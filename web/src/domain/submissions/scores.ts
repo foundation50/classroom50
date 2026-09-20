@@ -1,4 +1,5 @@
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 
 // The shapes the submissions UI consumes, derived from scores.json by
 // hooks/useGetScores and read by domain/submissions/dashboard. Here rather than
@@ -23,6 +24,10 @@ export type SubmissionRow = {
   late?: boolean
   // Last (re-)graded instant of the latest submission (mirrors submissions[0]).
   gradedAt?: string
+  // The latest submission's release was not the autograde workflow's own: the
+  // collector's recorded reason, or the live view's own judgment for a release
+  // not yet collected. Absent when the workflow published it.
+  provenance?: SubmissionProvenance
   // The entry carries a teacher override (`override: true` in scores.json): the
   // latest score was set/frozen by hand rather than (only) autograded. The
   // table marks it so a hand-entered grade is distinguishable from an
@@ -66,6 +71,7 @@ export type SubmissionAttempt = {
   late?: boolean
   gradedAt?: string
   submittedBy?: string
+  provenance?: SubmissionProvenance
 }
 
 export type NormalizedScores = {

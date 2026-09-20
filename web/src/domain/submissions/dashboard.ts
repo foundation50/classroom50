@@ -15,6 +15,7 @@ import type { DetectedSubmission } from "@/domain/assignments/submissionDetectio
 import type { Assignment, Student } from "@/types/classroom"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { BadgeTone } from "@/types/badgeTone"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
@@ -143,6 +144,8 @@ export type LiveSubmissionPresence = {
   release: string
   // Live submit/* release count for the repo (a lower bound; see LiveSubmission).
   submissionCount: number
+  // The newest live release was not the autograde workflow's own.
+  provenance?: SubmissionProvenance
 }
 
 export function mergeLiveRows(
@@ -201,6 +204,7 @@ export function mergeLiveRows(
       // otherwise a pending late submission reads as on-time until the next
       // collect. Left undefined (never guessed) without a parseable pair.
       late: liveLateness(live.datetime, dueDate),
+      ...(live.provenance ? { provenance: live.provenance } : {}),
       submissions: [],
     }))
 
@@ -1158,6 +1162,9 @@ export type ScoresCsvRow = {
   commit: string
   review: string
   release: string
+  // The collector's recorded reason when the latest release wasn't the
+  // workflow's own; blank otherwise. Snapshot rows only, so never a live kind.
+  provenance_warning: string
 }
 
 export function buildScoresCsvRows(
@@ -1229,6 +1236,10 @@ export function buildScoresCsvRows(
           commit: escapeCsvFormulaInjection(rest.commit),
           review: escapeCsvFormulaInjection(rest.review),
           release: escapeCsvFormulaInjection(rest.release),
+          // Free text a hand-published release's author could shape, so escape.
+          provenance_warning: escapeCsvFormulaInjection(
+            rest.provenance?.kind === "recorded" ? rest.provenance.reason : "",
+          ),
         },
         student,
         time: Number.isFinite(ms) ? ms : null,
@@ -1251,6 +1262,7 @@ export function buildScoresCsvRows(
       commit: "",
       review: "",
       release: "",
+      provenance_warning: "",
     },
     student,
     time: null,

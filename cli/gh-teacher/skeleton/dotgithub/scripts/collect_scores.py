@@ -424,7 +424,6 @@ def main() -> int:
                 assignment_filter=assignment_filter,
                 repo_index=repo_index,
                 team_members=team_members,
-                prior_scores=scores,
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures on COLLECTION
@@ -1398,6 +1397,19 @@ def collect_release_history(
                 f"{candidate.get('datetime')!r} is not an RFC 3339 timestamp; "
                 f"cannot mark lateness"
             )
+        # Who published the release is judged from the release metadata, never
+        # from the payload: strip any copy a hand-written result.json carries,
+        # since validate_result tolerates extra keys. Marked, not dropped: a
+        # teacher may publish by hand.
+        candidate.pop("provenance_warning", None)
+        problem = release_provenance_problem(release)
+        if problem is not None:
+            candidate["provenance_warning"] = problem
+            emit_warning(
+                f"{org}/{repo_name}: release {release.get('tag_name')!r} was {problem}; "
+                f"collected and marked in scores.json. Check the repository's "
+                f"Releases tab and Actions history."
+            )
         # The stored record is the validated payload minus the bucket-key
         # `assignment`. Keeps result/v1 shape: owner + assignment_type +
         # submitted_by, no usernames.
@@ -1553,7 +1565,6 @@ def collect_classroom(
     assignment_filter: str = "",
     repo_index: RepoIndex | None = None,
     team_members: "TeamMembers | None" = None,
-    prior_scores: dict[str, Any] | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     int,
@@ -1584,10 +1595,6 @@ def collect_classroom(
     `assignment_filter` (an assignment slug, empty for all) narrows the walk to
     one assignment, the web app's per-assignment "Sync now" scope. Sibling
     assignments' buckets in scores.json are untouched (apply_updates upserts).
-
-    `prior_scores` is the scores.json being updated, read only to warn when a
-    repo left with no counted release still has a score on file. None skips
-    that check.
     """
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
@@ -1791,9 +1798,6 @@ def collect_classroom(
                 # pushed, or pushed without the autograder publishing. Detection
                 # tells the last two apart. Individual misses are quiet; the
                 # per-assignment summary reports the gap.
-                warn_if_stale_score_remains(
-                    releases, prior_scores, org, repo_name, classroom_short, slug, username
-                )
                 record, read = detector.detect(username, repo_name)
                 if read:
                     detected_visited.add(username.lower())
@@ -1820,12 +1824,6 @@ def collect_classroom(
                 # does NOT count here.
                 if validation_rejected:
                     mode_flip_repos.append(repo_name)
-                # A trusted release stripped of its result.json lands here, not
-                # in the empty-listing branch above, so the same stale-score
-                # check applies.
-                warn_if_stale_score_remains(
-                    releases, prior_scores, org, repo_name, classroom_short, slug, username
-                )
                 continue
 
             # A skipped repo keeps its prior entry (see MemberAttribution.skipped).
@@ -2849,55 +2847,6 @@ def entry_from_result(payload: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in ("_assignment", "_type")}
 
 
-def has_collected_score(
-    scores: dict[str, Any] | None, slug: str, owner: str
-) -> bool:
-    """Whether scores.json already holds a collected (not teacher-overridden)
-    entry for this owner in this assignment's bucket."""
-    if not isinstance(scores, dict):
-        return False
-    bucket = (scores.get("assignments") or {}).get(slug)
-    if not isinstance(bucket, dict):
-        return False
-    for entry in bucket.get("entries") or []:
-        if (
-            isinstance(entry, dict)
-            and entry.get("override") is not True
-            and row_key(entry) == owner.lower()
-        ):
-            return True
-    return False
-
-
-def warn_if_stale_score_remains(
-    releases: Any,
-    prior_scores: dict[str, Any] | None,
-    org: str,
-    repo_name: str,
-    classroom_short: str,
-    slug: str,
-    owner: str,
-) -> None:
-    """Warn when a repo whose listing skipped releases for provenance ends this
-    run with nothing counted while a score for it is still on file.
-
-    Collection never removes an entry, so without this the skip warnings alone
-    read as "not counted" while the gradebook keeps the old score. Called from
-    both paths that end with nothing counted: an empty trusted listing, and a
-    trusted listing whose every release yielded no creditable history (a
-    result.json deleted by hand, for one)."""
-    if getattr(releases, "rejected", 0) and has_collected_score(
-        prior_scores, slug, owner
-    ):
-        emit_warning(
-            f"{org}/{repo_name}: no release counts for this repository "
-            f"now, but a score collected earlier for {owner} is still "
-            f"in {classroom_short}/scores.json under {slug!r}. Collection "
-            f"never removes an entry: check the repository, then delete "
-            f"that entry or set \"override\": true on it."
-        )
-
-
 def row_key(record: dict[str, Any]) -> str | None:
     """The stable per-bucket key: the repo OWNER login, lowercased.
 
@@ -2949,7 +2898,8 @@ def validate_result(
     classroom/assignment/owner checks defend against a hostile result.json
     trying to land in someone else's scores.json: the triple must match the
     source repo's expected identity. Provenance (did the workflow publish it at
-    all) is checked upstream by release_provenance_problem.
+    all) is judged separately by release_provenance_problem and recorded on the
+    stored record as `provenance_warning`, never used to reject.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
     (the roster/repo-name-derived owner; for a team assignment the repo-name
@@ -3436,8 +3386,10 @@ def release_provenance_problem(release: dict[str, Any]) -> str | None:
     Students can write to their repos, so they can publish a release or replace
     its result.json as themselves. They can't act as the workflow's
     GITHUB_TOKEN, so the release author and every result.json uploader must be
-    that login; a missing one counts as someone else. gh teacher download and
-    the web apply the same rule."""
+    that login; a missing one counts as someone else. The reason is stored on
+    the collected submission as `provenance_warning` so the teacher sees it
+    beside the score; a teacher who publishes a release by hand is marked the
+    same way. gh teacher download and the web apply the same rule."""
     author = _login(release.get("author"))
     if author != AUTOGRADE_RELEASE_AUTHOR:
         return f"published by {author or 'an unknown account'!r}, not by the autograde workflow"
@@ -3455,24 +3407,16 @@ def release_provenance_problem(release: dict[str, Any]) -> str | None:
     return None
 
 
-class SubmitReleases(list):
-    """The trusted releases, plus how many submit/* releases were skipped for
-    provenance. A list subclass so callers and test fakes that use plain lists
-    keep working; read the count with `getattr(releases, "rejected", 0)`."""
-
-    rejected: int = 0
-
-
 def all_submit_releases(
     api_url: str, owner: str, repo: str, token: str
-) -> "SubmitReleases":
-    """Every submit-tag release the autograde workflow published for a repo,
-    newest first, walking the full /releases pagination: the complete submission
-    history (a student who pushed N times has N submit/* releases, all
-    returned). Non-submit releases (a hand-created tag) and releases that fail
-    release_provenance_problem are filtered out; the latter warn and are counted
-    in `.rejected`. A 404 (no releases, or repo not accepted) yields an empty
-    list.
+) -> list[dict[str, Any]]:
+    """Every submit-tag release for a repo, newest first, walking the full
+    /releases pagination: the complete submission history (a student who pushed
+    N times has N submit/* releases, all returned). Non-submit releases (a
+    hand-created tag) are filtered out. Who published each one is judged later,
+    by release_provenance_problem in collect_release_history, and recorded on
+    the stored submission rather than used to drop it. A 404 (no releases, or
+    repo not accepted) yields an empty list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
     chain or the page cap) raises IncompleteListing rather than returning a
@@ -3489,9 +3433,9 @@ def all_submit_releases(
         )
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
-            return SubmitReleases()
+            return []
         raise
-    submits = [
+    return [
         release
         for release in releases
         if (release.get("tag_name") or "").startswith(SUBMIT_TAG_PREFIX)
@@ -3500,19 +3444,6 @@ def all_submit_releases(
         # assets aren't downloadable anyway, so skip it.
         and release.get("draft") is not True
     ]
-    trusted = SubmitReleases()
-    for release in submits:
-        problem = release_provenance_problem(release)
-        if problem is None:
-            trusted.append(release)
-            continue
-        trusted.rejected += 1
-        emit_warning(
-            f"{owner}/{repo}: release {release.get('tag_name')!r} was {problem}; "
-            f"not counted as a submission. Check the repository's Releases tab "
-            f"and Actions history."
-        )
-    return trusted
 
 
 class IncompleteListing(ValueError):

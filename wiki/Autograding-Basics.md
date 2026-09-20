@@ -587,11 +587,14 @@ doesn't guarantee:
   `classroom50` repository on every run and never enter the student's
   repository, so students can't change them. See
   [Teacher-only test files](#teacher-only-test-files).
-- **Hand-made Releases.** Only a Release that `github-actions[bot]` (the
-  workflow's identity, which students can't use) authored and whose
-  `result.json` it uploaded counts. Collection, `gh teacher download`, and the
-  submissions view skip anything else, and collection names each skipped
-  Release in its warnings.
+- **Hand-made Releases.** A Release that `github-actions[bot]` (the workflow's
+  identity, which students can't use) did not author, or whose `result.json`
+  someone else uploaded, is still collected but marked. The submissions page
+  shows an **Unverified** badge beside the score with who published it,
+  `scores.json` and both CSV exports carry the reason in `provenance_warning`,
+  and collection names each one in its warnings. A Release you publish by hand
+  to record a grade is marked the same way; `"override": true` on the entry is
+  the path that isn't.
 - **Code that runs during grading.** Grading and publishing share one job, so
   the caller workflow, any other workflow file a student adds, and the
   student's own code that the tests run can all publish a forged score under
@@ -747,6 +750,7 @@ submission's data:
 | `submitted_at` | The latest submission instant (ISO 8601 UTC). |
 | `late` | `yes` / `no` against the due date; blank for non-submitters. |
 | `commit` / `review` / `release` | Links: the graded commit, the full starter-to-graded diff, and the Release. |
+| `provenance_warning` | Why the autograde workflow didn't publish the latest Release (who did); blank when it did. See [How much to trust a collected score](#how-much-to-trust-a-collected-score). |
 
 #### CLI: `gh teacher download`
 
@@ -766,6 +770,7 @@ newest first), plus one blank-score line per non-submitter:
 | `review_url` | The starter-to-graded diff for this attempt. |
 | `late` | `true` / `false` against the due date; blank when unknown. |
 | `override` | `true` when a teacher override is in effect for the entry. |
+| `provenance_warning` | Why the autograde workflow didn't publish this attempt's Release (who did); blank when it did. |
 
 Per-test breakdowns aren't in either CSV. They're in each attempt's Release
 (and in the per-repository `result.json` / `results.json` files the download

@@ -804,6 +804,7 @@ const SubmissionsPageContent = () => {
             datetime: s.submittedAt,
             release: s.releaseUrl,
             submissionCount: s.submissionCount,
+            provenance: s.provenance,
           })),
           assignmentInfo?.due,
         )

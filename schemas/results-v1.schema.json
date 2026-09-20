@@ -21,7 +21,12 @@
             { "type": "null" },
             { "$ref": "#/$defs/resultPayload" }
           ],
-          "description": "The raw result/v1 payload published on the release, or null when the release had no result.json asset. The download tool round-trips the bytes verbatim; the shape mirrors result-v1.schema.json (which still carries `assignment`)."
+          "description": "The raw result/v1 payload published on the release, or null when the release had no result.json asset or the asset was not a classroom50/result/v1 document. The download tool round-trips the bytes verbatim; the shape mirrors result-v1.schema.json (which still carries `assignment`)."
+        },
+        "provenance_warning": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the autograde workflow did not publish this release (its author, or the `result.json` uploader, was not `github-actions[bot]`). The result is still recorded; the mark tells the teacher to check it. Absent when the workflow published both. Mirrors the scores-v1 submissionRecord field."
         }
       }
     },

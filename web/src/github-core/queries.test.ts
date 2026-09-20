@@ -346,7 +346,7 @@ describe("releasesQuery", () => {
     await expect(run({ request } as unknown as GitHubClient)).rejects.toThrow()
   })
 
-  it("keeps only submit/* tags the workflow published, newest first", async () => {
+  it("keeps every submit/* tag, whoever published it, newest first", async () => {
     const bot = { login: AUTOGRADE_RELEASE_AUTHOR }
     const rel = (
       tag: string,
@@ -365,11 +365,15 @@ describe("releasesQuery", () => {
       rel("submit/1", "2026-01-01T00:00:00Z"),
       rel("v1.0", "2026-02-01T00:00:00Z"), // non-submission tag, filtered out
       rel("submit/2", "2026-03-01T00:00:00Z"),
-      // hand-made by the student, not a submission
+      // hand-made by the student: still listed, marked by the caller
       rel("submit/3", "2026-04-01T00:00:00Z", { login: "alice" }),
     ])
     const releases = await run({ request } as unknown as GitHubClient)
-    expect(releases.map((r) => r.tag_name)).toEqual(["submit/2", "submit/1"])
+    expect(releases.map((r) => r.tag_name)).toEqual([
+      "submit/3",
+      "submit/2",
+      "submit/1",
+    ])
   })
 })
 

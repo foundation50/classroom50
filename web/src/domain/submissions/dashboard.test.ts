@@ -890,6 +890,10 @@ describe("buildScoresCsvRows", () => {
       commit: "c1",
       review: "r1",
       release: "rel1",
+      provenance: {
+        kind: "recorded",
+        reason: "published by 'alice', not by the autograde workflow",
+      },
     })
     // A group row is credited to all members; names come from the first
     // (owner/founder) login.
@@ -934,10 +938,13 @@ describe("buildScoresCsvRows", () => {
       commit: "c1",
       review: "r1",
       release: "rel1",
+      provenance_warning: "published by 'alice', not by the autograde workflow",
     })
     // The group row keeps all credited logins but takes the owner's name.
     expect(out[1].usernames).toBe("bob, carol")
     expect(out[1].name).toBe("Bob Brown")
+    // Workflow-published: the column is blank, not absent.
+    expect(out[1].provenance_warning).toBe("")
     // Non-submitter carries a name too, with an EMPTY score (not 0) and blank
     // fields — an ungraded student, not a graded zero.
     expect(out[2]).toEqual({
@@ -953,6 +960,7 @@ describe("buildScoresCsvRows", () => {
       commit: "",
       review: "",
       release: "",
+      provenance_warning: "",
     })
   })
 

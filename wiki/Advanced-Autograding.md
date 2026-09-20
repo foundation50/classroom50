@@ -230,8 +230,9 @@ reads `result.json` from the workspace after the autograder exits.
 
 Collection validates this before merging into `scores.json`. A `submit/*`
 Release the workflow didn't publish (any author other than
-`github-actions[bot]`, or a `result.json` someone else uploaded) is skipped
-with a warning before validation. A payload whose identity
+`github-actions[bot]`, or a `result.json` someone else uploaded) is still
+collected, with a `provenance_warning` naming who did stamped on the stored
+submission and a warning in the collect log. A payload whose identity
 (classroom/assignment/`owner`) doesn't match the source repository is rejected,
 and a mismatched `assignment_type` is warned about and skipped, so a hostile
 payload can't land in another student's collected scores. A submission is late
@@ -451,11 +452,11 @@ workflow you control, so your grading logic runs in place of the runner.
 > submission-mode` never rewrites its caller workflow. Trigger changes are
 > yours to make.
 
-For its results to be collected, your workflow must publish each graded
-submission the way the built-in runner does: a Release on a `submit/*` tag with
-a `result.json` asset, both created with the job's `GITHUB_TOKEN`. Collection
-skips a Release published with any other token, such as a personal access
-token.
+Publish each graded submission the way the built-in runner does: a Release on a
+`submit/*` tag with a `result.json` asset, both created with the job's
+`GITHUB_TOKEN`. A Release published with any other token, such as a personal
+access token, is still collected but every score from it is marked
+**Unverified**.
 
 ### Keeping a GitHub Classroom autograder
 

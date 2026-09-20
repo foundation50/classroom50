@@ -237,11 +237,12 @@ determined student can still read it. See
 
 ### Can a student change the score that gets recorded?
 
-Not by hand, but yes from inside the grading run. The score is a Release the
-grading workflow publishes in the student's own repository. A Release a student
-creates, or a `result.json` they replace, is skipped: only the workflow's
-identity (`github-actions[bot]`) counts, and collection warns about anything
-else. But grading and publishing share one job, so code that runs during it
+Not without leaving a mark, and yes from inside the grading run. The score is a
+Release the grading workflow publishes in the student's own repository. A
+Release a student creates, or a `result.json` they replace, is collected but
+marked **Unverified** on the submissions page and in the exports, naming who
+published it, and collection warns about each one. But grading and publishing
+share one job, so code that runs during it
 (the workflow file, another workflow file the student adds, or the student's
 own code while the tests run) can publish a forged score under that identity.
 That leaves a run in the **Actions** tab, so it's detectable, not prevented.

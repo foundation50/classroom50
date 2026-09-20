@@ -133,6 +133,7 @@ export {
   latestSubmitReleaseAndCount,
   AUTOGRADE_RELEASE_AUTHOR,
   isAutogradePublished,
+  releaseProvenanceProblem,
   getServiceTokenStatus,
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,

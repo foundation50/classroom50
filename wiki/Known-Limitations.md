@@ -83,9 +83,9 @@ reveals. See
 **Autograded scores come from repositories students can write to.** Grading
 runs as a GitHub Actions workflow inside each student's repository, and the
 score is a Release that workflow publishes there. A Release a student creates
-by hand, or a `result.json` a student replaces, is not counted: only Releases
-published by the workflow's own identity (`github-actions[bot]`) are read, and
-collection names any it skips. But code that runs during grading (the workflow
+by hand, or a `result.json` a student replaces, is collected but marked: the
+submissions page shows **Unverified** beside the score, the exports carry the
+reason, and collection warns about each one. But code that runs during grading (the workflow
 file, another workflow file a student adds, or the student's own code while the
 tests run) can still publish a forged score under that identity, and the
 submission time comes from a commit date the student's Git client sets. Treat

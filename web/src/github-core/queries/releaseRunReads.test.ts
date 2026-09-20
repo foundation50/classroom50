@@ -10,6 +10,7 @@ import {
   getServiceTokenStatus,
   isAutogradePublished,
   latestSubmitReleaseAndCount,
+  releaseProvenanceProblem,
   latestSubmitReleaseWithAssets,
 } from "./releaseRunReads"
 import type { GitHubClient } from "../client"
@@ -198,50 +199,56 @@ const release = (
   ...extra,
 })
 
-describe("isAutogradePublished", () => {
+describe("releaseProvenanceProblem", () => {
   const honest = release("submit/1", "2026-01-01T00:00:00Z")
 
-  it("accepts the runner's release", () => {
+  it("accepts the runner's release, with or without assets", () => {
+    expect(releaseProvenanceProblem(honest)).toBeNull()
+    expect(releaseProvenanceProblem({ ...honest, assets: [] })).toBeNull()
+    expect(
+      releaseProvenanceProblem({ ...honest, assets: undefined }),
+    ).toBeNull()
     expect(isAutogradePublished(honest)).toBe(true)
   })
 
-  it("accepts a workflow release with no assets yet", () => {
-    expect(isAutogradePublished({ ...honest, assets: [] })).toBe(true)
-    expect(isAutogradePublished({ ...honest, assets: undefined })).toBe(true)
-  })
-
   // A hand-made release carries the student's login as author, the one mark
-  // they can't forge.
-  it("rejects a release published by anyone else, or by no one", () => {
+  // they can't forge; a missing author counts as someone else.
+  it("names the author of a release published by anyone else, or by no one", () => {
     expect(
-      isAutogradePublished({ ...honest, author: { login: "alice" } }),
-    ).toBe(false)
-    expect(isAutogradePublished({ ...honest, author: null })).toBe(false)
-    expect(isAutogradePublished({ ...honest, author: undefined })).toBe(false)
+      releaseProvenanceProblem({ ...honest, author: { login: "alice" } }),
+    ).toEqual({ kind: "author", login: "alice" })
+    expect(releaseProvenanceProblem({ ...honest, author: null })).toEqual({
+      kind: "author",
+      login: null,
+    })
+    expect(releaseProvenanceProblem({ ...honest, author: undefined })).toEqual({
+      kind: "author",
+      login: null,
+    })
   })
 
   // A clobbered result.json keeps the bot as author; the uploader gives it away.
-  it("rejects a release whose result.json someone else uploaded", () => {
+  it("names the uploader of a result.json someone else uploaded", () => {
     const asset = honest.assets![0]
     expect(
-      isAutogradePublished({
+      releaseProvenanceProblem({
         ...honest,
         assets: [
           { ...asset, name: "Result.JSON", uploader: { login: "alice" } },
         ],
       }),
-    ).toBe(false)
+    ).toEqual({ kind: "uploader", login: "alice" })
     expect(
-      isAutogradePublished({
+      releaseProvenanceProblem({
         ...honest,
         assets: [{ ...asset, uploader: null }],
       }),
-    ).toBe(false)
+    ).toEqual({ kind: "uploader", login: null })
   })
 
   it("ignores other assets, whoever uploaded them", () => {
     expect(
-      isAutogradePublished({
+      releaseProvenanceProblem({
         ...honest,
         assets: [
           ...honest.assets!,
@@ -253,12 +260,13 @@ describe("isAutogradePublished", () => {
           },
         ],
       }),
-    ).toBe(true)
+    ).toBeNull()
   })
 })
 
 describe("latestSubmitReleaseWithAssets", () => {
-  it("drops a submit/* release the workflow did not publish", async () => {
+  it("keeps a submit/* release the workflow did not publish as the latest", async () => {
+    // Collected and marked, not dropped: a teacher may publish by hand.
     const client = clientReturning([
       release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z", {
         author: { login: "alice" },
@@ -266,7 +274,11 @@ describe("latestSubmitReleaseWithAssets", () => {
       release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
     ])
     const latest = await latestSubmitReleaseWithAssets(client, "o", "r")
-    expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
+    expect(latest?.tag_name).toBe("submit/2026-03-01T00:00:00Z-cccc")
+    expect(releaseProvenanceProblem(latest!)).toEqual({
+      kind: "author",
+      login: "alice",
+    })
   })
 
   it("returns the newest submit/* release among several", async () => {
@@ -353,8 +365,8 @@ describe("latestSubmitReleaseAndCount", () => {
     expect(count).toBe(1)
   })
 
-  it("neither surfaces nor counts a submit/* release the workflow did not publish", async () => {
-    // The live count is the surface a hand-made release would inflate.
+  it("counts and surfaces a submit/* release the workflow did not publish", async () => {
+    // The count stays honest to what the repo holds; the row marks it.
     const client = clientReturning([
       release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z", {
         author: { login: "alice" },
@@ -376,8 +388,8 @@ describe("latestSubmitReleaseAndCount", () => {
       "o",
       "r",
     )
-    expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
-    expect(count).toBe(1)
+    expect(latest?.tag_name).toBe("submit/2026-03-01T00:00:00Z-cccc")
+    expect(count).toBe(3)
   })
 
   it("resolves { latest: null, count: 0 } on a 404 (repo not accepted)", async () => {

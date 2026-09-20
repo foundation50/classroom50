@@ -2606,50 +2606,34 @@ class TestAllSubmitReleases:
             "submit/2026-05-01T10-00-00Z",
         ]
 
-    def test_skips_a_release_published_by_someone_else(self, monkeypatch, capsys):
-        # A hand-made release carries the student's login as author, the one
-        # mark they can't forge.
+    def test_keeps_releases_someone_else_published(self, monkeypatch, capsys):
+        # Who published is judged per release at ingest and recorded on the
+        # stored submission; the listing itself drops nothing for it.
         self._listing(monkeypatch, [
             bot_release("submit/2026-06-03T10-00-00Z", author={"login": "alice"}),
             bot_release("submit/2026-06-02T10-00-00Z", author=None),
             bot_release("submit/2026-06-01T10-00-00Z"),
         ])
         releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
-        assert [r["tag_name"] for r in releases] == ["submit/2026-06-01T10-00-00Z"]
-        err = capsys.readouterr().err
-        assert "'submit/2026-06-03T10-00-00Z' was published by 'alice'" in err
-        assert "'submit/2026-06-02T10-00-00Z' was published by 'an unknown account'" in err
-        assert "not counted as a submission" in err
+        assert [r["tag_name"] for r in releases] == [
+            "submit/2026-06-03T10-00-00Z",
+            "submit/2026-06-02T10-00-00Z",
+            "submit/2026-06-01T10-00-00Z",
+        ]
+        assert capsys.readouterr().err == ""
 
-    def test_skips_a_release_whose_result_json_was_replaced(self, monkeypatch, capsys):
-        # A clobbered result.json keeps the bot as author; the uploader gives
-        # it away.
-        self._listing(monkeypatch, [
-            bot_release(
-                "submit/2026-06-03T10-00-00Z",
-                assets=[{"name": "result.json", "url": "u", "uploader": {"login": "alice"}}],
-            ),
-            bot_release(
-                "submit/2026-06-02T10-00-00Z",
-                assets=[{"name": "Result.JSON", "url": "u"}],
-            ),
-            bot_release("submit/2026-06-01T10-00-00Z"),
-        ])
-        releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
-        assert [r["tag_name"] for r in releases] == ["submit/2026-06-01T10-00-00Z"]
-        err = capsys.readouterr().err
-        assert "result.json uploaded by 'alice'" in err
-        assert "result.json uploaded by 'an unknown account'" in err
-
-    def test_other_assets_by_other_uploaders_do_not_matter(self):
-        # Only result.json feeds the collected scores.
-        release = bot_release("submit/2026-06-01T10-00-00Z")
-        release["assets"].append({"name": "screenshot.png", "url": "u", "uploader": {"login": "alice"}})
-        assert cs.release_provenance_problem(release) is None
-
-    def test_a_release_with_no_assets_is_still_the_workflows(self):
-        # A failed upload is reported downstream as a missing asset, not here.
-        assert cs.release_provenance_problem(bot_release("submit/x", assets=[])) is None
+    def test_release_provenance_problem_names_author_then_uploader(self):
+        assert cs.release_provenance_problem(bot_release("submit/x")) is None
+        assert cs.release_provenance_problem(
+            bot_release("submit/x", author={"login": "alice"})
+        ) == "published by 'alice', not by the autograde workflow"
+        assert cs.release_provenance_problem(
+            bot_release("submit/x", author=None)
+        ) == "published by 'an unknown account', not by the autograde workflow"
+        replaced = bot_release("submit/x", assets=[{"name": "Result.JSON", "url": "u", "uploader": {"login": "alice"}}])
+        assert cs.release_provenance_problem(replaced) == "result.json uploaded by 'alice', not by the autograde workflow"
+        no_uploader = bot_release("submit/x", assets=[{"name": "result.json", "url": "u"}])
+        assert cs.release_provenance_problem(no_uploader) == "result.json uploaded by 'an unknown account', not by the autograde workflow"
 
     def test_paginates_via_link_header(self, monkeypatch):
         page1 = json.dumps([bot_release(f"submit/p1-{i}") for i in range(100)]).encode("utf-8")
@@ -4092,104 +4076,6 @@ def test_autograded_graded_repo_is_visited_but_never_probed(monkeypatch):
     assert visited == {"alice", "bob"}
 
 
-def _prior_scores(slug: str, owner: str, **entry_extra):
-    entry = {"owner": owner, "submissions": [{"score": 10, "max-score": 10}], **entry_extra}
-    return {"schema": cs.SCORES_SCHEMA_V1, "assignments": {slug: {"type": "individual", "entries": [entry]}}}
-
-
-def _collect_with_all_releases_rejected(monkeypatch, prior_scores):
-    # Every release of alice's repo fails provenance: empty but flagged.
-    def fake_all(api_url, org, repo, token):
-        listing = cs.SubmitReleases()
-        listing.rejected = 1
-        return listing
-
-    monkeypatch.setattr(cs, "all_submit_releases", fake_all)
-    monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
-    stub_team_members(monkeypatch, ["alice"])
-    return cs.collect_classroom(
-        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-        classroom_meta={},
-        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
-        service_token="token",
-        prior_scores=prior_scores,
-    )
-
-
-def test_all_releases_rejected_warns_about_a_score_already_on_file(monkeypatch, capsys):
-    # Collection never removes an entry, so a score ingested before the check
-    # would silently stay while the skip warnings read as "not counted".
-    results, _, _, detected = _collect_with_all_releases_rejected(
-        monkeypatch, _prior_scores("hw1", "alice")
-    )
-    assert results == []
-    assert detected["hw1"][1] == []
-    err = capsys.readouterr().err
-    assert "cs50/cs-principles-hw1-alice: no release counts for this repository now" in err
-    assert "a score collected earlier for alice is still in cs-principles/scores.json under 'hw1'" in err
-    assert 'delete that entry or set "override": true' in err
-
-
-@pytest.mark.parametrize(
-    "prior",
-    [
-        None,
-        {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}},
-        _prior_scores("hw1", "bob"),
-        _prior_scores("hw2", "alice"),
-        _prior_scores("hw1", "alice", override=True),
-    ],
-    ids=["no-scores", "empty", "other-owner", "other-assignment", "teacher-override"],
-)
-def test_all_releases_rejected_is_quiet_without_a_collected_score(monkeypatch, capsys, prior):
-    # Nothing stale to point at, or a teacher override collection leaves alone.
-    _collect_with_all_releases_rejected(monkeypatch, prior)
-    assert "still in" not in capsys.readouterr().err
-
-
-def test_plain_empty_listing_never_warns_about_prior_scores(monkeypatch, capsys):
-    # An honest empty listing is the ordinary not-submitted case, not a skip.
-    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
-    monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
-    stub_team_members(monkeypatch, ["alice"])
-    cs.collect_classroom(
-        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-        classroom_meta={},
-        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
-        service_token="token",
-        prior_scores=_prior_scores("hw1", "alice"),
-    )
-    assert "still in" not in capsys.readouterr().err
-
-
-def test_rejected_plus_trusted_release_without_asset_still_warns_about_prior_score(monkeypatch, capsys):
-    # A trusted release stripped of its result.json is not an empty listing, so
-    # it reaches the empty-history branch; the stale-score check must fire there
-    # too, or deleting one asset would silence it.
-    def fake_all(api_url, org, repo, token):
-        listing = cs.SubmitReleases([bot_release("submit/2026-06-01T10-00-00Z", assets=[])])
-        listing.rejected = 1
-        return listing
-
-    def no_asset(api_url, release, token):
-        raise cs.AssetMissingError("no result.json asset")
-
-    monkeypatch.setattr(cs, "all_submit_releases", fake_all)
-    monkeypatch.setattr(cs, "download_result_asset", no_asset)
-    stub_team_members(monkeypatch, ["alice"])
-    results, _, _, _ = cs.collect_classroom(
-        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-        classroom_meta={},
-        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
-        service_token="token",
-        prior_scores=_prior_scores("hw1", "alice"),
-    )
-    assert results == []
-    err = capsys.readouterr().err
-    assert "no result.json asset; skipping that submission" in err
-    assert "a score collected earlier for alice is still in cs-principles/scores.json" in err
-
-
 def test_collect_release_history_skips_a_deeply_nested_result_json(monkeypatch, capsys):
     # json.loads raises RecursionError, not ValueError, once nesting exhausts
     # the C stack (the depth varies by platform, so the fake raises it
@@ -4208,17 +4094,49 @@ def test_collect_release_history_skips_a_deeply_nested_result_json(monkeypatch, 
     assert "result.json malformed for 'submit/2026-06-01T10-00-00Z'" in capsys.readouterr().err
 
 
-def test_all_submit_releases_counts_rejected(monkeypatch):
-    body = json.dumps([
-        bot_release("submit/2026-06-03T10-00-00Z", author={"login": "alice"}),
-        bot_release("submit/2026-06-02T10-00-00Z"),
-        {"tag_name": "v1.0"},
-    ]).encode("utf-8")
-    monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, _NoHeaders()))
-    releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
-    assert [r["tag_name"] for r in releases] == ["submit/2026-06-02T10-00-00Z"]
-    assert releases.rejected == 1
-    assert isinstance(releases, list)
+def _history_for(monkeypatch, release, payload_extra=None):
+    payload = make_result(classroom="cs-principles", assignment="hw1", username="alice")
+    payload.update(payload_extra or {})
+    monkeypatch.setattr(cs, "download_result_asset", lambda *a, **k: dict(payload))
+    return cs.collect_release_history(
+        "https://api.github.com", "cs50", "cs-principles-hw1-alice", [release], "token",
+        classroom_short="cs-principles", slug="hw1", username="alice",
+        assignment_type="individual", renamed_from=None, due=None,
+    )
+
+
+def test_hand_published_release_is_collected_and_marked(monkeypatch, capsys):
+    # A teacher (or student) who publishes by hand still gets the score
+    # collected; the record says who published so the gradebook can show it.
+    history, rejected = _history_for(monkeypatch, bot_release("submit/2026-06-01T10-00-00Z", author={"login": "alice"}))
+    assert rejected == 0
+    assert len(history) == 1
+    assert history[0]["provenance_warning"] == "published by 'alice', not by the autograde workflow"
+    assert history[0]["score"] == 10
+    err = capsys.readouterr().err
+    assert "'submit/2026-06-01T10-00-00Z' was published by 'alice'" in err
+    assert "collected and marked in scores.json" in err
+
+
+def test_workflow_published_release_carries_no_mark(monkeypatch, capsys):
+    history, _ = _history_for(monkeypatch, bot_release("submit/2026-06-01T10-00-00Z"))
+    assert "provenance_warning" not in history[0]
+    assert "marked" not in capsys.readouterr().err
+
+
+def test_provenance_warning_inside_result_json_never_survives(monkeypatch):
+    # validate_result tolerates extra top-level keys, so a hand-written mark in
+    # result.json must be stripped and only the release metadata may set it.
+    history, _ = _history_for(
+        monkeypatch, bot_release("submit/2026-06-01T10-00-00Z"),
+        payload_extra={"provenance_warning": "looks legitimate"},
+    )
+    assert "provenance_warning" not in history[0]
+    history, _ = _history_for(
+        monkeypatch, bot_release("submit/2026-06-01T10-00-00Z", author={"login": "alice"}),
+        payload_extra={"provenance_warning": "looks legitimate"},
+    )
+    assert history[0]["provenance_warning"] == "published by 'alice', not by the autograde workflow"
 
 
 def test_autograded_detection_respects_tag_mode(monkeypatch):

@@ -421,13 +421,14 @@ func TestWriteScoresCSV(t *testing.T) {
 						"owner": "alice",
 						"submissions": []any{
 							map[string]any{
-								"score":        float64(20),
-								"max-score":    float64(30),
-								"datetime":     "2026-06-02T09:00:00Z",
-								"submission":   "submit/2026-06-02T08-59-00Z",
-								"review":       "https://github.com/cs50/cs-principles-hello-alice/commit/ghi",
-								"late":         false,
-								"submitted_by": map[string]any{"username": "alice", "id": float64(111)},
+								"score":              float64(20),
+								"provenance_warning": "published by 'alice', not by the autograde workflow",
+								"max-score":          float64(30),
+								"datetime":           "2026-06-02T09:00:00Z",
+								"submission":         "submit/2026-06-02T08-59-00Z",
+								"review":             "https://github.com/cs50/cs-principles-hello-alice/commit/ghi",
+								"late":               false,
+								"submitted_by":       map[string]any{"username": "alice", "id": float64(111)},
 							},
 							map[string]any{
 								"score":      float64(18),
@@ -483,11 +484,11 @@ func TestWriteScoresCSV(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override",
-		"alice,Ada,Lovelace,ada@uni.edu,A,20,30,2026-06-02T09:00:00Z,submit/2026-06-02T08-59-00Z,alice,https://github.com/cs50/cs-principles-hello-alice/commit/ghi,false,",
-		"alice,Ada,Lovelace,ada@uni.edu,A,18,30,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,,https://github.com/cs50/cs-principles-hello-alice/commit/abc,false,",
-		"Bob,Bob,Jones,bob@uni.edu,B,25,30,2026-06-01T15:00:00Z,submit/2026-06-01T14-59-00Z,,https://github.com/cs50/cs-principles-hello-bob/commit/def,true,true",
-		"carol,,,,,,,,,,,,",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
+		"alice,Ada,Lovelace,ada@uni.edu,A,20,30,2026-06-02T09:00:00Z,submit/2026-06-02T08-59-00Z,alice,https://github.com/cs50/cs-principles-hello-alice/commit/ghi,false,,\"published by 'alice', not by the autograde workflow\"",
+		"alice,Ada,Lovelace,ada@uni.edu,A,18,30,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,,https://github.com/cs50/cs-principles-hello-alice/commit/abc,false,,",
+		"Bob,Bob,Jones,bob@uni.edu,B,25,30,2026-06-01T15:00:00Z,submit/2026-06-01T14-59-00Z,,https://github.com/cs50/cs-principles-hello-bob/commit/def,true,true,",
+		"carol,,,,,,,,,,,,,",
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -534,8 +535,8 @@ func TestWriteScoresCSV_ManualOverride(t *testing.T) {
 		t.Fatalf("read file: %v", err)
 	}
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override",
-		"alice,,,,,42,50,2026-06-02T09:00:00Z,submit/manual-2026-06-02T09-00-00Z,,submit/manual-2026-06-02T09-00-00Z,,true",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
+		"alice,,,,,42,50,2026-06-02T09:00:00Z,submit/manual-2026-06-02T09-00-00Z,,submit/manual-2026-06-02T09-00-00Z,,true,",
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -591,13 +592,13 @@ func TestWriteScoresCSV_GroupFanOut(t *testing.T) {
 
 	// No CSV metadata here (blank name/section/email): 4 empty cells after
 	// the username, then the shared submission columns.
-	row := ",,,,,90,100,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,bob,https://github.com/cs50/cs-principles-project-alice/commit/abc,false,"
+	row := ",,,,,90,100,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,bob,https://github.com/cs50/cs-principles-project-alice/commit/abc,false,,"
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
 		"alice" + row,
 		"bob" + row,
 		"carol" + row,
-		"dan,,,,,,,,,,,,", // not a group member → blank
+		"dan,,,,,,,,,,,,,", // not a group member → blank
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -618,7 +619,7 @@ func TestWriteScoresCSV_EmptyRoster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	want := "username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override\n"
+	want := "username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning\n"
 	if string(got) != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -873,12 +874,15 @@ func TestRefreshResultJSON(t *testing.T) {
 	mux.HandleFunc("/repos/o/no-release/releases", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
-	// Every submit/* release fails provenance: nothing is written, and files an
-	// earlier download left in the clone are named on errOut.
-	mux.HandleFunc("/repos/o/all-rejected/releases", func(w http.ResponseWriter, r *http.Request) {
-		forged := botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-new.json"))
-		forged["author"] = map[string]any{"login": "alice"}
-		_ = json.NewEncoder(w).Encode([]map[string]any{forged})
+	// A release the workflow didn't publish is still recorded, with the reason
+	// on its results.json entry and a line on errOut.
+	mux.HandleFunc("/repos/o/hand-published/releases", func(w http.ResponseWriter, r *http.Request) {
+		byHand := botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-new.json"))
+		byHand["author"] = map[string]any{"login": "alice"}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			byHand,
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
+		})
 	})
 	// The bot uploaded it, but it isn't a result document: a release_assets
 	// file renamed to result.json. Treated as a missing asset.
@@ -992,7 +996,6 @@ func TestRefreshResultJSON(t *testing.T) {
 	}{
 		{name: "no submit-tag release anywhere → no files", repo: "non-submit-empty"},
 		{name: "404 releases → no files", repo: "no-release"},
-		{name: "every release rejected for provenance → no files", repo: "all-rejected"},
 	}
 	for _, tc := range noOpCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1012,26 +1015,40 @@ func TestRefreshResultJSON(t *testing.T) {
 		})
 	}
 
-	t.Run("every release rejected → files from an earlier download are named, not touched", func(t *testing.T) {
-		target := filepath.Join(dir, "all-rejected-stale")
+	t.Run("a release the workflow didn't publish is recorded and marked", func(t *testing.T) {
+		target := filepath.Join(dir, "hand-published")
 		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		const stale = `{"schema":"classroom50/result/v1","score":100}`
-		mustWrite(t, filepath.Join(target, resultAssetName), stale)
 		var errOut bytes.Buffer
-		if err := refreshResultJSON(client, &errOut, "test-token", server.URL, "o", "all-rejected", target); err != nil {
+		if err := refreshResultJSON(client, &errOut, "test-token", server.URL, "o", "hand-published", target); err != nil {
 			t.Fatalf("refreshResultJSON: %v", err)
 		}
-		got, err := os.ReadFile(filepath.Join(target, resultAssetName))
-		if err != nil || string(got) != stale {
-			t.Fatalf("result.json = %q, %v; want the earlier file left in place", got, err)
+		var history []submissionRecord
+		historyBytes, err := os.ReadFile(filepath.Join(target, resultsAssetName))
+		if err != nil {
+			t.Fatalf("read results.json: %v", err)
 		}
-		if !strings.Contains(errOut.String(), "result.json from an earlier download is still in "+target) {
-			t.Errorf("errOut lacks the stale result.json warning:\n%s", errOut.String())
+		if err := json.Unmarshal(historyBytes, &history); err != nil {
+			t.Fatalf("decode results.json: %v", err)
 		}
-		if strings.Contains(errOut.String(), "results.json from an earlier download") {
-			t.Errorf("results.json was never written, yet errOut names it:\n%s", errOut.String())
+		if len(history) != 2 {
+			t.Fatalf("history = %s, want both releases", historyBytes)
+		}
+		if history[0].ProvenanceWarning != `published by "alice", not by the autograde workflow` {
+			t.Errorf("newest provenance_warning = %q", history[0].ProvenanceWarning)
+		}
+		if history[1].ProvenanceWarning != "" || strings.Contains(string(historyBytes), `"provenance_warning": ""`) {
+			t.Errorf("the workflow's release must carry no provenance_warning:\n%s", historyBytes)
+		}
+		// The hand-published release is still the latest; the mark, not a
+		// drop, is what tells the teacher.
+		latest, err := os.ReadFile(filepath.Join(target, resultAssetName))
+		if err != nil || !strings.Contains(string(latest), `"score":25`) {
+			t.Errorf("result.json = %q, %v; want the newest payload", latest, err)
+		}
+		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z" was published by "alice", not by the autograde workflow; recorded and marked in results.json`) {
+			t.Errorf("errOut lacks the mark line:\n%s", errOut.String())
 		}
 	})
 
@@ -1252,7 +1269,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, _, err := listAllSubmitReleases(client, io.Discard, "o", "r")
+		rels, err := listAllSubmitReleases(client, "o", "r")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
@@ -1271,52 +1288,47 @@ func TestListAllSubmitReleases(t *testing.T) {
 	})
 
 	// A hand-made release or a clobbered result.json carries the student's login
-	// as author or uploader, the one mark they can't forge.
-	t.Run("skips releases not published by the autograde workflow", func(t *testing.T) {
+	// as author or uploader, the one mark they can't forge. The listing keeps
+	// them all; provenanceProblem names the reason for the results.json entry.
+	t.Run("keeps releases the workflow didn't publish; provenanceProblem names why", func(t *testing.T) {
 		alice := map[string]any{"login": "alice"}
+		forgedRelease := botRelease("submit/2026-06-04T10-00-00Z", botAsset("result.json", "u"))
+		forgedRelease["author"] = alice
+		noAuthor := botRelease("submit/2026-06-03T10-00-00Z")
+		delete(noAuthor, "author")
+		replacedAsset := botRelease("submit/2026-06-02T10-00-00Z",
+			map[string]any{"name": "Result.JSON", "url": "u", "uploader": alice})
+		noUploader := botRelease("submit/2026-06-01T20-00-00Z",
+			map[string]any{"name": "result.json", "url": "u"})
+		extraAsset := botRelease("submit/2026-06-01T10-00-00Z",
+			botAsset("result.json", "u"),
+			map[string]any{"name": "screenshot.png", "url": "u", "uploader": alice})
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
-			forgedRelease := botRelease("submit/2026-06-04T10-00-00Z", botAsset("result.json", "u"))
-			forgedRelease["author"] = alice
-			noAuthor := botRelease("submit/2026-06-03T10-00-00Z")
-			delete(noAuthor, "author")
-			replacedAsset := botRelease("submit/2026-06-02T10-00-00Z",
-				map[string]any{"name": "Result.JSON", "url": "u", "uploader": alice})
-			noUploader := botRelease("submit/2026-06-01T20-00-00Z",
-				map[string]any{"name": "result.json", "url": "u"})
-			extraAsset := botRelease("submit/2026-06-01T10-00-00Z",
-				botAsset("result.json", "u"),
-				map[string]any{"name": "screenshot.png", "url": "u", "uploader": alice})
 			_ = json.NewEncoder(w).Encode([]map[string]any{forgedRelease, noAuthor, replacedAsset, noUploader, extraAsset})
 		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var errOut bytes.Buffer
-		rels, rejected, err := listAllSubmitReleases(client, &errOut, "o", "r")
+		rels, err := listAllSubmitReleases(client, "o", "r")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
-		if rejected != 4 {
-			t.Errorf("rejected = %d, want 4", rejected)
+		if len(rels) != 5 {
+			t.Fatalf("kept %d releases, want all 5", len(rels))
 		}
-		if len(rels) != 1 || rels[0].TagName != "submit/2026-06-01T10-00-00Z" {
-			t.Fatalf("kept %+v, want only the workflow's release with a foreign screenshot", rels)
+		want := []string{
+			`published by "alice", not by the autograde workflow`,
+			`published by "an unknown account", not by the autograde workflow`,
+			`result.json uploaded by "alice", not by the autograde workflow`,
+			`result.json uploaded by "an unknown account", not by the autograde workflow`,
+			"",
 		}
-		for _, want := range []string{
-			`o/r: release "submit/2026-06-04T10-00-00Z" was published by "alice"`,
-			`o/r: release "submit/2026-06-03T10-00-00Z" was published by "an unknown account"`,
-			`o/r: release "submit/2026-06-02T10-00-00Z" was result.json uploaded by "alice"`,
-			`o/r: release "submit/2026-06-01T20-00-00Z" was result.json uploaded by "an unknown account"`,
-			"not counted as a submission",
-		} {
-			if !strings.Contains(errOut.String(), want) {
-				t.Errorf("errOut lacks %q:\n%s", want, errOut.String())
+		for i, rel := range rels {
+			if got := provenanceProblem(rel); got != want[i] {
+				t.Errorf("provenanceProblem(%s) = %q, want %q", rel.TagName, got, want[i])
 			}
-		}
-		if strings.Contains(errOut.String(), "submit/2026-06-01T10-00-00Z") {
-			t.Errorf("the kept release was warned about:\n%s", errOut.String())
 		}
 	})
 
@@ -1329,7 +1341,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, _, err := listAllSubmitReleases(client, io.Discard, "o", "missing")
+		rels, err := listAllSubmitReleases(client, "o", "missing")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
@@ -1356,7 +1368,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, _, err := listAllSubmitReleases(client, io.Discard, "o", "many")
+		rels, err := listAllSubmitReleases(client, "o", "many")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}

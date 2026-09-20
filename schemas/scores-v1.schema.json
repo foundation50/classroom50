@@ -177,6 +177,11 @@
           "type": "boolean",
           "description": "Collection-added: true when this submission's datetime is after the assignment `due`. Absent when the assignment has no `due`."
         },
+        "provenance_warning": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Collection-added: why the autograde workflow did not publish this release (its author, or the `result.json` uploader, was not `github-actions[bot]`). The score is still collected; the mark tells the teacher to check it. Absent when the workflow published both. Never taken from result.json: collection strips any copy there and stamps it from the release metadata."
+        },
         "submitted_by": {
           "type": "object",
           "additionalProperties": false,

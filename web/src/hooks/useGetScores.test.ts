@@ -109,6 +109,52 @@ describe("normalizeScores — manual override entries", () => {
   })
 })
 
+describe("normalizeScores — provenance_warning", () => {
+  const graded = (over: Record<string, unknown>) => ({
+    ...overrideRecord,
+    submission: "submit/2026-01-01T00-00-00Z-abc1234",
+    ...over,
+  })
+
+  it("carries the collector's reason onto the row and its attempt", () => {
+    const reason = "published by 'alice', not by the autograde workflow"
+    const normalized = normalizeScores(
+      scoresWith([
+        {
+          owner: "alice",
+          submissions: [
+            graded({
+              datetime: "2026-02-02T00:00:00Z",
+              provenance_warning: reason,
+            }),
+            graded({ datetime: "2026-01-01T00:00:00Z" }),
+          ],
+        },
+      ]) as never,
+    )
+    const [row] = normalized?.submissions.hw1 ?? []
+    expect(row.provenance).toEqual({ kind: "recorded", reason })
+    expect(row.submissions.map((s) => s.provenance)).toEqual([
+      { kind: "recorded", reason },
+      undefined,
+    ])
+  })
+
+  it("ignores an empty or non-string value", () => {
+    for (const value of ["", 7, null, true]) {
+      const normalized = normalizeScores(
+        scoresWith([
+          {
+            owner: "alice",
+            submissions: [graded({ provenance_warning: value })],
+          },
+        ]) as never,
+      )
+      expect(normalized?.submissions.hw1[0].provenance).toBeUndefined()
+    }
+  })
+})
+
 describe("normalizeScores — per-bucket collected_at", () => {
   it("surfaces a bucket's collected_at and omits unstamped buckets", () => {
     const normalized = normalizeScores({
