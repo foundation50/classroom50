@@ -1047,8 +1047,8 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err != nil || !strings.Contains(string(latest), `"score":25`) {
 			t.Errorf("result.json = %q, %v; want the newest payload", latest, err)
 		}
-		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z" was published by 'alice', not by the autograde workflow; recorded and marked in results.json`) {
-			t.Errorf("errOut lacks the mark line:\n%s", errOut.String())
+		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z" was published by 'alice', not by the autograde workflow; recorded and marked in results.json; result.json holds this payload unmarked`) {
+			t.Errorf("errOut lacks the mark line naming the unmarked result.json:\n%s", errOut.String())
 		}
 	})
 

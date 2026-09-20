@@ -2,7 +2,7 @@ import { PencilIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Badge, Button } from "@/components/ui"
-import { ProvenanceBadge } from "@/pages/submissions/ProvenanceBadge"
+import { ProvenanceBadge } from "@/components/submissions/ProvenanceBadge"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 import type { SubmissionProvenance } from "@/types/submissionProvenance"
 

@@ -64,7 +64,7 @@ import { FeedbackPrIconButton } from "@/pages/submissions/ReviewButton"
 import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
 import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
-import { ProvenanceBadge } from "@/pages/submissions/ProvenanceBadge"
+import { ProvenanceBadge } from "@/components/submissions/ProvenanceBadge"
 import {
   ScoreOverrideModal,
   type ScoreOverrideCapability,
@@ -183,10 +183,19 @@ function buildDetailItems(
   )
   // sha (short or full, whichever the collected commit URL ends with) -> the
   // graded release URL for that attempt, so a detected push can link its grade.
+  // Same keying for provenance so a detected push carries the collector's mark.
   const releaseByCommit = new Map<string, string>()
+  const provenanceByCommit = new Map<
+    string,
+    NonNullable<(typeof row.submissions)[number]["provenance"]>
+  >()
   for (const s of row.submissions) {
     const sha = s.commit?.split("/").pop()
     if (sha && s.release) releaseByCommit.set(sha, s.release)
+    if (sha && s.provenance) {
+      provenanceByCommit.set(sha, s.provenance)
+      provenanceByCommit.set(sha.slice(0, 7), s.provenance)
+    }
   }
 
   const commits: PushSubmission[] =
@@ -200,12 +209,17 @@ function buildDetailItems(
               releaseByCommit.get(e.sha.slice(0, 7)))
             : undefined,
           author: e.author,
+          provenance: e.sha
+            ? (provenanceByCommit.get(e.sha) ??
+              provenanceByCommit.get(e.sha.slice(0, 7)))
+            : undefined,
         }))
       : row.submissions.map((s, i) => ({
           key: `${s.datetime}-${s.commit}-${i}`,
           commitHref: s.commit,
           datetime: s.datetime,
           releaseHref: s.release,
+          provenance: s.provenance,
         }))
 
   // Tag-mode fallback for a viewer without the detection overlay: the collected
@@ -216,6 +230,7 @@ function buildDetailItems(
       datetime: s.datetime,
       commitHref: s.commit,
       releaseHref: s.release,
+      provenance: s.provenance,
     }),
   )
 

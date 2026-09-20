@@ -122,7 +122,9 @@ func NewCmd() *cobra.Command {
 			"    (newest first), result.json the latest. A submit/* release the\n" +
 			"    autograde workflow didn't publish is still collected, marked\n" +
 			"    with a provenance_warning in results.json and scores.csv, and\n" +
-			"    reported on stderr. A result.json that isn't a\n" +
+			"    reported on stderr. result.json keeps the latest payload\n" +
+			"    unmarked for back-compat; results.json and scores.csv are the\n" +
+			"    marked views. A result.json that isn't a\n" +
 			"    classroom50/result/v1 document is treated as missing.\n" +
 			"  - Team members with no repo on the org are reported as\n" +
 			"    `not yet accepted` and don't fail the run.\n" +
@@ -966,8 +968,9 @@ func stringifyOverride(v any) string {
 // Silent no-op for no releases / no submit-tag release. Network/5xx/decode
 // failures propagate so the caller can warn. Reported on errOut and otherwise
 // tolerated: a release the autograde workflow didn't publish (still recorded,
-// with its results.json entry carrying provenance_warning) and a result.json
-// that isn't a classroom50/result/v1 document (stored as a null payload).
+// with its results.json entry carrying provenance_warning; result.json keeps
+// that payload unmarked for back-compat) and a result.json that isn't a
+// classroom50/result/v1 document (stored as a null payload).
 // Token and apiBase are resolved once in downloadByRoster; apiBase lets
 // rewriteAssetURL retarget the asset host on GHES / test setups.
 func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase, org, repo, target string) error {
@@ -980,8 +983,10 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 	}
 
 	// API returns releases newest-first; preserve that so results.json[0] is
-	// the most recent submission.
+	// the most recent submission. latestPayloadSeen tracks which release's
+	// payload lands in result.json so its mark line can name the unmarked file.
 	history := make([]submissionRecord, 0, len(releases))
+	latestPayloadSeen := false
 	for _, rel := range releases {
 		assetURL, err := selectResultAsset(rel)
 		if err != nil {
@@ -1004,9 +1009,20 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 			}
 		}
 		problem := provenanceProblem(rel)
+		// History is newest-first; the first release with a payload becomes
+		// result.json. Say so on that release's mark line so the unmarked
+		// back-compat file isn't mistaken for the marked view.
+		isLatestPayload := len(payload) > 0 && !latestPayloadSeen
+		if len(payload) > 0 {
+			latestPayloadSeen = true
+		}
 		if problem != "" {
-			_, _ = fmt.Fprintf(errOut, "%s/%s: release %q was %s; recorded and marked in %s. Check the repository's Releases tab and Actions history.\n",
+			msg := fmt.Sprintf("%s/%s: release %q was %s; recorded and marked in %s",
 				org, repo, rel.TagName, problem, resultsAssetName)
+			if isLatestPayload {
+				msg += fmt.Sprintf("; %s holds this payload unmarked", resultAssetName)
+			}
+			_, _ = fmt.Fprintf(errOut, "%s. Check the repository's Releases tab and Actions history.\n", msg)
 		}
 		history = append(history, submissionRecord{
 			SubmissionTag:     rel.TagName,

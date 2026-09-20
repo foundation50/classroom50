@@ -986,6 +986,54 @@ describe("SubmissionsTable submission details modal", () => {
     )
   })
 
+  it("marks a non-latest collected attempt whose release the workflow didn't publish", async () => {
+    // Per-attempt provenance lives on the history rows, not only the summary
+    // score cell — a older hand-published attempt must still show Unverified.
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/bbb",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fz",
+                score: 9,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/aaa",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fy",
+                score: 8,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    const badges = screen.getAllByText("submissions.table.unverified")
+    expect(badges).toHaveLength(1)
+    expect(badges[0].getAttribute("title")).toContain(
+      "submissions.table.unverifiedRecordedTitle",
+    )
+  })
+
   it("keeps the tag glob-group modal header consistent with the count chip", async () => {
     const user = userEvent.setup()
     // A submit/* glob group collapses 3 tags into one jumpable row. The chip

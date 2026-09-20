@@ -12,6 +12,7 @@ import { repoTagsUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import type { SubmissionDetailItem } from "@/components/submissions/SubmissionDetailsModal"
 
 // Translator shape both submission views already thread into their item
@@ -24,12 +25,15 @@ type Translate = (key: string, opts?: Record<string, unknown>) => string
 // the student maps its live default-branch commits. `commitHref`/`releaseHref`
 // are raw (possibly unsafe) URLs — the builder guards them. `author` is who made
 // the commit, when the source knows (live commits do; collected attempts don't).
+// `provenance` marks an attempt whose release the autograde workflow didn't
+// publish (collected attempts only; live student commits have none).
 export type PushSubmission = {
   key: string
   commitHref?: string | null
   datetime?: string
   releaseHref?: string | null
   author?: CommitAuthor
+  provenance?: SubmissionProvenance
 }
 
 // A normalized tag submission collected in scores.json — the FALLBACK tag
@@ -37,12 +41,14 @@ export type PushSubmission = {
 // staff viewer, or the owner before detection resolves). The collected count is
 // present for everyone, so the modal lists these rather than a false "no tagged
 // submissions" state that contradicts the count chip. Jump targets (release,
-// else commit) are raw URLs the builder guards.
+// else commit) are raw URLs the builder guards. `provenance` is the collector's
+// mark when the graded release wasn't the workflow's own.
 export type CollectedTagSubmission = {
   key: string
   datetime?: string
   commitHref?: string | null
   releaseHref?: string | null
+  provenance?: SubmissionProvenance
 }
 
 // Map detected tag/tag-group entries to details-modal items. Shared by the
@@ -96,6 +102,7 @@ export function collectedTagDetailItems(
     href:
       safeHttpUrl(submission.releaseHref) ?? safeHttpUrl(submission.commitHref),
     count: 1,
+    provenance: submission.provenance,
   }))
 }
 
@@ -130,6 +137,7 @@ export function commitDetailItems(
       ? detailItemAuthor(commit.author, authorName)
       : undefined,
     count: 1,
+    provenance: commit.provenance,
   }))
 }
 
