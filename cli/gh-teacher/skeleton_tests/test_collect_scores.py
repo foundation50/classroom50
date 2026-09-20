@@ -2634,6 +2634,12 @@ class TestAllSubmitReleases:
         assert cs.release_provenance_problem(replaced) == "result.json uploaded by 'alice', not by the autograde workflow"
         no_uploader = bot_release("submit/x", assets=[{"name": "result.json", "url": "u"}])
         assert cs.release_provenance_problem(no_uploader) == "result.json uploaded by 'an unknown account', not by the autograde workflow"
+        # Only result.json feeds the score; other assets and a failed upload
+        # (no assets at all) don't make the release someone else's.
+        extra = bot_release("submit/x")
+        extra["assets"].append({"name": "screenshot.png", "url": "u", "uploader": {"login": "alice"}})
+        assert cs.release_provenance_problem(extra) is None
+        assert cs.release_provenance_problem(bot_release("submit/x", assets=[])) is None
 
     def test_paginates_via_link_header(self, monkeypatch):
         page1 = json.dumps([bot_release(f"submit/p1-{i}") for i in range(100)]).encode("utf-8")

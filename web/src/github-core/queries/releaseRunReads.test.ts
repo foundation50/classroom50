@@ -8,7 +8,6 @@ import {
   getLastCollectScoresRun,
   getRunAnnotations,
   getServiceTokenStatus,
-  isAutogradePublished,
   latestSubmitReleaseAndCount,
   releaseProvenanceProblem,
   latestSubmitReleaseWithAssets,
@@ -208,7 +207,6 @@ describe("releaseProvenanceProblem", () => {
     expect(
       releaseProvenanceProblem({ ...honest, assets: undefined }),
     ).toBeNull()
-    expect(isAutogradePublished(honest)).toBe(true)
   })
 
   // A hand-made release carries the student's login as author, the one mark

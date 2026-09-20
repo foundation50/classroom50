@@ -54,22 +54,19 @@ export function releaseProvenanceProblem(
   return null
 }
 
-export function isAutogradePublished(release: GitHubRelease): boolean {
-  return releaseProvenanceProblem(release) === null
-}
-
 // published_at is null for a draft; fall back to created_at so ordering holds.
 export function releaseTime(release: GitHubRelease): number {
   return new Date(release.published_at ?? release.created_at).getTime()
 }
 
 // The `submit/*` releases from a repo's release list, newest first: the shared
-// filter and sort the full-list query and the latest-only read derive from. Who
-// published each one is not a filter here; callers mark it via
-// releaseProvenanceProblem.
+// filter and sort the full-list query and the latest-only read derive from.
+// Drafts are dropped as the collector does (the runner never publishes one, and
+// a draft's assets aren't downloadable). Who published each one is not a filter
+// here; callers mark it via releaseProvenanceProblem.
 function submitReleasesNewestFirst(releases: GitHubRelease[]): GitHubRelease[] {
   return releases
-    .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
+    .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX) && !r.draft)
     .sort((a, b) => releaseTime(b) - releaseTime(a))
 }
 

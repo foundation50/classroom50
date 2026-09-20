@@ -1086,6 +1086,7 @@ type submissionRecord struct {
 // absent so a malformed release doesn't fail decode for a key we don't use.
 type release struct {
 	TagName string         `json:"tag_name"`
+	Draft   bool           `json:"draft"`
 	Author  releaseUser    `json:"author"`
 	Assets  []releaseAsset `json:"assets"`
 }
@@ -1114,15 +1115,17 @@ func provenanceProblem(rel release) string {
 		}
 		return login
 	}
+	// Single quotes match collect_scores.py's repr() so the same release reads
+	// identically in scores.json and results.json.
 	if rel.Author.Login != contract.AutogradeReleaseAuthor {
-		return fmt.Sprintf("published by %q, not by the autograde workflow", describe(rel.Author.Login))
+		return fmt.Sprintf("published by '%s', not by the autograde workflow", describe(rel.Author.Login))
 	}
 	for _, a := range rel.Assets {
 		if !strings.EqualFold(a.Name, resultAssetName) {
 			continue
 		}
 		if a.Uploader.Login != contract.AutogradeReleaseAuthor {
-			return fmt.Sprintf("%s uploaded by %q, not by the autograde workflow",
+			return fmt.Sprintf("%s uploaded by '%s', not by the autograde workflow",
 				resultAssetName, describe(a.Uploader.Login))
 		}
 	}
@@ -1140,8 +1143,9 @@ func isResultDocument(body []byte) bool {
 
 // listAllSubmitReleases returns every submit-tag release for a repo, newest
 // first, walking the full /releases pagination. Non-submit releases (a
-// student's hand-created tag) are filtered out; who published each one is
-// judged by provenanceProblem at ingest and recorded, not filtered. Mirrors
+// student's hand-created tag) and drafts (the runner never publishes one, and a
+// draft's assets aren't downloadable) are filtered out; who published each one
+// is judged by provenanceProblem at ingest and recorded, not filtered. Mirrors
 // all_submit_releases in collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
@@ -1164,7 +1168,7 @@ func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]relea
 	}
 	submits := make([]release, 0, len(all))
 	for _, rel := range all {
-		if strings.HasPrefix(rel.TagName, submitTagPrefix) {
+		if strings.HasPrefix(rel.TagName, submitTagPrefix) && !rel.Draft {
 			submits = append(submits, rel)
 		}
 	}

@@ -367,6 +367,8 @@ describe("releasesQuery", () => {
       rel("submit/2", "2026-03-01T00:00:00Z"),
       // hand-made by the student: still listed, marked by the caller
       rel("submit/3", "2026-04-01T00:00:00Z", { login: "alice" }),
+      // a draft is never the runner's; dropped like the collector does
+      { ...rel("submit/4", "2026-05-01T00:00:00Z"), draft: true },
     ])
     const releases = await run({ request } as unknown as GitHubClient)
     expect(releases.map((r) => r.tag_name)).toEqual([

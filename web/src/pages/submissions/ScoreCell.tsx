@@ -2,7 +2,9 @@ import { PencilIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Badge, Button } from "@/components/ui"
+import { ProvenanceBadge } from "@/pages/submissions/ProvenanceBadge"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 
 // The idle score cell with an override trigger. Shows the current grade (or an
 // ungraded/pending affordance), a "Manual" badge when overridden, and an edit
@@ -16,6 +18,7 @@ export function ScoreCell({
   score,
   max,
   overridden,
+  provenance,
   thresholdFraction,
   onEdit,
 }: {
@@ -28,6 +31,8 @@ export function ScoreCell({
   score: number
   max: number
   overridden: boolean
+  // The latest release wasn't the autograde workflow's own; see ProvenanceBadge.
+  provenance?: SubmissionProvenance
   thresholdFraction: number | null
   onEdit: () => void
 }) {
@@ -54,6 +59,7 @@ export function ScoreCell({
           {t("submissions.table.overridden")}
         </Badge>
       ) : null}
+      <ProvenanceBadge provenance={provenance} />
       <Button
         type="button"
         variant="ghost"

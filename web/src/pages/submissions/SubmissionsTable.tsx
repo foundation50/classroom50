@@ -64,6 +64,7 @@ import { FeedbackPrIconButton } from "@/pages/submissions/ReviewButton"
 import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
 import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
+import { ProvenanceBadge } from "@/pages/submissions/ProvenanceBadge"
 import {
   ScoreOverrideModal,
   type ScoreOverrideCapability,
@@ -89,7 +90,6 @@ import {
   SubmissionCountCell,
 } from "@/components/submissions/SubmissionRowCells"
 import type { SubmissionRow } from "@/hooks/useGetScores"
-import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupDisplayName } from "@/util/groupTeam"
@@ -231,37 +231,6 @@ function buildDetailItems(
     org,
     repo,
     t,
-  )
-}
-
-// The latest release wasn't the autograde workflow's own: collected, still
-// counted, marked so the teacher weighs it. Nothing when the workflow published
-// it. The collector's stored reason is data; the live kinds are phrased here.
-function ProvenanceBadge({
-  provenance,
-}: {
-  provenance: SubmissionProvenance | undefined
-}) {
-  const { t } = useTranslation()
-  if (!provenance) return null
-  const login = (value: string | null) =>
-    value ?? t("submissions.table.unverifiedUnknownAccount")
-  const title =
-    provenance.kind === "recorded"
-      ? t("submissions.table.unverifiedRecordedTitle", {
-          reason: provenance.reason,
-        })
-      : provenance.kind === "author"
-        ? t("submissions.table.unverifiedAuthorTitle", {
-            login: login(provenance.login),
-          })
-        : t("submissions.table.unverifiedUploaderTitle", {
-            login: login(provenance.login),
-          })
-  return (
-    <Badge tone="warning" size="sm" title={title}>
-      {t("submissions.table.unverified")}
-    </Badge>
   )
 }
 
@@ -827,6 +796,7 @@ const SubmissionsTable = ({
                   score={score}
                   max={rest["max-score"]}
                   overridden={Boolean(rest.overridden)}
+                  provenance={rest.provenance}
                   thresholdFraction={passBar}
                   onEdit={() =>
                     setOverrideRow({

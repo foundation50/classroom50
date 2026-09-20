@@ -1035,7 +1035,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if len(history) != 2 {
 			t.Fatalf("history = %s, want both releases", historyBytes)
 		}
-		if history[0].ProvenanceWarning != `published by "alice", not by the autograde workflow` {
+		if history[0].ProvenanceWarning != `published by 'alice', not by the autograde workflow` {
 			t.Errorf("newest provenance_warning = %q", history[0].ProvenanceWarning)
 		}
 		if history[1].ProvenanceWarning != "" || strings.Contains(string(historyBytes), `"provenance_warning": ""`) {
@@ -1047,7 +1047,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err != nil || !strings.Contains(string(latest), `"score":25`) {
 			t.Errorf("result.json = %q, %v; want the newest payload", latest, err)
 		}
-		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z" was published by "alice", not by the autograde workflow; recorded and marked in results.json`) {
+		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z" was published by 'alice', not by the autograde workflow; recorded and marked in results.json`) {
 			t.Errorf("errOut lacks the mark line:\n%s", errOut.String())
 		}
 	})
@@ -1319,16 +1319,38 @@ func TestListAllSubmitReleases(t *testing.T) {
 			t.Fatalf("kept %d releases, want all 5", len(rels))
 		}
 		want := []string{
-			`published by "alice", not by the autograde workflow`,
-			`published by "an unknown account", not by the autograde workflow`,
-			`result.json uploaded by "alice", not by the autograde workflow`,
-			`result.json uploaded by "an unknown account", not by the autograde workflow`,
+			`published by 'alice', not by the autograde workflow`,
+			`published by 'an unknown account', not by the autograde workflow`,
+			`result.json uploaded by 'alice', not by the autograde workflow`,
+			`result.json uploaded by 'an unknown account', not by the autograde workflow`,
 			"",
 		}
 		for i, rel := range rels {
 			if got := provenanceProblem(rel); got != want[i] {
 				t.Errorf("provenanceProblem(%s) = %q, want %q", rel.TagName, got, want[i])
 			}
+		}
+	})
+
+	// A read-write token also lists drafts; the runner never publishes one, so a
+	// draft submit/* tag is hand-made noise the collector skips too.
+	t.Run("skips draft releases", func(t *testing.T) {
+		draft := botRelease("submit/2026-06-02T10-00-00Z")
+		draft["draft"] = true
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]any{draft, botRelease("submit/2026-06-01T10-00-00Z")})
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		rels, err := listAllSubmitReleases(client, "o", "r")
+		if err != nil {
+			t.Fatalf("listAllSubmitReleases: %v", err)
+		}
+		if len(rels) != 1 || rels[0].TagName != "submit/2026-06-01T10-00-00Z" {
+			t.Fatalf("kept %+v, want only the published release", rels)
 		}
 	})
 

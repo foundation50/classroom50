@@ -1783,6 +1783,38 @@ describe("mergeLiveRows", () => {
     expect(bob?.["max-score"]).toBe(0)
   })
 
+  it("carries the live reader's provenance onto a pending live-only row", () => {
+    const merged = mergeLiveRows(
+      [],
+      [
+        {
+          ...live("bob", "2026-06-21T10:00:00Z"),
+          provenance: { kind: "uploader", login: null },
+        },
+      ],
+    )
+    expect(merged[0].provenance).toEqual({ kind: "uploader", login: null })
+    expect(
+      mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z")])[0].provenance,
+    ).toBeUndefined()
+  })
+
+  it("keeps the collected row's own mark when a live read overlays it", () => {
+    // The live mark describes a release the collector hasn't ingested; the row
+    // still shows the collected score, so it keeps the collected judgment.
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", submissionCount: 1 })],
+      [
+        {
+          ...live("alice", "2026-06-22T10:00:00Z", 2),
+          provenance: { kind: "author", login: "alice" },
+        },
+      ],
+    )
+    expect(merged[0].staleCount).toBe(true)
+    expect(merged[0].provenance).toBeUndefined()
+  })
+
   it("floors a live-only row's count at 1 even if the live count is 0", () => {
     const merged = mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z", 0)])
     expect(merged[0].submissionCount).toBe(1)

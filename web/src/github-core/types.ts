@@ -155,7 +155,7 @@ export type GitHubRelease = {
   created_at: string
   published_at: string | null
   // Who published it. Optional because older fixtures never set it; the
-  // submission readers treat absent as "not the workflow" (isAutogradePublished).
+  // submission readers treat absent as "not the workflow" (releaseProvenanceProblem).
   author?: { login: string } | null
   // Present on the list endpoint; absent-tolerant so existing release readers
   // (student submissions list) that ignore assets keep working.

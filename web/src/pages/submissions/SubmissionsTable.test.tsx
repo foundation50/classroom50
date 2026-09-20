@@ -447,6 +447,84 @@ describe("SubmissionsTable empty_repo score cell", () => {
   })
 })
 
+describe("SubmissionsTable provenance mark", () => {
+  const recorded = {
+    kind: "recorded" as const,
+    reason: "published by 'alice', not by the autograde workflow",
+  }
+  const overrideGrade = {
+    org: "acme",
+    classroom: "cs101",
+    assignment: "hw1",
+    assignmentType: "individual" as const,
+    mode: "auto" as const,
+    maxPoints: 10,
+  }
+
+  it("marks a collected row whose release the workflow didn't publish", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow({ provenance: recorded })]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    const badge = screen.getByText("submissions.table.unverified")
+    expect(badge.getAttribute("title")).toContain(
+      "submissions.table.unverifiedRecordedTitle",
+    )
+  })
+
+  it("marks the row on the override-capable score cell too", () => {
+    // Teachers with override capability take the ScoreCell path; the mark must
+    // not disappear for the audience it exists for.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow({ provenance: recorded })]}
+        acceptedUsernames={new Set(["alice"])}
+        overrideGrade={overrideGrade}
+      />,
+    )
+    expect(screen.getByText("submissions.table.unverified")).toBeTruthy()
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.scoreOverride.editLabel",
+      }),
+    ).toBeTruthy()
+  })
+
+  it("marks a pending live row from the live reader's own judgment", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[
+          scoreRow({
+            pending: true,
+            provenance: { kind: "author", login: null },
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    const badge = screen.getByText("submissions.table.unverified")
+    expect(badge.getAttribute("title")).toContain(
+      "submissions.table.unverifiedAuthorTitle",
+    )
+  })
+
+  it("shows no mark for a workflow-published row", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    expect(screen.queryByText("submissions.table.unverified")).toBeNull()
+  })
+})
+
 describe("SubmissionsTable score override on a no-autograder manual assignment", () => {
   // A templated manual-graded assignment is written as no_autograder (the
   // skipsGrading prop here), so manual grading must win over the no-grading

@@ -83,6 +83,36 @@ describe("useLiveSubmissions", () => {
     expect(request).toHaveBeenCalledTimes(5)
   })
 
+  it("marks a release the workflow didn't publish; leaves the workflow's own unmarked", async () => {
+    request.mockResolvedValue([
+      {
+        ...submitRelease("submit/x", "2026-01-01T00:00:00Z"),
+        author: { login: "alice" },
+      },
+    ])
+    const { result } = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["alice"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.submissions.length).toBe(1))
+    expect(result.current.submissions[0].provenance).toEqual({
+      kind: "author",
+      login: "alice",
+    })
+
+    request.mockResolvedValue([
+      submitRelease("submit/y", "2026-01-02T00:00:00Z"),
+    ])
+    const honest = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["bob"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() =>
+      expect(honest.result.current.submissions.length).toBe(1),
+    )
+    expect(honest.result.current.submissions[0].provenance).toBeUndefined()
+  })
+
   it("treats a repo with no submit release as not-submitted, not an error", async () => {
     request.mockResolvedValue([]) // repo exists but no submissions
     const { result } = renderHook(
