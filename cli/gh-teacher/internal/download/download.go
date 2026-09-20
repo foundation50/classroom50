@@ -1008,7 +1008,7 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 					org, repo, rel.TagName, resultAssetName, resultSchemaV1)
 			}
 		}
-		problem := provenanceProblem(rel)
+		problem := releaseProvenanceProblem(rel)
 		// History is newest-first; the first release with a payload becomes
 		// result.json. Say so on that release's mark line so the unmarked
 		// back-compat file isn't mistaken for the marked view.
@@ -1117,14 +1117,14 @@ type releaseUser struct {
 	Login string `json:"login"`
 }
 
-// provenanceProblem says why a submit/* release did not come from the autograde
+// releaseProvenanceProblem says why a submit/* release did not come from the autograde
 // workflow, or "" when it did. Students can write to their repos, so they can
 // publish a release or replace its result.json as themselves. They can't act as
 // the workflow's GITHUB_TOKEN, so the author and every result.json uploader must
 // be that login; a missing one counts as someone else. The reason is recorded
 // beside the result rather than used to drop it, since a teacher may publish by
 // hand. Mirrors release_provenance_problem in collect_scores.py.
-func provenanceProblem(rel release) string {
+func releaseProvenanceProblem(rel release) string {
 	describe := func(login string) string {
 		if login == "" {
 			return "an unknown account"
@@ -1161,7 +1161,7 @@ func isResultDocument(body []byte) bool {
 // first, walking the full /releases pagination. Non-submit releases (a
 // student's hand-created tag) and drafts (the runner never publishes one, and a
 // draft's assets aren't downloadable) are filtered out; who published each one
-// is judged by provenanceProblem at ingest and recorded, not filtered. Mirrors
+// is judged by releaseProvenanceProblem at ingest and recorded, not filtered. Mirrors
 // all_submit_releases in collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,

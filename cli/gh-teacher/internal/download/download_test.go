@@ -1289,8 +1289,8 @@ func TestListAllSubmitReleases(t *testing.T) {
 
 	// A hand-made release or a clobbered result.json carries the student's login
 	// as author or uploader, the one mark they can't forge. The listing keeps
-	// them all; provenanceProblem names the reason for the results.json entry.
-	t.Run("keeps releases the workflow didn't publish; provenanceProblem names why", func(t *testing.T) {
+	// them all; releaseProvenanceProblem names the reason for the results.json entry.
+	t.Run("keeps releases the workflow didn't publish; releaseProvenanceProblem names why", func(t *testing.T) {
 		alice := map[string]any{"login": "alice"}
 		forgedRelease := botRelease("submit/2026-06-04T10-00-00Z", botAsset("result.json", "u"))
 		forgedRelease["author"] = alice
@@ -1326,8 +1326,8 @@ func TestListAllSubmitReleases(t *testing.T) {
 			"",
 		}
 		for i, rel := range rels {
-			if got := provenanceProblem(rel); got != want[i] {
-				t.Errorf("provenanceProblem(%s) = %q, want %q", rel.TagName, got, want[i])
+			if got := releaseProvenanceProblem(rel); got != want[i] {
+				t.Errorf("releaseProvenanceProblem(%s) = %q, want %q", rel.TagName, got, want[i])
 			}
 		}
 	})

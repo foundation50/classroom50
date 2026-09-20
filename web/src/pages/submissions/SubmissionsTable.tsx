@@ -65,6 +65,7 @@ import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal
 import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import { ProvenanceBadge } from "@/components/submissions/ProvenanceBadge"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import {
   ScoreOverrideModal,
   type ScoreOverrideCapability,
@@ -185,17 +186,11 @@ function buildDetailItems(
   // graded release URL for that attempt, so a detected push can link its grade.
   // Same keying for provenance so a detected push carries the collector's mark.
   const releaseByCommit = new Map<string, string>()
-  const provenanceByCommit = new Map<
-    string,
-    NonNullable<(typeof row.submissions)[number]["provenance"]>
-  >()
+  const provenanceByCommit = new Map<string, SubmissionProvenance>()
   for (const s of row.submissions) {
     const sha = s.commit?.split("/").pop()
     if (sha && s.release) releaseByCommit.set(sha, s.release)
-    if (sha && s.provenance) {
-      provenanceByCommit.set(sha, s.provenance)
-      provenanceByCommit.set(sha.slice(0, 7), s.provenance)
-    }
+    if (sha && s.provenance) provenanceByCommit.set(sha, s.provenance)
   }
 
   const commits: PushSubmission[] =
