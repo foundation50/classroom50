@@ -114,10 +114,9 @@ func NewCmd() *cobra.Command {
 			"  - Clones whichever repos exist, and refreshes <repo>/result.json\n" +
 			"    and <repo>/results.json from the repo's submit-tag releases\n" +
 			"    alongside the clone: results.json holds every submission\n" +
-			"    (newest first), result.json the latest. Only releases the\n" +
-			"    autograde workflow published count; a release someone else\n" +
-			"    created, or whose result.json someone else uploaded, is skipped\n" +
-			"    and reported on stderr.\n" +
+			"    (newest first), result.json the latest. A submit/* release the\n" +
+			"    autograde workflow didn't publish is skipped and reported on\n" +
+			"    stderr.\n" +
 			"  - Team members with no repo on the org are reported as\n" +
 			"    `not yet accepted` and don't fail the run.\n" +
 			"  - A scores.csv summary is written at the destination root with\n" +
@@ -1073,12 +1072,11 @@ type releaseUser struct {
 	Login string `json:"login"`
 }
 
-// provenanceProblem says why a submit/* release did not come from the
-// autograde workflow, or "" when it did. The workflow's GITHUB_TOKEN can't be
-// impersonated, but a student's push access lets them publish a release, or
-// replace its result.json, as themselves; either mark by another login means
-// the payload didn't come from grading. A missing login counts as another
-// login: nothing the runner publishes lacks one. Mirrors
+// provenanceProblem says why a submit/* release did not come from the autograde
+// workflow, or "" when it did. Students can write to their repos, so they can
+// publish a release or replace its result.json as themselves. They can't act as
+// the workflow's GITHUB_TOKEN, so the author and every result.json uploader must
+// be that login; a missing one counts as someone else. Mirrors
 // release_provenance_problem in collect_scores.py.
 func provenanceProblem(rel release) string {
 	describe := func(login string) string {
@@ -1102,12 +1100,11 @@ func provenanceProblem(rel release) string {
 	return ""
 }
 
-// listAllSubmitReleases returns every submit-tag release the autograde
-// workflow published for a repo, newest first, walking the full /releases
-// pagination. Non-submit releases (e.g., a student's hand-created tag) are
-// filtered out, and so is a submit/* release provenanceProblem rejects, with a
-// line on errOut naming it so the teacher can follow up. Mirrors
-// all_submit_releases in collect_scores.py.
+// listAllSubmitReleases returns every submit-tag release the autograde workflow
+// published for a repo, newest first, walking the full /releases pagination.
+// Non-submit releases (a student's hand-created tag) and releases
+// provenanceProblem rejects are filtered out; the latter are named on errOut.
+// Mirrors all_submit_releases in collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
 		func(page int) string {
@@ -1133,7 +1130,7 @@ func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, rep
 			continue
 		}
 		if problem := provenanceProblem(rel); problem != "" {
-			_, _ = fmt.Fprintf(errOut, "%s/%s: release %q was %s; not counted as a submission. Only releases the workflow publishes count; check the repo's Releases tab and Actions history.\n",
+			_, _ = fmt.Fprintf(errOut, "%s/%s: release %q was %s; not counted as a submission. Check the repository's Releases tab and Actions history.\n",
 				owner, repo, rel.TagName, problem)
 			continue
 		}

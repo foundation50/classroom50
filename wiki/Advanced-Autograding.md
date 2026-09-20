@@ -228,16 +228,15 @@ reads `result.json` from the workspace after the autograder exits.
 | `tests` | array | Per-test breakdown (`[]` is valid for a vacuous pass). Extra diagnostic fields on a test are preserved verbatim. |
 | `submitted_by` | object | Optional, stamped by the runner. Who pushed: `username`, and `id` (which may be null or absent). |
 
-Collection validates this before merging into `scores.json`. A payload whose
-identity (classroom/assignment/`owner`) doesn't match the source repository is
-rejected, and a mismatched `assignment_type` is warned about and skipped, so a
-hostile payload can't land in another student's collected scores. Before any of
-that, a `submit/*` Release the workflow didn't publish is skipped with a
-warning: only a Release authored by `github-actions[bot]` whose `result.json`
-that same identity uploaded is read at all, so a student's hand-made Release,
-or a `result.json` they replaced, never reaches validation. A submission is
-late when `datetime` is after the assignment's due date; submitting exactly at
-the due date is on time. For what this does and doesn't guarantee, see
+Collection validates this before merging into `scores.json`. A `submit/*`
+Release the workflow didn't publish (any author other than
+`github-actions[bot]`, or a `result.json` someone else uploaded) is skipped
+with a warning before validation. A payload whose identity
+(classroom/assignment/`owner`) doesn't match the source repository is rejected,
+and a mismatched `assignment_type` is warned about and skipped, so a hostile
+payload can't land in another student's collected scores. A submission is late
+when `datetime` is after the assignment's due date; submitting exactly at the
+due date is on time. See
 [How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
 
 <details>
@@ -404,13 +403,11 @@ dot, no `..`, not `result.json` or `release-body.md`), and relative. A separate
 100 MiB file-content budget applies at runtime. Missing, unsafe, oversized, or
 failed uploads warn without changing the score.
 
-These files come from the student's working tree, so treat them as student
-content that happens to be published under the workflow's identity. The runner
-refuses to attach a file that is itself a `classroom50/result/*` document:
-anyone with push access can rename a Release asset after the fact, and a
-student-authored file shaped like `result.json` is the one attachment that
-rename would turn into a forged score. See
-[How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
+These files come from the student's working tree, so they are student content
+published under the workflow's identity. The runner refuses to attach a file
+that is itself a `classroom50/result/*` document: anyone with push access can
+rename a Release asset, and a student-authored file shaped like `result.json`
+is the one attachment a rename would turn into a forged score.
 
 > [!NOTE]
 > Submission publishing doesn't support GitHub immutable releases: a rerun
@@ -457,8 +454,8 @@ workflow you control, so your grading logic runs in place of the runner.
 For its results to be collected, your workflow must publish each graded
 submission the way the built-in runner does: a Release on a `submit/*` tag with
 a `result.json` asset, both created with the job's `GITHUB_TOKEN`. Collection
-reads only Releases authored by `github-actions[bot]` and skips the rest, so a
-Release published with a personal access token is ignored.
+skips a Release published with any other token, such as a personal access
+token.
 
 ### Keeping a GitHub Classroom autograder
 

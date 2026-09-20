@@ -2607,10 +2607,8 @@ class TestAllSubmitReleases:
         ]
 
     def test_skips_a_release_published_by_someone_else(self, monkeypatch, capsys):
-        # Students have push access, so `gh release create submit/x result.json`
-        # with a hand-written result.json is one command away. The release
-        # author is the one mark they can't forge: only the workflow token is
-        # github-actions[bot]. Skip it and say so; the teacher should know.
+        # A hand-made release carries the student's login as author, the one
+        # mark they can't forge.
         self._listing(monkeypatch, [
             bot_release("submit/2026-06-03T10-00-00Z", author={"login": "alice"}),
             bot_release("submit/2026-06-02T10-00-00Z", author=None),
@@ -2624,9 +2622,8 @@ class TestAllSubmitReleases:
         assert "not counted as a submission" in err
 
     def test_skips_a_release_whose_result_json_was_replaced(self, monkeypatch, capsys):
-        # The other route: keep the workflow's honest release and `gh release
-        # upload --clobber` a forged result.json onto it. The author stays the
-        # bot; the asset's uploader gives it away.
+        # A clobbered result.json keeps the bot as author; the uploader gives
+        # it away.
         self._listing(monkeypatch, [
             bot_release(
                 "submit/2026-06-03T10-00-00Z",
@@ -2645,15 +2642,13 @@ class TestAllSubmitReleases:
         assert "result.json uploaded by 'an unknown account'" in err
 
     def test_other_assets_by_other_uploaders_do_not_matter(self):
-        # Only result.json feeds the gradebook. A screenshot a student attached
-        # to the workflow's release is noise, not tampering.
+        # Only result.json feeds the collected scores.
         release = bot_release("submit/2026-06-01T10-00-00Z")
         release["assets"].append({"name": "screenshot.png", "url": "u", "uploader": {"login": "alice"}})
         assert cs.release_provenance_problem(release) is None
 
     def test_a_release_with_no_assets_is_still_the_workflows(self):
-        # A bot release with no result.json (an upload that failed) passes here
-        # and is reported downstream as a missing asset, not as tampering.
+        # A failed upload is reported downstream as a missing asset, not here.
         assert cs.release_provenance_problem(bot_release("submit/x", assets=[])) is None
 
     def test_paginates_via_link_header(self, monkeypatch):
@@ -4103,8 +4098,7 @@ def _prior_scores(slug: str, owner: str, **entry_extra):
 
 
 def _collect_with_all_releases_rejected(monkeypatch, prior_scores):
-    # Every submit/* release of alice's repo fails provenance, so the listing
-    # comes back empty but flagged, exactly as all_submit_releases returns it.
+    # Every release of alice's repo fails provenance: empty but flagged.
     def fake_all(api_url, org, repo, token):
         listing = cs.SubmitReleases()
         listing.rejected = 1
@@ -4123,10 +4117,8 @@ def _collect_with_all_releases_rejected(monkeypatch, prior_scores):
 
 
 def test_all_releases_rejected_warns_about_a_score_already_on_file(monkeypatch, capsys):
-    # A forged release ingested before the provenance check, or honest releases
-    # a student deleted afterwards, leave an entry collection never removes. The
-    # per-release skip warning alone would read as "not counted" while the
-    # gradebook still shows the old score, so name the stale entry.
+    # Collection never removes an entry, so a score ingested before the check
+    # would silently stay while the skip warnings read as "not counted".
     results, _, _, detected = _collect_with_all_releases_rejected(
         monkeypatch, _prior_scores("hw1", "alice")
     )
@@ -4150,16 +4142,13 @@ def test_all_releases_rejected_warns_about_a_score_already_on_file(monkeypatch, 
     ids=["no-scores", "empty", "other-owner", "other-assignment", "teacher-override"],
 )
 def test_all_releases_rejected_is_quiet_without_a_collected_score(monkeypatch, capsys, prior):
-    # Nothing stale to point at: no file, no entry for this owner and slug, or a
-    # teacher override that collection leaves alone by design.
+    # Nothing stale to point at, or a teacher override collection leaves alone.
     _collect_with_all_releases_rejected(monkeypatch, prior)
     assert "still in" not in capsys.readouterr().err
 
 
 def test_plain_empty_listing_never_warns_about_prior_scores(monkeypatch, capsys):
-    # An honest empty listing (nothing published yet, or a 404) is the ordinary
-    # not-submitted case, not a provenance skip; a prior entry there is the
-    # existing "prior credit preserved" behavior and stays quiet.
+    # An honest empty listing is the ordinary not-submitted case, not a skip.
     monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
     monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
     stub_team_members(monkeypatch, ["alice"])

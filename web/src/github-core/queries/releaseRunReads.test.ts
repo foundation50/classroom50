@@ -210,9 +210,8 @@ describe("isAutogradePublished", () => {
     expect(isAutogradePublished({ ...honest, assets: undefined })).toBe(true)
   })
 
-  // Students have push access, so `gh release create submit/x result.json`
-  // with a hand-written payload is one command away. The author is the mark
-  // they can't forge: only the workflow token is github-actions[bot].
+  // A hand-made release carries the student's login as author, the one mark
+  // they can't forge.
   it("rejects a release published by anyone else, or by no one", () => {
     expect(
       isAutogradePublished({ ...honest, author: { login: "alice" } }),
@@ -221,8 +220,7 @@ describe("isAutogradePublished", () => {
     expect(isAutogradePublished({ ...honest, author: undefined })).toBe(false)
   })
 
-  // The other route: keep the workflow's honest release and clobber its
-  // result.json. The author stays the bot; the uploader gives it away.
+  // A clobbered result.json keeps the bot as author; the uploader gives it away.
   it("rejects a release whose result.json someone else uploaded", () => {
     const asset = honest.assets![0]
     expect(

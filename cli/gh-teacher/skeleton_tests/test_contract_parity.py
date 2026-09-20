@@ -79,10 +79,7 @@ class TestAcceptMarkerPath:
 
 class TestAutogradeReleaseAuthor:
     def test_collector_matches_go_and_web(self):
-        # The provenance mark every submission reader filters on. Three hand
-        # spellings (Go download, the Python collector, the web release list);
-        # a drift would make one reader count a hand-made release the others
-        # reject, or reject every honest one.
+        # Three hand spellings; a drift makes one reader disagree with the others.
         go = re.search(r'AutogradeReleaseAuthor\s*=\s*"([^"]+)"', _CONTRACT_GO.read_text())
         assert go, "contract.AutogradeReleaseAuthor not found in contract.go"
         web = re.search(

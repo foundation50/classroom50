@@ -26,9 +26,8 @@ import (
 	scoresschema "github.com/foundation50/gh-teacher/internal/scores"
 )
 
-// botUser is the workflow token's identity as GitHub renders it on a release
-// and its assets. Every fixture standing in for a runner-published release
-// carries it, since the reader now rejects releases that don't.
+// botUser is the workflow token's identity on a release and its assets; the
+// reader rejects releases without it.
 var botUser = map[string]any{"login": contract.AutogradeReleaseAuthor}
 
 // botAsset is an asset the workflow token uploaded.
@@ -1200,11 +1199,8 @@ func TestListAllSubmitReleases(t *testing.T) {
 		}
 	})
 
-	// Students have push access, so `gh release create submit/x result.json`
-	// with a hand-written payload, or `gh release upload --clobber` onto the
-	// workflow's honest release, is one command away. The author and the asset
-	// uploader are the marks they can't forge: only the workflow token is
-	// github-actions[bot]. Skip such a release and say so on errOut.
+	// A hand-made release or a clobbered result.json carries the student's login
+	// as author or uploader, the one mark they can't forge.
 	t.Run("skips releases not published by the autograde workflow", func(t *testing.T) {
 		alice := map[string]any{"login": "alice"}
 		mux := http.NewServeMux()

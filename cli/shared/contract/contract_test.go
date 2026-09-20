@@ -97,9 +97,8 @@ func TestContractLiterals(t *testing.T) {
 		// autograde-runner.yaml tag step, and the web SUBMISSION_TAG_PREFIX
 		// (releaseRunReads.ts). Update every copy in lockstep on change.
 		{"SubmitTagPrefix", SubmitTagPrefix, "submit/"},
-		// AutogradeReleaseAuthor is GitHub's fixed login for GITHUB_TOKEN, mirrored
-		// with NO compile-time link in collect_scores.py and the web
-		// (releaseRunReads.ts). It is GitHub's value, not ours: it can't change.
+		// AutogradeReleaseAuthor is GitHub's login for GITHUB_TOKEN, mirrored with
+		// NO compile-time link in collect_scores.py and the web (releaseRunReads.ts).
 		{"AutogradeReleaseAuthor", AutogradeReleaseAuthor, "github-actions[bot]"},
 		{"ResultFilename", ResultFilename, "result.json"},
 		{"ReleaseBodyFilename", ReleaseBodyFilename, "release-body.md"},

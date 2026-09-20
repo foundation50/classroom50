@@ -1185,10 +1185,8 @@ gh teacher download --pull -d <dir> <org> <classroom> <assignment> # update exis
 **Team-driven (default):** lists the classroom team's members and, for each,
 probes the expected `<classroom>-<assignment>-<username>` repo, clones it (or
 reports `Missing: <username>`), and refreshes `result.json` (latest) and
-`results.json` (all submissions) from its releases. Only releases the autograde
-workflow published count: a `submit/*` release authored by anyone other than
-`github-actions[bot]`, or whose `result.json` someone else uploaded, is skipped
-and reported on stderr. Then writes a `scores.csv`
+`results.json` (all submissions) from its releases. A `submit/*` release the
+autograde workflow didn't publish is skipped and reported on stderr. Then writes a `scores.csv`
 at the destination root, one line per submission (a student with several pushes
 contributes several lines), plus a blank-score line for each non-submitter.
 

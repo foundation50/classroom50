@@ -79,10 +79,8 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (created by autograde-runner.yaml on push to the repo's default branch).
 SUBMIT_TAG_PREFIX = "submit/"
 
-# The login GitHub gives a workflow's GITHUB_TOKEN; the provenance mark every
-# submit/* release and result.json the runner publishes carries (see
-# release_provenance_problem). Hand-mirrored from Go
-# contract.AutogradeReleaseAuthor (parity-tested).
+# The login GitHub gives a workflow's GITHUB_TOKEN; see release_provenance_problem.
+# Hand-mirrored from Go contract.AutogradeReleaseAuthor (parity-tested).
 AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
 
 # Repo permission the collect-time grant gives each staff role's team on every
@@ -1586,8 +1584,8 @@ def collect_classroom(
     assignments' buckets in scores.json are untouched (apply_updates upserts).
 
     `prior_scores` is the scores.json being updated, read only to warn when a
-    repo whose every release was skipped for provenance still has a collected
-    score on file (collection never removes an entry). None disables that check.
+    repo left with no counted release still has a score on file. None skips
+    that check.
     """
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
@@ -1792,10 +1790,9 @@ def collect_classroom(
                 # tells the last two apart. Individual misses are quiet; the
                 # per-assignment summary reports the gap.
                 #
-                # Except when every release was skipped for provenance and a
-                # score is already on file: collection never removes an entry,
-                # so the gradebook would keep showing a score no trusted
-                # release backs while the log says nothing was counted.
+                # A repo whose releases were all skipped for provenance may
+                # still have a score on file. Collection never removes an
+                # entry, so say so; the skip warnings alone read as "not counted".
                 if getattr(releases, "rejected", 0) and has_collected_score(
                     prior_scores, slug, username
                 ):
@@ -1803,7 +1800,7 @@ def collect_classroom(
                         f"{org}/{repo_name}: no release counts for this repository "
                         f"now, but a score collected earlier for {username} is still "
                         f"in {classroom_short}/scores.json under {slug!r}. Collection "
-                        f"never removes an entry; check the repository, then delete "
+                        f"never removes an entry: check the repository, then delete "
                         f"that entry or set \"override\": true on it."
                     )
                 record, read = detector.detect(username, repo_name)
@@ -2925,9 +2922,8 @@ def validate_result(
     """Raise ValueError if the payload fails the v1 contract. The
     classroom/assignment/owner checks defend against a hostile result.json
     trying to land in someone else's scores.json: the triple must match the
-    source repo's expected identity. Whether the payload came from the
-    autograde workflow at all is release_provenance_problem's job, upstream in
-    all_submit_releases; this validates the shape of one that did.
+    source repo's expected identity. Provenance (did the workflow publish it at
+    all) is checked upstream by release_provenance_problem.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
     (the roster/repo-name-derived owner; for a team assignment the repo-name
@@ -3409,15 +3405,13 @@ def _login(user: Any) -> str:
 
 
 def release_provenance_problem(release: dict[str, Any]) -> str | None:
-    """Why a submit/* release did not come from the autograde workflow, or None
-    when it did.
+    """Why a submit/* release did not come from the autograde workflow, or None.
 
-    Students have push access to their repos, so they can publish a release, or
-    replace its result.json, as themselves; the one thing they can't do is act
-    as the workflow's GITHUB_TOKEN. So the release author and the uploader of
-    every result.json asset must both be that login. A missing author or
-    uploader counts as another login: nothing the runner publishes lacks them.
-    gh teacher download and the web apply the same rule."""
+    Students can write to their repos, so they can publish a release or replace
+    its result.json as themselves. They can't act as the workflow's
+    GITHUB_TOKEN, so the release author and every result.json uploader must be
+    that login; a missing one counts as someone else. gh teacher download and
+    the web apply the same rule."""
     author = _login(release.get("author"))
     if author != AUTOGRADE_RELEASE_AUTHOR:
         return f"published by {author or 'an unknown account'!r}, not by the autograde workflow"
@@ -3436,10 +3430,9 @@ def release_provenance_problem(release: dict[str, Any]) -> str | None:
 
 
 class SubmitReleases(list):
-    """all_submit_releases' return: the trusted releases, plus how many
-    submit/* releases were skipped for provenance. A list subclass so the many
-    callers and test fakes that treat the result as a plain list keep working;
-    `getattr(releases, "rejected", 0)` reads it from either."""
+    """The trusted releases, plus how many submit/* releases were skipped for
+    provenance. A list subclass so callers and test fakes that use plain lists
+    keep working; read the count with `getattr(releases, "rejected", 0)`."""
 
     rejected: int = 0
 
@@ -3450,10 +3443,10 @@ def all_submit_releases(
     """Every submit-tag release the autograde workflow published for a repo,
     newest first, walking the full /releases pagination: the complete submission
     history (a student who pushed N times has N submit/* releases, all
-    returned). Non-submit releases (e.g., a hand-created tag) are filtered out,
-    and so is a submit/* release that fails release_provenance_problem, with a
-    warning naming it (see there for why) and a count in `.rejected`. A 404 (no
-    releases, or repo not accepted) yields an empty list.
+    returned). Non-submit releases (a hand-created tag) and releases that fail
+    release_provenance_problem are filtered out; the latter warn and are counted
+    in `.rejected`. A 404 (no releases, or repo not accepted) yields an empty
+    list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
     chain or the page cap) raises IncompleteListing rather than returning a
@@ -3490,8 +3483,8 @@ def all_submit_releases(
         trusted.rejected += 1
         emit_warning(
             f"{owner}/{repo}: release {release.get('tag_name')!r} was {problem}; "
-            f"not counted as a submission. Only releases the workflow publishes "
-            f"count; check the repo's Releases tab and Actions history."
+            f"not counted as a submission. Check the repository's Releases tab "
+            f"and Actions history."
         )
     return trusted
 

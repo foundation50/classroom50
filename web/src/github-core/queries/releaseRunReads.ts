@@ -23,20 +23,18 @@ import { githubKeys } from "./keys"
 // the release page rather than reading result.json.
 export const SUBMISSION_TAG_PREFIX = "submit/"
 
-// The login GitHub gives a workflow's GITHUB_TOKEN: the provenance mark every
-// release and result.json the runner publishes carries (see
-// isAutogradePublished). Mirrors the shared contract's AutogradeReleaseAuthor
-// and collect_scores.py; keep byte-identical (parity-tested).
+// The login GitHub gives a workflow's GITHUB_TOKEN; see isAutogradePublished.
+// Mirrors contract.AutogradeReleaseAuthor and collect_scores.py; keep
+// byte-identical (parity-tested).
 export const AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
 
 const RESULT_ASSET_NAME = "result.json"
 
 // Whether the autograde workflow published this release and its result.json.
-// Students have push access to their repos, so they can publish a release, or
-// replace its result.json, as themselves; the one thing they can't do is act
-// as the workflow token. So the author and every result.json uploader must both
-// be that login, and a missing one counts as another login. Mirrors
-// release_provenance_problem in collect_scores.py.
+// Students can write to their repos, so they can publish a release or replace
+// its result.json as themselves. They can't act as the workflow token, so the
+// author and every result.json uploader must be that login; a missing one
+// counts as someone else. Mirrors release_provenance_problem in collect_scores.py.
 export function isAutogradePublished(release: GitHubRelease): boolean {
   if (release.author?.login !== AUTOGRADE_RELEASE_AUTHOR) return false
   return (release.assets ?? []).every(
@@ -52,9 +50,9 @@ export function releaseTime(release: GitHubRelease): number {
 }
 
 // The workflow-published `submit/*` releases from a repo's release list, newest
-// first — the shared filter+sort both the full-list query and the latest-only
-// read derive from. A hand-made submit/* release is dropped here, so a forged
-// one never shows up as an attempt or inflates the live count.
+// first: the shared filter and sort the full-list query and the latest-only
+// read derive from. Dropping hand-made releases here keeps them out of both the
+// attempt list and the live count.
 function submitReleasesNewestFirst(releases: GitHubRelease[]): GitHubRelease[] {
   return releases
     .filter(

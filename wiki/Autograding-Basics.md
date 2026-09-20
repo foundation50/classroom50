@@ -579,59 +579,52 @@ commit), and the feedback pull request (**View feedback PR** on the row, or
 
 ### How much to trust a collected score
 
-Grading runs inside the student's repository, and students can write to their
-repositories. That shapes what a collected score does and doesn't guarantee:
+Grading runs inside the student's repository, and students can write to that
+repository. A collected score is reliable feedback, not proof. What it does and
+doesn't guarantee:
 
-- **The tests are the ones you wrote.** Test files, fixtures, and the runner
-  are fetched from your `classroom50` repository's GitHub Pages site on every
-  run and never enter the student's repository, so a student can't edit the
-  tests that ran. See [Teacher-only test files](#teacher-only-test-files).
-- **Hand-made Releases don't count.** Every Release the workflow publishes,
-  and the `result.json` it attaches, carries the workflow's identity
-  (`github-actions[bot]`), which a student can't use. Collection,
-  `gh teacher download`, and the submissions view all skip a `submit/*`
-  Release with any other author, or whose `result.json` someone else uploaded,
-  and the collection run's warnings name the repository and tag so you can
-  follow up.
-- **Anything that runs during grading can publish under that identity.**
-  Grading and publishing share one job in the student's repository, and
-  students can write to that repository. The caller workflow at
-  `.github/workflows/autograde.yaml`, any other workflow file a student adds
-  next to it, and the student's own code that the tests execute all run with
-  the same token before the Release is published, so any of them can leave a
-  forged `result.json` for the publish step or publish one directly. A
-  changed or added workflow file is a commit in the repository's history; a
-  process left behind by student code is not. Every run appears in the
-  **Actions** tab. Nothing prevents this; the check above only stops what a
-  student does by hand.
-- **Submission time is the commit's committer date**, which the student's
-  Git client sets. The **late** flag is advisory. See
+- **Test files.** Tests, fixtures, and the runner are fetched from your
+  `classroom50` repository on every run and never enter the student's
+  repository, so students can't change them. See
+  [Teacher-only test files](#teacher-only-test-files).
+- **Hand-made Releases.** Only a Release that `github-actions[bot]` (the
+  workflow's identity, which students can't use) authored and whose
+  `result.json` it uploaded counts. Collection, `gh teacher download`, and the
+  submissions view skip anything else, and collection names each skipped
+  Release in its warnings.
+- **Code that runs during grading.** Grading and publishing share one job, so
+  the caller workflow, any other workflow file a student adds, and the
+  student's own code that the tests run can all publish a forged score under
+  the workflow's identity. A changed workflow file leaves a commit; a process
+  left behind by student code does not. Every run appears in the **Actions**
+  tab. This is detectable, not prevented.
+- **Submission time.** The committer date of the graded commit, which the
+  student's Git client sets. The **late** flag is advisory. See
   [Due dates mark late; closing enforces](Course-Lifecycle-and-End-of-Term#due-dates-mark-late-closing-enforces).
 
-For day-to-day feedback and a first pass at marks, the on-submit score is what
-you want. For a final score students can't have influenced, grade once more in
-a context they never had write access to:
+For a final score students can't have influenced, grade again in a context
+they never had write access to:
 
-1. After the due date, **Close submission** so every repository is read-only
-   and the code is frozen.
-2. Run `gh teacher download ORG CLASSROOM ASSIGNMENT`. It clones every
+1. After the due date, use **Close submission** to make every repository
+   read-only.
+2. Run `gh teacher download cs50-fall-2026 cs-principles hello`, replacing the
+   organization, classroom, and assignment with yours. It clones every
    repository and writes each one's `result.json` and `results.json` next to
    the clone. See [Score exports](#score-exports).
-3. Run the same tests against the clones yourself, locally or in a workflow in
-   your `classroom50` repository. The declarative tests and any `autograder.py`
-   are already in that repository, so the result reproduces the on-submit
-   score when nothing was tampered with, and differs when it was.
+3. Run the same tests against the clones, locally or in a workflow in your
+   `classroom50` repository. The declarative tests and any `autograder.py` are
+   already there, so the result matches the on-submit score unless something
+   was tampered with.
 
-To spot-check a single repository instead, treat the `result.json` asset as
-the score of record, not the Release page: a Release's title and notes can be
-edited by anyone with write access while the author stays
-`github-actions[bot]`. Confirm the Release author and the `result.json`
-uploader are both `github-actions[bot]`, follow the run from the commit's
-`classroom50/autograde` status into the **Actions** tab and read its job
-summary, and list `.github/workflows/` at the graded commit: it should hold
-only the `autograde.yaml` that `gh student accept` writes. None of this rules
-out a forged result left behind by student code during the run, which is why
-the re-grade above is the trustworthy path.
+To spot-check one repository instead, use the `result.json` asset as the score
+of record: a Release's title and notes can be edited by anyone with write
+access while the author stays `github-actions[bot]`. Confirm that the Release
+author and the `result.json` uploader are both `github-actions[bot]`, open the
+run from the commit's `classroom50/autograde` status and read its job summary,
+and check that `.github/workflows/` at the graded commit holds only the
+`autograde.yaml` that `gh student accept` writes. A forged result left behind
+by student code during the run still passes these checks, which is why the
+re-grade above is the trustworthy path.
 
 ### Latest score versus history
 

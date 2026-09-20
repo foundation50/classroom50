@@ -82,32 +82,17 @@ reveals. See
 
 **Autograded scores come from repositories students can write to.** Grading
 runs as a GitHub Actions workflow inside each student's repository, and the
-score is a Release that workflow publishes there. Students have write access
-to their repositories, so Classroom 50 contains what it can and is honest
-about the rest:
-
-- A Release a student creates by hand, or a `result.json` a student replaces
-  on the workflow's Release, is not counted. Only Releases and `result.json`
-  files published by the workflow's own identity (`github-actions[bot]`) are
-  read by collection, `gh teacher download`, and the submissions view. A
-  skipped Release is named in the collection run's warnings, so you see who to
-  ask. The Release title and notes stay editable and are not evidence; the
-  `result.json` asset is the score of record.
-- Anything that runs during grading can publish under that identity, because
-  grading and publishing share one job in a repository the student can write
-  to: the caller workflow (`.github/workflows/autograde.yaml`), any other
-  workflow file a student adds, and the student's own code that the tests
-  execute. A changed workflow file leaves a commit; a process left behind by
-  student code does not. Every run appears in the repository's **Actions**
-  tab. This is detectable with effort, not prevented.
-- The submission time (and the **late** flag) comes from the graded commit's
-  committer date, which the student's Git client sets.
-
-Treat the on-submit score as feedback for students and a first pass for you.
-For a score students can't have influenced, grade after the due date in a
-context they never had write access to: **Close submission**, run
-`gh teacher download`, and run the same tests yourself against the clones.
-See [How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
+score is a Release that workflow publishes there. A Release a student creates
+by hand, or a `result.json` a student replaces, is not counted: only Releases
+published by the workflow's own identity (`github-actions[bot]`) are read, and
+collection names any it skips. But code that runs during grading (the workflow
+file, another workflow file a student adds, or the student's own code while the
+tests run) can still publish a forged score under that identity, and the
+submission time comes from a commit date the student's Git client sets. Treat
+the on-submit score as feedback and a first pass. For a score students can't
+have influenced, use **Close submission** after the due date, run
+`gh teacher download`, and run the tests yourself against the clones. See
+[How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
 
 **Student repositories are not forks.** Accept generates a copy of the
 template; there is no upstream link, so template updates can't be pushed or

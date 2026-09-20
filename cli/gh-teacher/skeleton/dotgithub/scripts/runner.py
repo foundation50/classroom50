@@ -60,9 +60,9 @@ from typing import Any
 # Schema sentinel. Keep in lockstep with collect_scores.py::validate_result
 # (cli/gh-teacher/skeleton/dotgithub/scripts/collect_scores.py).
 RESULT_SCHEMA_V1 = "classroom50/result/v1"
-# Any version of the sentinel: what a staged release asset must not carry, so a
-# future v2 reader is covered too. Sniffing stops at the collector's own asset
-# ceiling (MAX_RESULT_BYTES there); a larger file is rejected downstream anyway.
+# Any version of the sentinel: a staged release asset carrying one is refused
+# (see _looks_like_result_document). Files above the collector's asset ceiling
+# can't be read as a score, so they aren't parsed.
 RESULT_SCHEMA_PREFIX = "classroom50/result/"
 RESULT_SNIFF_MAX_BYTES = 10 * 1024 * 1024
 
@@ -1001,14 +1001,12 @@ def _copy_release_asset(
 
 
 def _looks_like_result_document(path: pathlib.Path) -> bool:
-    """True when a staged release asset parses as a Classroom 50 result document.
+    """True when a staged release asset is itself a result document.
 
-    The readers accept any result.json-named asset the workflow token uploaded,
-    and a student with push access can rename a bot-uploaded asset after the
-    fact. A student-authored file that already carries the result schema is the
-    one thing that rename would turn into a forged score, so the runner never
-    attaches one. Anything that isn't a small JSON object with that sentinel is
-    an ordinary attachment."""
+    Anyone with push access can rename a Release asset, and the readers accept
+    any result.json the workflow token uploaded. A student-authored file that
+    already carries the result schema is the one attachment a rename would turn
+    into a forged score, so the runner never attaches one."""
     try:
         if path.stat().st_size > RESULT_SNIFF_MAX_BYTES:
             return False

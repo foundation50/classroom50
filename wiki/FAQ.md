@@ -237,18 +237,16 @@ determined student can still read it. See
 
 ### Can a student change the score that gets recorded?
 
-Not by hand, but yes from inside the grading run. Grading runs inside the
-student's repository, and the score is a Release the workflow publishes there.
-A Release a student creates themselves, or a `result.json` they replace on the
-workflow's Release, is skipped: only the workflow's own identity
-(`github-actions[bot]`) counts, and collection warns about anything else. But
-grading and publishing share one job in a repository the student can write to,
-so anything that runs during that job can publish a forged score under that
-identity: the workflow file, another workflow file the student adds, or the
-student's own code while the tests run. A workflow edit leaves a commit and
-every run leaves an Actions entry, so it's detectable, not prevented. For a
-final score students can't have influenced, close the assignment, download the
-repositories, and run the tests yourself. See
+Not by hand, but yes from inside the grading run. The score is a Release the
+grading workflow publishes in the student's own repository. A Release a student
+creates, or a `result.json` they replace, is skipped: only the workflow's
+identity (`github-actions[bot]`) counts, and collection warns about anything
+else. But grading and publishing share one job, so code that runs during it
+(the workflow file, another workflow file the student adds, or the student's
+own code while the tests run) can publish a forged score under that identity.
+That leaves a run in the **Actions** tab, so it's detectable, not prevented.
+For a final score students can't have influenced, close the assignment,
+download the repositories, and run the tests yourself. See
 [How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
 
 ### Can I turn autograding off, or reduce Actions usage?
