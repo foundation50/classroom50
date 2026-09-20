@@ -176,13 +176,22 @@ def test_looks_like_result_document_ignores_oversized_and_unreadable(tmp_path, m
     assert runner._looks_like_result_document(tmp_path / "absent.json") is False
 
 
-def test_stage_release_assets_refuses_deeply_nested_json_without_crashing(tmp_path, capsys):
-    # json.loads raises RecursionError, not ValueError, here; the runner must
-    # skip the file with a warning rather than die after grading.
+def test_stage_release_assets_refuses_deeply_nested_json_without_crashing(tmp_path, capsys, monkeypatch):
+    # json.loads raises RecursionError, not ValueError, once nesting exhausts
+    # the C stack; the depth that does so varies by platform, so force it. The
+    # runner must skip the file with a warning rather than die after grading.
     workspace = _workspace(tmp_path)
-    _write_file(workspace, "out/deep.json", b"[" * 100_000 + b"]" * 100_000)
+    _write_file(workspace, "out/deep.json", b"[[1]]")
     _write_file(workspace, "out/report.json", b'{"ok": true}')
     destination = tmp_path / "staged"
+    real_loads = json.loads
+
+    def loads(text, *args, **kwargs):
+        if text.startswith("[["):
+            raise RecursionError("maximum recursion depth exceeded")
+        return real_loads(text, *args, **kwargs)
+
+    monkeypatch.setattr(runner.json, "loads", loads)
 
     accepted = runner.stage_release_assets(
         workspace, destination, ["out/deep.json", "out/report.json"]

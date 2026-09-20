@@ -4191,10 +4191,11 @@ def test_rejected_plus_trusted_release_without_asset_still_warns_about_prior_sco
 
 
 def test_collect_release_history_skips_a_deeply_nested_result_json(monkeypatch, capsys):
-    # json.loads raises RecursionError, not ValueError; one hostile asset must
-    # skip that submission, not abort the whole collection run.
+    # json.loads raises RecursionError, not ValueError, once nesting exhausts
+    # the C stack (the depth varies by platform, so the fake raises it
+    # outright); one hostile asset must skip that submission, not abort the run.
     def nested(api_url, release, token):
-        return json.loads("[" * 100_000 + "]" * 100_000)
+        raise RecursionError("maximum recursion depth exceeded")
 
     monkeypatch.setattr(cs, "download_result_asset", nested)
     history, rejected = cs.collect_release_history(
