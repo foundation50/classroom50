@@ -25,8 +25,8 @@ export function applyConsent(choices: ConsentChoices): void {
   )
   if (granted.length > 0) runtime?.enable(granted)
 
-  if (!choices.analytics) {
-    if (runtime?.started("analytics")) {
+  if (!choices.google) {
+    if (runtime?.started("google")) {
       // Google Tag Manager only recognizes consent commands pushed as a real
       // `arguments` object (what gtag does), never a plain array.
       const gtag = function () {

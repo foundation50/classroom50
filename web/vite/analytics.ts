@@ -12,13 +12,14 @@ import {
 // by .github/actions/web-analytics-env) and injected only when that variable is
 // set, so local, test, and self-hosted builds carry no tracking by default.
 //
-// Nothing loads without consent. The injected runtime (window.__classroom50Analytics)
-// registers each vendor under its consent category and starts a vendor only
-// when the stored consent record grants that category, when the visitor
-// accepts in the consent prompt (the app calls `enable`), and never while the
-// browser sends Global Privacy Control or Do Not Track. Injecting at build time
-// rather than editing index.html keeps the source page free of third-party
-// script and its anti-flash drift tests valid.
+// Nothing loads without consent. The injected runtime
+// (window.__classroom50Analytics) registers each vendor under its consent
+// category and starts it only when the stored consent record grants that
+// category or the visitor accepts in the consent prompt (the app calls
+// `enable`). Nothing starts while the browser sends Global Privacy Control or
+// Do Not Track. Injecting at build time rather than editing index.html keeps
+// the source page free of third-party script and its anti-flash drift tests
+// valid.
 
 export type AnalyticsEnv = Record<string, string | undefined>
 
@@ -66,7 +67,7 @@ export const ANALYTICS_PROVIDERS: readonly Provider[] = [
   {
     name: "Google Tag Manager",
     envVar: "VITE_GTM_CONTAINER_ID",
-    category: "analytics",
+    category: "google",
     pattern: /^GTM-[A-Z0-9]+$/,
     hint: "the container ID from the Google Tag Manager snippet, such as GTM-ABC123",
     injectTo: "head",
@@ -75,7 +76,7 @@ export const ANALYTICS_PROVIDERS: readonly Provider[] = [
   {
     name: "Cloudflare Web Analytics",
     envVar: "VITE_CF_BEACON_TOKEN",
-    category: "analytics",
+    category: "cloudflare",
     pattern: /^[A-Za-z0-9_-]+$/,
     hint: "only the token value from the Cloudflare Web Analytics snippet, not the whole <script> tag",
     injectTo: "body-end",

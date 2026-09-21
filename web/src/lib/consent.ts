@@ -63,3 +63,11 @@ export function browserDeclinesTracking(
 ): boolean {
   return nav.globalPrivacyControl === true || nav.doNotTrack === "1"
 }
+
+// Forgets the decision so the prompt asks again. The legacy key goes too, or
+// it would immediately read back as a denial.
+export function clearConsent(): void {
+  const store = localStorageOrNull()
+  store?.removeItem(CONSENT_STORAGE_KEY)
+  store?.removeItem(LEGACY_ANALYTICS_STORAGE_KEY)
+}

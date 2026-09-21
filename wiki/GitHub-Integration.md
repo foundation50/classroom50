@@ -432,19 +432,24 @@ much student data reaches GitHub in the first place:
 
 ### Usage analytics
 
-classroom50.org counts visits to see how many people use it and which countries
-and sites they come from. Two services do this: Google Analytics, loaded through
-Google Tag Manager, and [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/).
-Neither is used for advertising, and neither knows who you are.
+Analytics show how many people use classroom50.org, which features they use,
+and where they get stuck, so the app can improve. With your permission, two
+services do this, and you can turn either one off. Neither is used for
+advertising or knows who you are:
+
+- **Cloudflare Web Analytics** sets no cookies and stores no identifiers, so it
+  counts visits, not people.
+- **Google Analytics**, loaded through Google Tag Manager, shows how features
+  are used and sets a cookie so a returning browser is counted once.
 
 | Collected | Not collected |
 |---|---|
-| The page path, for example `/cs1-fall-2026/assignments` | Query strings. Cloudflare removes them in your browser and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded. |
+| The pages you view, for example `/cs1-fall-2026/assignments`, and how long you stay | Query strings. Cloudflare removes them in your browser and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded. |
 | The site that linked to the page | Your GitHub username, email, or roster data |
-| Your country, worked out from your connection | Advertising identifiers or cross-site tracking. Advertising storage is switched off. |
-| Browser, operating system, and device type | |
+| Your country, worked out from your connection | Advertising identifiers or cross-site tracking. Advertising storage is turned off. |
+| Browser, operating system, device type, and language | |
 | Page load time | |
-| Google Analytics only: a cookie holding a random ID, so a returning browser is counted once. It expires after 2 years, and opting out removes it. | |
+| Google Analytics only: a cookie holding a random ID. It expires after 2 years, and turning Google Analytics off removes it. | |
 
 Google and Cloudflare process this data for the Fifty Foundation under their
 data processing terms: the
@@ -455,18 +460,20 @@ and the
 Google keeps event data for up to 14 months. Cloudflare keeps full data for 7
 days and a sample for 6 months.
 
-Analytics runs only with your consent. On your first visit, a small card in the
-corner asks you to **Accept**, **Reject**, or **Customize**. Nothing loads until
-you accept, and either answer takes one click. What the app needs to work (your
-sign-in for the session, your settings, and your answer here) stays on
-regardless, in your browser only. To change your answer later:
+On your first visit, a bar along the bottom of the page lists both services,
+preselected. Uncheck any you'd rather not share and select **Accept**, or
+select **Decline** to turn off all analytics. Nothing runs until you choose.
+Functional storage stays on regardless and never leaves your browser: your
+GitHub sign-in so you stay signed in, your settings, and your answer here. To
+change your answer later:
 
 - In the app, open **Settings**, then **Cookies and analytics**. The same
-  controls are on the public [privacy page](https://classroom50.org/privacy).
-  Withdrawing removes the analytics cookies now and stops both services from
-  the next page load in that browser.
+  controls are on the public [privacy page](https://classroom50.org/privacy)
+  and always show what you chose in the bar. Turning a service off removes its
+  cookies now and stops it from the next page load in that browser. **Reset and
+  ask again** clears your answer so the bar returns.
 - In your browser, turn on the Global Privacy Control or Do Not Track signal.
-  Analytics then stays off and you aren't asked.
+  No analytics runs and Classroom 50 doesn't ask.
 
 Content blockers and network filters that block the analytics hosts don't
 affect the app. See [Network and allowed domains](#network-and-allowed-domains).

@@ -96,38 +96,56 @@ so never reuse the production token for it).
 
 #### Consent
 
-Nothing optional runs until the visitor says yes. The consent record lives in
-localStorage as `classroom50:consent` (`{ v, at, analytics }`, see
+Nothing optional runs until the visitor accepts. Each vendor declares a consent
+category, one per vendor (`cloudflare`, `google`), and the `functional`
+category covers what the app stores to work (always on, no control). The
+prompt preselects every optional category; Accept saves what is selected and
+Decline turns everything optional off. Nothing starts while the browser sends
+Global Privacy Control or Do Not Track. The record lives in localStorage as
+`classroom50:consent` (`{ v, at, cloudflare, google }`, see
 `src/types/consent.ts`); absent means undecided, and `CONSENT_VERSION` lets a
-future policy change re-ask everyone. `ConsentProvider`
-(`src/context/consent/`) owns the state, `components/consent/` holds the
-first-visit banner, the Customize dialog, and the category form that Settings
-and `/privacy` embed, and `lib/analyticsRuntime.ts` bridges to the injected
-runtime so accepting starts vendors without a reload and withdrawing pushes a
-Consent Mode `denied` update and clears Google's cookies. Categories are
-`necessary` (always on, explained but not toggleable) and `analytics`; adding
-one means a new entry in `OPTIONAL_CONSENT_CATEGORIES`, copy under
-`consent.categories.<id>`, and a `category` on each provider that belongs to
-it. The pre-consent opt-out key (`classroom50:analytics` = `off`) is honored as
-a denial so earlier visitors aren't asked again.
+future policy change re-ask everyone. The pre-consent opt-out key
+(`classroom50:analytics` = `off`) is honored as a denial so earlier visitors
+aren't asked again.
+
+`ConsentProvider` (`src/context/consent/`) owns the state. `components/consent/`
+holds the prompt (a full-width bottom `Modal` with `backdrop="focus"`, which
+dims the page to about half and blurs it), the category list in a compact
+checkbox shape for the prompt and a toggle-row shape for pages, and the form
+that Settings and `/privacy` embed with start-aligned actions and a **Reset and
+ask again** button. Both surfaces read the same record, so they always agree.
+`lib/analyticsRuntime.ts` bridges to the injected runtime so accepting starts
+vendors without a reload, and turning Google off pushes a Consent Mode `denied`
+update and clears its cookies. Adding a vendor means a provider entry with its
+own category in `OPTIONAL_CONSENT_CATEGORIES`, plus copy under
+`consent.categories.<id>`.
 
 #### Google Tag Manager container setup
 
 The repository controls when the container loads and sets Consent Mode
 defaults (advertising storage denied, analytics storage granted). What the
-container does is configured in Google Tag Manager, and the privacy notice
-assumes this configuration. When you set up a container:
+container does is configured in Google Tag Manager, and the privacy notice's
+claims depend on this configuration. When you set up a container:
 
 1. Add a Google Analytics 4 tag with the measurement ID of a property created
    for that environment.
 2. In the tag, override `page_location` with a variable that strips the query
    string. The app's URLs carry OAuth codes, invite link keys, and roster
    searches, and Google Analytics records the full URL by default.
-3. In the Google Analytics property, turn off Google Signals, set data
-   retention to 14 months or less, and turn on **Redact email** under data
-   collection settings.
-4. Don't add advertising or remarketing tags. The privacy notice says
+3. In the Google Analytics property, under enhanced measurement, turn off
+   **Site search**. Its default parameter list includes `q`, which the roster
+   page uses for a username or email search.
+4. In the property, turn off Google Signals, set data retention to 14 months,
+   and turn on **Redact email** under data collection settings.
+5. Don't add advertising or remarketing tags. The privacy notice says
    advertising is switched off, and Consent Mode denies advertising storage.
+
+The privacy notice tells visitors Google Analytics collects the pages they
+view and how long they stay, the referring site, country, browser, device, and
+language, sets a 2-year cookie, and keeps data for up to 14 months. Those are
+GA4's defaults with the settings above; if you change them, change the notice
+(`privacy.*` and `consent.categories.google.*` in `src/locales/en.json` and the
+wiki's Privacy and FERPA section) in the same change.
 
 Google's noscript `<iframe>` from the install instructions is intentionally not
 injected: the app needs JavaScript anyway, and a noscript beacon could not

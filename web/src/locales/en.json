@@ -1135,7 +1135,7 @@
     },
     "analytics": {
       "heading": "Cookies and analytics",
-      "subheading": "Choose whether Classroom 50 may count your visits. Only what the app needs to work stays on regardless.",
+      "subheading": "Analytics help improve Classroom 50. Choose which services can count your visits in this browser. Functional cookies stay on.",
       "privacyLink": "Read the privacy notice"
     }
   },
@@ -4220,32 +4220,32 @@
     },
     "analytics": {
       "heading": "Usage analytics",
-      "intro": "With your consent, classroom50.org counts visits with two services: Google Analytics, loaded through Google Tag Manager, and Cloudflare Web Analytics. Neither is used for advertising, and neither knows who you are.",
+      "intro": "Analytics show how many people use classroom50.org, which features they use, and where they get stuck, so the app can improve. With your permission, two services do this: Cloudflare Web Analytics, which sets no cookies, and Google Analytics, loaded through Google Tag Manager, which recognizes a returning browser with a cookie. You can turn either one off. Neither is used for advertising, and neither knows who you are.",
       "collectedHeading": "Collected",
       "collected": {
-        "path": "The page path, for example /cs1-fall-2026/assignments",
+        "path": "The pages you view, for example /cs1-fall-2026/assignments, and how long you stay",
         "referrer": "The site that linked to the page",
         "country": "Your country, worked out from your connection",
-        "device": "Browser, operating system, and device type",
+        "device": "Browser, operating system, device type, and language",
         "timings": "Page load time",
-        "cookie": "Google Analytics only: a cookie holding a random ID, so a returning browser is counted once. It expires after 2 years, and opting out removes it."
+        "cookie": "Google Analytics only: a cookie holding a random ID, so a returning browser is counted once. It expires after 2 years, and turning Google Analytics off removes it."
       },
       "notCollectedHeading": "Not collected",
       "notCollected": {
         "queryStrings": "Query strings. Cloudflare removes them in your browser, and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded.",
         "identity": "Your GitHub username, email, or roster data",
-        "ads": "Advertising identifiers or cross-site tracking. Advertising storage is switched off."
+        "ads": "Advertising identifiers or cross-site tracking. Advertising storage is turned off."
       },
-      "processing": "Google and Cloudflare process this data for us under their data processing terms:",
+      "processing": "Google and Cloudflare process this data for the Fifty Foundation under their data processing terms:",
       "googleTerms": "Google Ads Data Processing Terms",
       "googleUsage": "How Google uses information from sites that use its services",
       "cloudflareTerms": "Cloudflare data processing addendum",
-      "retention": "Google keeps event data for up to 14 months. Cloudflare keeps full data for 7 days and a sample for 6 months. Analytics runs only after you accept it, and you can withdraw at any time below."
+      "retention": "Google keeps event data for up to 14 months. Cloudflare keeps full data for 7 days and a sample for 6 months. Neither service runs until you accept, and you can change your answer at any time below."
     },
     "choice": {
       "heading": "Your choice",
-      "body": "Your choice is saved in this browser. Accepting starts analytics right away. Withdrawing removes the analytics cookies now and stops both services from the next page load. When you're signed in, you can also change it in Settings.",
-      "signals": "If your browser sends the Global Privacy Control or Do Not Track signal, analytics stays off and you aren't asked."
+      "body": "Your choice is saved in this browser. Accepting starts the services you left on right away. Turning one off removes its cookies now and stops it from the next page load. When you're signed in, you can also change it in Settings.",
+      "signals": "If your browser sends the Global Privacy Control or Do Not Track signal, no analytics runs and Classroom 50 doesn't ask."
     },
     "contact": {
       "heading": "Questions",
@@ -4255,43 +4255,47 @@
   },
   "consent": {
     "banner": {
-      "aria": "Cookie and analytics consent",
-      "title": "We count visits, not people",
-      "body": "Analytics tells us how many people use Classroom 50 and where they come from. Nothing runs until you say yes.",
+      "title": "Analytics help improve Classroom 50",
+      "body": "Anonymous usage data shows which features get used and where people get stuck, so the app can get better. Nothing identifies you, and you can change your choice any time in Settings. Uncheck anything you'd rather not share, then select Accept.",
+      "readNotice": "Read the privacy notice",
+      "hideNotice": "Hide the privacy notice",
       "accept": "Accept",
-      "reject": "Reject",
-      "customize": "Customize"
+      "decline": "Decline"
     },
-    "dialog": {
-      "title": "Cookies and analytics",
-      "subtitle": "Choose what Classroom 50 may use in this browser. You can change this any time in Settings.",
-      "footnote": "Cloudflare and Google process analytics for us and never learn who you are."
-    },
-    "privacyLink": "Privacy notice",
     "alwaysOn": "Always on",
     "whatThisIncludes": "What this includes",
-    "acceptAll": "Accept all",
-    "rejectAll": "Reject all",
     "savePreferences": "Save preferences",
-    "browserDeclines": "Your browser sends the Global Privacy Control or Do Not Track signal, so analytics stays off and you won't be asked.",
+    "declineAll": "Decline all analytics",
+    "reset": "Reset and ask again",
+    "browserDeclines": "Your browser sends the Global Privacy Control or Do Not Track signal, so analytics stays off and Classroom 50 doesn't ask.",
     "categories": {
-      "necessary": {
-        "label": "Necessary",
-        "caption": "What the app needs to work. Stays in this browser and is never sent to us.",
+      "functional": {
+        "label": "Functional",
+        "caption": "Required for the app to work. Stays in this browser.",
+        "tooltip": "Stored in this browser only: your GitHub sign-in so you stay signed in, your settings (language, theme, name order, motion, hidden organizations, and sidebar layout), and the choice you make here. None of it is used for analytics.",
         "items": {
-          "session": "Your GitHub sign-in for this session",
-          "preferences": "Your settings: language, theme, name order, motion",
+          "session": "Your GitHub sign-in, so you stay signed in",
+          "preferences": "Your settings: language, theme, name order, motion, hidden organizations, and sidebar layout",
           "consent": "The choice you make here"
         }
       },
-      "analytics": {
-        "label": "Analytics",
-        "caption": "Anonymous counts of visits, pages, countries, and referring sites.",
+      "cloudflare": {
+        "label": "Cloudflare Web Analytics",
+        "caption": "Counts visits. No cookies.",
         "items": {
-          "visits": "Page path, referring site, country, browser type, and load time",
-          "vendors": "Processed by Cloudflare Web Analytics and Google Analytics, loaded through Google Tag Manager",
-          "cookie": "Google Analytics sets a cookie with a random ID so a returning browser is counted once. It expires after 2 years.",
-          "notCollected": "Never your GitHub username, email, roster data, or the query string of any URL"
+          "collected": "Page path, referring site, country, browser type, and load time",
+          "noCookies": "No cookies and no identifiers, so it counts visits, not people",
+          "notCollected": "Never your GitHub username, email, roster data, or the query string of a URL"
+        }
+      },
+      "google": {
+        "label": "Google Analytics",
+        "caption": "Shows how features are used. Sets one cookie.",
+        "items": {
+          "collected": "Pages you view and how long you stay, the site that linked to the page, your country, and your browser, device, and language, sent through Google Tag Manager",
+          "cookie": "A cookie holding a random ID, so a returning browser is counted once. It expires after 2 years.",
+          "notCollected": "Never your GitHub username, email, roster data, or the query string of a URL",
+          "ads": "No advertising. Advertising storage is turned off."
         }
       }
     }

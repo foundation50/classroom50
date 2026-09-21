@@ -1,7 +1,7 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Collapse, Toggle, cx } from "@/components/ui"
+import { Checkbox, Collapse, HelpTooltip, Toggle, cx } from "@/components/ui"
 import { ChevronRightIcon, LockIcon } from "@/components/ui/icons"
 import type {
   ConsentCategory,
@@ -10,37 +10,52 @@ import type {
 } from "@/types/consent"
 
 // What each category covers, as i18n keys under consent.categories.<id>.items.
-// "necessary" has no toggle: it is what the app stores to work at all.
+// "functional" has no control: it is what the app stores to work at all.
 const CATEGORY_ITEMS: Record<ConsentCategory, readonly string[]> = {
-  necessary: ["session", "preferences", "consent"],
-  analytics: ["visits", "vendors", "cookie", "notCollected"],
+  functional: ["session", "preferences", "consent"],
+  cloudflare: ["collected", "noCookies", "notCollected"],
+  google: ["collected", "cookie", "notCollected", "ads"],
 }
 
-const CATEGORIES: readonly ConsentCategory[] = ["necessary", "analytics"]
+const CATEGORIES: readonly ConsentCategory[] = [
+  "functional",
+  "cloudflare",
+  "google",
+]
 
-// One row per category: a toggle (locked on for "necessary"), a label, a
-// one-line caption, and a "What this includes" disclosure. Shared by the
-// consent dialog, Settings, and the public /privacy page so every surface
-// explains the same things the same way.
+// The categories a visitor decides on, one control each, with the functional
+// category shown as always on. Two shapes share the same copy: "full" is one
+// bordered row per category with a toggle and a "What this includes"
+// disclosure (Settings, /privacy); "compact" is a wrapping row of checkboxes
+// with their captions, for the consent prompt.
 export function ConsentCategoryList({
   choices,
   onChange,
   idPrefix,
+  variant = "full",
 }: {
   choices: ConsentChoices
   onChange: (category: OptionalConsentCategory, granted: boolean) => void
   idPrefix: string
+  variant?: "full" | "compact"
 }) {
+  const Row = variant === "compact" ? CompactRow : FullRow
   return (
-    <ul className="flex flex-col gap-3">
+    <ul
+      className={cx(
+        variant === "compact"
+          ? "flex flex-wrap gap-x-8 gap-y-3"
+          : "flex flex-col gap-3",
+      )}
+    >
       {CATEGORIES.map((category) => (
-        <CategoryRow
+        <Row
           key={category}
           category={category}
           id={`${idPrefix}-${category}`}
-          checked={category === "necessary" ? true : choices[category]}
+          checked={category === "functional" ? true : choices[category]}
           onChange={
-            category === "necessary"
+            category === "functional"
               ? undefined
               : (granted) => onChange(category, granted)
           }
@@ -50,17 +65,63 @@ export function ConsentCategoryList({
   )
 }
 
-function CategoryRow({
-  category,
-  id,
-  checked,
-  onChange,
-}: {
+type RowProps = {
   category: ConsentCategory
   id: string
   checked: boolean
+  // Absent for the functional category, which has no control.
   onChange?: (granted: boolean) => void
-}) {
+}
+
+function CompactRow({ category, id, checked, onChange }: RowProps) {
+  const { t } = useTranslation()
+  const captionId = useId()
+  const locked = onChange === undefined
+  return (
+    <li className="flex items-start gap-2">
+      {locked ? (
+        <LockIcon
+          aria-hidden="true"
+          className="mt-1 size-4 shrink-0 text-base-content/50"
+        />
+      ) : (
+        <Checkbox
+          id={id}
+          size="sm"
+          className="mt-0.5 shrink-0"
+          checked={checked}
+          onChange={(event) => onChange(event.currentTarget.checked)}
+          aria-describedby={captionId}
+        />
+      )}
+      <div className="flex min-w-0 flex-col">
+        {locked ? (
+          // No control to explain itself, so the "?" spells out exactly what
+          // the app stores.
+          <span className="flex items-center gap-1 text-sm font-medium">
+            {t(`consent.categories.${category}.label`)}
+            <span className="text-xs font-normal text-base-content/60">
+              ({t("consent.alwaysOn")})
+            </span>
+            <HelpTooltip
+              position="top"
+              help={t(`consent.categories.${category}.tooltip`)}
+            />
+          </span>
+        ) : (
+          <label htmlFor={id} className="cursor-pointer text-sm font-medium">
+            {t(`consent.categories.${category}.label`)}
+          </label>
+        )}
+        <span id={captionId} className="text-xs text-base-content/60">
+          {t(`consent.categories.${category}.caption`)}
+        </span>
+      </div>
+    </li>
+  )
+}
+
+function FullRow({ category, id, checked, onChange }: RowProps) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const captionId = useId()

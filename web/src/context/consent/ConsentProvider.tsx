@@ -11,12 +11,12 @@ import {
 import { applyConsent } from "@/lib/analyticsRuntime"
 import {
   browserDeclinesTracking,
+  clearConsent,
   readConsent,
   writeConsent,
 } from "@/lib/consent"
 import {
   ALL_DENIED,
-  ALL_GRANTED,
   CONSENT_STORAGE_KEY,
   type ConsentChoices,
   type ConsentRecord,
@@ -31,12 +31,10 @@ type ConsentContextValue = {
   // True when the app should be asking: no decision and no browser signal.
   needsDecision: boolean
   decide: (choices: ConsentChoices) => void
-  acceptAll: () => void
-  rejectAll: () => void
-  // The preferences dialog, openable from the banner, Settings, and /privacy.
-  dialogOpen: boolean
-  openDialog: () => void
-  closeDialog: () => void
+  declineAll: () => void
+  // Forgets the decision: optional vendors stop as if withdrawn, and the
+  // prompt asks again.
+  reset: () => void
 }
 
 const ConsentContext = createContext<ConsentContextValue>({
@@ -44,21 +42,17 @@ const ConsentContext = createContext<ConsentContextValue>({
   browserDeclines: false,
   needsDecision: false,
   decide: () => {},
-  acceptAll: () => {},
-  rejectAll: () => {},
-  dialogOpen: false,
-  openDialog: () => {},
-  closeDialog: () => {},
+  declineAll: () => {},
+  reset: () => {},
 })
 
 export const useConsent = () => useContext(ConsentContext)
 
 // Holds the visitor's cookie/tracking decision reactively for the whole app
-// (banner, dialog, Settings, /privacy), persists it, starts or stops vendors
+// (the prompt, Settings, /privacy), persists it, starts or stops vendors
 // through the injected runtime, and follows a decision made in another tab.
 export const ConsentProvider = ({ children }: { children: ReactNode }) => {
   const [record, setRecord] = useState<ConsentRecord | null>(readConsent)
-  const [dialogOpen, setDialogOpen] = useState(false)
   const browserDeclines = useMemo(
     () => typeof navigator !== "undefined" && browserDeclinesTracking(),
     [],
@@ -76,10 +70,13 @@ export const ConsentProvider = ({ children }: { children: ReactNode }) => {
   const decide = useCallback((choices: ConsentChoices) => {
     setRecord(writeConsent(choices))
     applyConsent(choices)
-    setDialogOpen(false)
   }, [])
-  const acceptAll = useCallback(() => decide(ALL_GRANTED), [decide])
-  const rejectAll = useCallback(() => decide(ALL_DENIED), [decide])
+  const declineAll = useCallback(() => decide(ALL_DENIED), [decide])
+  const reset = useCallback(() => {
+    clearConsent()
+    applyConsent(ALL_DENIED)
+    setRecord(null)
+  }, [])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -100,21 +97,10 @@ export const ConsentProvider = ({ children }: { children: ReactNode }) => {
       browserDeclines,
       needsDecision: record === null && !browserDeclines && vendorsPresent,
       decide,
-      acceptAll,
-      rejectAll,
-      dialogOpen,
-      openDialog: () => setDialogOpen(true),
-      closeDialog: () => setDialogOpen(false),
+      declineAll,
+      reset,
     }),
-    [
-      record,
-      browserDeclines,
-      vendorsPresent,
-      decide,
-      acceptAll,
-      rejectAll,
-      dialogOpen,
-    ],
+    [record, browserDeclines, vendorsPresent, decide, declineAll, reset],
   )
 
   return (

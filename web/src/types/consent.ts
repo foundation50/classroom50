@@ -11,12 +11,14 @@ export const CONSENT_STORAGE_KEY = "classroom50:consent"
 // is honored as a denial so those visitors are never asked to decide again.
 export const LEGACY_ANALYTICS_STORAGE_KEY = "classroom50:analytics"
 
-// Categories a visitor decides on. "necessary" is always granted and has no
-// toggle; it exists so the UI can explain what the app stores regardless.
-export const OPTIONAL_CONSENT_CATEGORIES = ["analytics"] as const
+// What a visitor decides on. "functional" is what the app needs to work; it is
+// always on and has no toggle, but is listed so the prompt explains it. The
+// optional categories are the analytics vendors, one each, so a visitor can
+// keep the cookie-free one and refuse the cookie-setting one.
+export const OPTIONAL_CONSENT_CATEGORIES = ["cloudflare", "google"] as const
 export type OptionalConsentCategory =
   (typeof OPTIONAL_CONSENT_CATEGORIES)[number]
-export type ConsentCategory = "necessary" | OptionalConsentCategory
+export type ConsentCategory = "functional" | OptionalConsentCategory
 
 export type ConsentChoices = Record<OptionalConsentCategory, boolean>
 
@@ -27,5 +29,7 @@ export type ConsentRecord = {
   at: string
 } & ConsentChoices
 
-export const ALL_DENIED: ConsentChoices = { analytics: false }
-export const ALL_GRANTED: ConsentChoices = { analytics: true }
+export const ALL_DENIED: ConsentChoices = { cloudflare: false, google: false }
+export const ALL_GRANTED: ConsentChoices = { cloudflare: true, google: true }
+// What the prompt pre-selects before the visitor touches anything.
+export const DEFAULT_CHOICES: ConsentChoices = ALL_GRANTED

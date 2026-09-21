@@ -25,7 +25,6 @@ import { LiveAnnouncer } from "./components/status/LiveAnnouncer"
 import { RouteProgressBar } from "./components/status/RouteProgressBar"
 import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpdateToaster"
 import { ConsentBanner } from "./components/consent/ConsentBanner"
-import { ConsentDialog } from "./components/consent/ConsentDialog"
 import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
 import { installDiagnosticsHandlers } from "./lib/diagnostics/globalHandlers"
@@ -120,7 +119,6 @@ createRoot(document.getElementById("root")!).render(
                       <ActionsBanner />
                       <LanguagePackUpdateToaster />
                       <ConsentBanner />
-                      <ConsentDialog />
                     </ConsentProvider>
                   </UserPreferencesProvider>
                 </HiddenOrgsProvider>

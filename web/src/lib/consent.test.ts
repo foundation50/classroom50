@@ -30,7 +30,7 @@ describe("consent storage", () => {
   })
 
   it("round-trips a decision with the current version and a timestamp", () => {
-    const written = writeConsent({ analytics: true })
+    const written = writeConsent({ cloudflare: true, google: false })
     expect(written.v).toBe(CONSENT_VERSION)
     expect(Date.parse(written.at)).not.toBeNaN()
     expect(readConsent()).toEqual(written)
@@ -39,7 +39,7 @@ describe("consent storage", () => {
   it("treats an older version or a corrupt value as undecided", () => {
     window.localStorage.setItem(
       CONSENT_STORAGE_KEY,
-      JSON.stringify({ v: 0, at: "t", analytics: true }),
+      JSON.stringify({ v: 0, at: "t", cloudflare: true, google: true }),
     )
     expect(readConsent()).toBeNull()
     window.localStorage.setItem(CONSENT_STORAGE_KEY, "{not json")
@@ -53,11 +53,11 @@ describe("consent storage", () => {
 
   it("honors the pre-consent opt-out as a denial and retires it on the next decision", () => {
     window.localStorage.setItem(LEGACY_ANALYTICS_STORAGE_KEY, "off")
-    expect(readConsent()).toMatchObject({ analytics: false })
+    expect(readConsent()).toMatchObject({ cloudflare: false, google: false })
 
-    writeConsent({ analytics: true })
+    writeConsent({ cloudflare: true, google: true })
     expect(window.localStorage.getItem(LEGACY_ANALYTICS_STORAGE_KEY)).toBeNull()
-    expect(readConsent()).toMatchObject({ analytics: true })
+    expect(readConsent()).toMatchObject({ cloudflare: true, google: true })
   })
 
   it("ignores a legacy value other than off", () => {

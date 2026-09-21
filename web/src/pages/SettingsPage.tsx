@@ -429,7 +429,7 @@ function NameOrderSection({ highlighted }: { highlighted?: boolean }) {
 // couldn't take effect.
 function ConsentSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
-  const { browserDeclines } = useConsent()
+  const { browserDeclines, record } = useConsent()
   return (
     <SettingsSectionCard
       id="analytics"
@@ -442,7 +442,11 @@ function ConsentSection({ highlighted }: { highlighted?: boolean }) {
           {t("consent.browserDeclines")}
         </p>
       ) : (
-        <ConsentPreferencesForm idPrefix="settings-consent" />
+        <ConsentPreferencesForm
+          // Re-keyed on the record so Reset (record -> null) starts a fresh draft.
+          key={record?.at ?? "undecided"}
+          idPrefix="settings-consent"
+        />
       )}
       <p className="mt-4 text-sm">
         <Link className="link link-info link-hover" to="/privacy">

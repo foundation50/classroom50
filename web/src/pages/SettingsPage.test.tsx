@@ -406,12 +406,12 @@ describe("SettingsPage student names", () => {
 // The decision flow itself is covered by components/consent/consent.test.tsx;
 // here only the page wiring matters.
 describe("SettingsPage cookies and analytics", () => {
-  it("renders the consent form with analytics off by default, and links to the notice", () => {
+  it("renders the consent form with the prompt defaults, and links to the notice", () => {
     renderPage()
-    const toggle = screen.getByLabelText(
-      "consent.categories.analytics.label",
+    const google = screen.getByLabelText(
+      "consent.categories.google.label",
     ) as HTMLInputElement
-    expect(toggle.checked).toBe(false)
+    expect(google.checked).toBe(true)
     expect(screen.getByText("consent.savePreferences")).toBeTruthy()
     expect(screen.getByText("settings.analytics.privacyLink")).toBeTruthy()
   })

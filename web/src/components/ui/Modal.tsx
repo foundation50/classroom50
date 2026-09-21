@@ -52,7 +52,7 @@ const ModalFooterContext = createContext<HTMLDivElement | null | undefined>(
 )
 
 export type ModalSize =
-  "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl"
+  "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl" | "full"
 
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-sm",
@@ -63,6 +63,8 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   "3xl": "max-w-3xl",
   "4xl": "max-w-4xl",
   "5xl": "max-w-5xl",
+  // Edge to edge; pair with placement="bottom" for a full-width bar.
+  full: "w-full max-w-none",
 }
 
 export type ModalProps = {
@@ -100,6 +102,12 @@ export type ModalProps = {
   onKeyDown?: React.KeyboardEventHandler<HTMLDialogElement>
   // Extra classes for the modal-box.
   boxClassName?: string
+  // Where the box sits over the dimmed page. "bottom" anchors it to the bottom
+  // edge, for prompts that should not cover the page they are about.
+  placement?: "middle" | "bottom"
+  // "focus" dims the page to about half and blurs it slightly, for a prompt the
+  // visitor has to answer before going on.
+  backdrop?: "default" | "focus"
   dialogRef?: RefObject<HTMLDialogElement | null>
   ref?: Ref<HTMLDialogElement>
   children?: ReactNode
@@ -117,6 +125,8 @@ export function Modal({
   hideCloseButton = false,
   closeDisabled = false,
   boxClassName,
+  placement = "middle",
+  backdrop = "default",
   dialogRef,
   ref,
   onKeyDown,
@@ -186,7 +196,11 @@ export function Modal({
   return (
     <dialog
       ref={setRefs}
-      className="modal"
+      className={cx(
+        "modal",
+        placement === "bottom" && "[place-items:end_center]",
+        backdrop === "focus" && "open:bg-black/50 backdrop-blur-sm",
+      )}
       onClose={handleNativeClose}
       onKeyDown={onKeyDown}
       onCancel={(event) => {

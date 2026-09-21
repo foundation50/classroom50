@@ -102,14 +102,16 @@ const granted = {
   [CONSENT_STORAGE_KEY]: JSON.stringify({
     v: CONSENT_VERSION,
     at: "t",
-    analytics: true,
+    cloudflare: true,
+    google: true,
   }),
 }
 const denied = {
   [CONSENT_STORAGE_KEY]: JSON.stringify({
     v: CONSENT_VERSION,
     at: "t",
-    analytics: false,
+    cloudflare: false,
+    google: false,
   }),
 }
 
@@ -144,27 +146,34 @@ describe("analyticsPlugin", () => {
     ).toThrow(/VITE_CF_BEACON_TOKEN must be/)
   })
 
-  it("every provider declares a consent category", () => {
-    expect(ANALYTICS_PROVIDERS.every((p) => p.category === "analytics")).toBe(
-      true,
+  it("each vendor has its own optional consent category", () => {
+    const byName = Object.fromEntries(
+      ANALYTICS_PROVIDERS.map((p) => [p.name, p.category]),
     )
+    expect(byName).toEqual({
+      "Google Tag Manager": "google",
+      "Cloudflare Web Analytics": "cloudflare",
+    })
   })
 
   describe("consent gate at boot", () => {
     const html = transform(BOTH)
+    const kinds = (inserted: Record<string, unknown>[]) =>
+      inserted.map((i) => (i.type === "module" ? "cloudflare" : "google"))
 
-    it("loads nothing without a decision", () => {
+    it("starts nothing without a decision", () => {
       expect(boot(html).inserted).toHaveLength(0)
       expect(boot(html, { storage: "THROW" }).inserted).toHaveLength(0)
     })
 
-    it("loads nothing when analytics was denied or the record is from an older version", () => {
+    it("starts nothing when everything was declined or the record is from an older version", () => {
       expect(boot(html, { storage: denied }).inserted).toHaveLength(0)
       const old = {
         [CONSENT_STORAGE_KEY]: JSON.stringify({
           v: 0,
           at: "t",
-          analytics: true,
+          cloudflare: true,
+          google: true,
         }),
       }
       expect(boot(html, { storage: old }).inserted).toHaveLength(0)
@@ -175,11 +184,25 @@ describe("analyticsPlugin", () => {
       expect(boot(html, { storage: legacy }).inserted).toHaveLength(0)
     })
 
-    it("loads every analytics vendor when analytics was granted", () => {
-      expect(boot(html, { storage: granted }).inserted).toHaveLength(2)
+    it("starts exactly the granted vendors", () => {
+      expect(kinds(boot(html, { storage: granted }).inserted).sort()).toEqual([
+        "cloudflare",
+        "google",
+      ])
+      const onlyCloudflare = {
+        [CONSENT_STORAGE_KEY]: JSON.stringify({
+          v: CONSENT_VERSION,
+          at: "t",
+          cloudflare: true,
+          google: false,
+        }),
+      }
+      expect(kinds(boot(html, { storage: onlyCloudflare }).inserted)).toEqual([
+        "cloudflare",
+      ])
     })
 
-    it("never loads while the browser sends GPC or DNT, even with consent", () => {
+    it("starts nothing while the browser sends GPC or DNT, even with consent", () => {
       expect(boot(html, { storage: granted, gpc: true }).inserted).toHaveLength(
         0,
       )
@@ -194,16 +217,18 @@ describe("analyticsPlugin", () => {
 
     it("enable() starts granted categories once, and reports them as started", () => {
       const { inserted, runtime } = boot(html)
-      expect(runtime.started("analytics")).toBe(false)
-      runtime.enable(["analytics"])
-      runtime.enable(["analytics"])
+      expect(runtime.started("google")).toBe(false)
+      runtime.enable(["google"])
+      runtime.enable(["google"])
+      expect(inserted).toHaveLength(1)
+      expect(runtime.started("google")).toBe(true)
+      runtime.enable(["cloudflare"])
       expect(inserted).toHaveLength(2)
-      expect(runtime.started("analytics")).toBe(true)
     })
 
     it("enable() is a no-op under GPC", () => {
       const { inserted, runtime } = boot(html, { gpc: true })
-      runtime.enable(["analytics"])
+      runtime.enable(["google", "cloudflare"])
       expect(inserted).toHaveLength(0)
     })
 
