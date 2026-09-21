@@ -429,6 +429,35 @@ much student data reaches GitHub in the first place:
 - **End-of-term cleanup.** Archive or delete student repositories when the
   course ends. See [End of term](Course-Lifecycle-and-End-of-Term#end-of-term).
 
+### Usage analytics
+
+classroom50.org uses [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
+to count visits and see which countries and sites they come from. It sets no
+cookies and doesn't track you across sites.
+
+| Collected | Not collected |
+|---|---|
+| The page path, for example `/cs1-fall-2026/assignments` | Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device. |
+| The site that linked to the page | Cookies, local storage, or fingerprints |
+| Your country, worked out from your connection | Your GitHub username or roster data |
+| Browser, operating system, and device type | |
+| Page load time | |
+
+Cloudflare processes this data for the Fifty Foundation under its
+[data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
+It keeps full data for 7 days and a sample for 6 months.
+The legal basis is legitimate interest, so you can object at any time:
+
+- In the app, open **Settings**, then **Usage analytics**, and select **Don't
+  count my visits**. The same choice is on the public
+  [privacy page](https://classroom50.org/privacy). It applies to that browser
+  from the next page load.
+- In your browser, turn on the Global Privacy Control or Do Not Track signal.
+
+Only classroom50.org and preview.classroom50.org include the script, each
+reporting to its own Cloudflare site. `gh teacher` and `gh student` send no
+analytics.
+
 This section describes how Classroom 50 handles data; it isn't legal advice.
 Confirm your obligations with your institution's privacy office.
 

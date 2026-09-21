@@ -3,19 +3,17 @@ import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import {
-  AnimatedAlert,
   Button,
   Card,
-  Radio,
   RouterButton,
   SectionAnchorHeading,
   cx,
   Heading,
   headingVariantClass,
 } from "@/components/ui"
-import { useOptionalToast } from "@/context/notifications/NotificationProvider"
 import { useTranslation } from "react-i18next"
 import { useMemo, useState } from "react"
+import { Link } from "@tanstack/react-router"
 import useGetOrgs from "@/hooks/useGetOrgs"
 import {
   isOwnedReadyOrg,
@@ -31,6 +29,11 @@ import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { useUserPreferences } from "@/context/userPreferences/UserPreferencesProvider"
 import type { NameOrder } from "@/types/preferences"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
+import {
+  PreferenceForm,
+  type PreferenceOption,
+} from "@/components/settings/PreferenceForm"
+import { AnalyticsPreferenceForm } from "@/components/settings/AnalyticsPreferenceForm"
 import {
   useDeleteRepoScopeState,
   useCanElevateInApp,
@@ -215,139 +218,6 @@ function ElevatedPermissionsSection({
   )
 }
 
-// A single-choice preference rendered as an accessible radio group. Shared by
-// the Appearance and Animations sections (identical shape: labeled options with
-// a hint, current value + setter). `name` scopes the radios so the two groups
-// don't collide.
-function PreferenceRadioGroup<T extends string>({
-  name,
-  legend,
-  value,
-  onChange,
-  options,
-}: {
-  name: string
-  legend: string
-  value: T
-  onChange: (next: T) => void
-  options: { value: T; label: string; hint: string }[]
-}) {
-  return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="sr-only">{legend}</legend>
-      {options.map((option) => {
-        const id = `${name}-${option.value}`
-        const hintId = `${id}-hint`
-        return (
-          <label
-            key={option.value}
-            htmlFor={id}
-            className="flex cursor-pointer items-start gap-3 rounded-field border border-base-300 px-3 py-2 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-          >
-            <Radio
-              id={id}
-              name={name}
-              size="sm"
-              tone="primary"
-              className="mt-0.5"
-              value={option.value}
-              checked={value === option.value}
-              onChange={() => onChange(option.value)}
-              aria-label={option.label}
-              aria-describedby={hintId}
-            />
-            <span className="flex flex-col">
-              <span className="text-sm font-medium">{option.label}</span>
-              <span id={hintId} className="text-xs text-base-content/60">
-                {option.hint}
-              </span>
-            </span>
-          </label>
-        )
-      })}
-    </fieldset>
-  )
-}
-
-// Draft-and-save wrapper around PreferenceRadioGroup (Primer settings
-// guidance: an explicit Save, not save-on-click). Selection edits a local
-// draft; Save commits it through the pref hook. An unchanged save is a no-op
-// with a notice (the house form pattern), a real save confirms inline and
-// announces to SR. An external pref change (another tab, the OS) re-syncs a
-// pristine draft but never clobbers in-progress edits.
-function PreferenceForm<T extends string>({
-  name,
-  legend,
-  value,
-  onSave,
-  options,
-  savedMessage,
-}: {
-  name: string
-  legend: string
-  value: T
-  onSave: (next: T) => void
-  options: { value: T; label: string; hint: string }[]
-  savedMessage: string
-}) {
-  const { t } = useTranslation()
-  // Optional: the settings page also renders in provider-less tests.
-  const announce = useOptionalToast()?.announce
-  const [draft, setDraft] = useState<T>(value)
-  const [lastValue, setLastValue] = useState(value)
-  if (value !== lastValue) {
-    setLastValue(value)
-    setDraft((current) => (current === lastValue ? value : current))
-  }
-  const [notice, setNotice] = useState<"saved" | "noChanges" | null>(null)
-
-  return (
-    <form
-      noValidate
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (draft === value) {
-          setNotice("noChanges")
-          return
-        }
-        onSave(draft)
-        setNotice("saved")
-        announce?.(savedMessage)
-      }}
-    >
-      <PreferenceRadioGroup
-        name={name}
-        legend={legend}
-        value={draft}
-        onChange={(next) => {
-          setDraft(next)
-          setNotice(null)
-        }}
-        options={options}
-      />
-      <AnimatedAlert
-        tone="info"
-        show={notice === "noChanges"}
-        className="mt-3 text-sm"
-      >
-        {t("settings.noChangesToSave")}
-      </AnimatedAlert>
-      <AnimatedAlert
-        tone="success"
-        show={notice === "saved"}
-        className="mt-3 text-sm"
-      >
-        {savedMessage}
-      </AnimatedAlert>
-      <div className="mt-4">
-        <Button type="submit" variant="primary" size="sm">
-          {t("common.save")}
-        </Button>
-      </div>
-    </form>
-  )
-}
-
 // Card shell for a settings section: an anchor heading + subheading over its
 // body. Matches the Service-tokens / Hidden-orgs sections.
 function SettingsSectionCard({
@@ -416,7 +286,7 @@ function AppearanceSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
   const { pref, setThemePref } = useTheme()
 
-  const options: { value: ThemePref; label: string; hint: string }[] = [
+  const options: PreferenceOption<ThemePref>[] = [
     {
       value: "system",
       label: t("settings.appearance.system"),
@@ -476,7 +346,7 @@ function MotionSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
   const { pref, setPref } = useReducedMotion()
 
-  const options: { value: MotionPref; label: string; hint: string }[] = [
+  const options: PreferenceOption<MotionPref>[] = [
     {
       value: "system",
       label: t("settings.motion.system"),
@@ -520,7 +390,7 @@ function NameOrderSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
   const { preferences, setPreference } = useUserPreferences()
 
-  const options: { value: NameOrder; label: string; hint: string }[] = [
+  const options: PreferenceOption<NameOrder>[] = [
     {
       value: "first-last",
       label: t("settings.nameOrder.firstLast"),
@@ -548,6 +418,27 @@ function NameOrderSection({ highlighted }: { highlighted?: boolean }) {
         options={options}
         savedMessage={t("settings.nameOrder.saved")}
       />
+    </SettingsSectionCard>
+  )
+}
+
+// Anonymous usage analytics opt-out. The form is shared with the public
+// /privacy page; this card adds the settings chrome and a link to the notice.
+function AnalyticsSection({ highlighted }: { highlighted?: boolean }) {
+  const { t } = useTranslation()
+  return (
+    <SettingsSectionCard
+      id="analytics"
+      heading={t("settings.analytics.heading")}
+      subheading={t("settings.analytics.subheading")}
+      highlighted={highlighted}
+    >
+      <AnalyticsPreferenceForm />
+      <p className="mt-4 text-sm">
+        <Link className="link link-info link-hover" to="/privacy">
+          {t("settings.analytics.privacyLink")}
+        </Link>
+      </p>
     </SettingsSectionCard>
   )
 }
@@ -594,8 +485,8 @@ function HiddenOrgsSection({ highlighted }: { highlighted?: boolean }) {
 // Organizations (hidden orgs, service tokens) and Preferences. Organization
 // cards are ordered alphabetically by heading; Preferences run from the choices
 // most people make once (language, student names) to the cosmetic ones
-// (appearance, animations). Theme and language also have quick-access
-// affordances in the sidebar footer.
+// (appearance, animations), ending with the analytics opt-out. Theme and
+// language also have quick-access affordances in the sidebar footer.
 const SettingsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.settings"))
@@ -630,6 +521,7 @@ const SettingsPage = () => {
           <NameOrderSection highlighted={highlightedId === "name-order"} />
           <AppearanceSection highlighted={highlightedId === "appearance"} />
           <MotionSection highlighted={highlightedId === "motion"} />
+          <AnalyticsSection highlighted={highlightedId === "analytics"} />
         </SettingsGroup>
       </div>
     </PageShell>

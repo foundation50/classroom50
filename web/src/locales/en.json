@@ -295,6 +295,7 @@
     "aboutAskQuestion": "Ask a question",
     "aboutAskQuestionHint": "Get help from the community.",
     "aboutViewAccessibility": "View accessibility info",
+    "aboutViewPrivacy": "View privacy info",
     "aboutDiagnosticsTitle": "Diagnostics",
     "aboutDiagnosticsHint": "Copy technical details to include in a bug report or support thread. No data is sent anywhere; it only fills your clipboard.",
     "aboutDiagnosticsShow": "Show diagnostics",
@@ -314,6 +315,7 @@
     "footerTagline": "Manage assignments and submissions through GitHub.",
     "visitDocs": "Visit Classroom 50's docs",
     "accessibility": "Accessibility",
+    "privacy": "Privacy",
     "signedInConfirmed": "Signed in. Your session is active.",
     "verifyingSession": "Verifying your session…",
     "profileUnavailable": "Profile unavailable",
@@ -1130,6 +1132,17 @@
       "lastFirstHint": "For example, Lovelace Ada.",
       "groupAria": "Name order preference",
       "saved": "Name order preference saved."
+    },
+    "analytics": {
+      "heading": "Usage analytics",
+      "subheading": "Classroom 50 counts visits anonymously to see how many people use it and where they come from. Nothing identifies you.",
+      "on": "Count my visits anonymously",
+      "onHint": "Shares the page path, browser type, and load time. No cookies, no names, no query strings.",
+      "off": "Don't count my visits",
+      "offHint": "Applies to this browser from the next page load.",
+      "groupAria": "Usage analytics preference",
+      "saved": "Usage analytics preference saved. It applies from the next page load.",
+      "privacyLink": "Read the privacy notice"
     }
   },
   "assignments": {
@@ -4200,6 +4213,47 @@
     "unclaimed": {
       "staff": "The team {{slug}} already exists but wasn't created by Classroom 50, so it can't be used as a staff team. Review its members at {{url}}, then either delete it or give it access to the classroom50 repository, and try again.",
       "studentOf": "The team {{slug}} is the student team of classroom {{classroom}}, so it can't be this classroom's {{role}} team. Leave the {{role}} role unstaffed here, or rename one of the classrooms."
+    }
+  },
+  "privacy": {
+    "pageTitle": "Privacy",
+    "pageSubtitle": "How the Classroom 50 web app handles your data, and how to opt out of usage analytics.",
+    "data": {
+      "heading": "Your classroom data",
+      "body": "Classroom 50 has no server, database, or accounts of its own. Rosters, assignment repositories, scores, and feedback stay in your GitHub organization. The app reads and writes them through the GitHub API with a token you grant. Sign-in and repository downloads pass through a proxy that stores nothing.",
+      "more": "For details, including FERPA guidance, see",
+      "moreLink": "Privacy and FERPA in the docs"
+    },
+    "analytics": {
+      "heading": "Usage analytics",
+      "intro": "classroom50.org uses Cloudflare Web Analytics to count visits and see which countries and sites they come from. It sets no cookies and doesn't track you across sites.",
+      "collectedHeading": "Collected",
+      "collected": {
+        "path": "The page path, for example /cs1-fall-2026/assignments",
+        "referrer": "The site that linked to the page",
+        "country": "Your country, worked out from your connection",
+        "device": "Browser, operating system, and device type",
+        "timings": "Page load time"
+      },
+      "notCollectedHeading": "Not collected",
+      "notCollected": {
+        "queryStrings": "Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device.",
+        "storage": "Cookies, local storage, or fingerprints",
+        "identity": "Your GitHub username or roster data"
+      },
+      "processing": "Cloudflare processes this data for us under its",
+      "processingLink": "data processing addendum",
+      "processingAfter": ". It keeps full data for 7 days and a sample for 6 months. Our legal basis is legitimate interest, and you can object at any time by opting out below."
+    },
+    "choice": {
+      "heading": "Your choice",
+      "body": "Your choice is saved in this browser and applies from the next page load. When you're signed in, you can also change it in Settings.",
+      "signals": "If your browser sends the Global Privacy Control or Do Not Track signal, the analytics script never loads, regardless of this setting."
+    },
+    "contact": {
+      "heading": "Questions",
+      "body": "Classroom 50 is an open source project of the Fifty Foundation. To ask about this notice, start a thread in",
+      "link": "GitHub Discussions"
     }
   }
 }

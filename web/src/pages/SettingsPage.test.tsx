@@ -356,16 +356,19 @@ describe("SettingsPage service tokens", () => {
   })
 })
 
+// Preference forms share one Save label, so pick the form by its radio name.
+const radio = (label: string) =>
+  screen.getByLabelText(label) as HTMLInputElement
+const saveButtonFor = (formName: string) =>
+  screen
+    .getAllByText("common.save")
+    .map((el) => el.closest("form"))
+    .find((form) => form?.querySelector(`input[name="${formName}"]`))!
+    .querySelector('button[type="submit"]') as HTMLButtonElement
+
 describe("SettingsPage student names", () => {
   const NAME_ORDER_KEY = USER_PREFERENCE_SPECS.nameOrder.storageKey
-  const radio = (label: string) =>
-    screen.getByLabelText(label) as HTMLInputElement
-  const saveButton = () =>
-    screen
-      .getAllByText("common.save")
-      .map((el) => el.closest("form"))
-      .find((form) => form?.querySelector('input[name="name-order-pref"]'))!
-      .querySelector('button[type="submit"]') as HTMLButtonElement
+  const saveButton = () => saveButtonFor("name-order-pref")
 
   it("defaults to first-last and only persists on Save", async () => {
     renderPage()
@@ -394,5 +397,16 @@ describe("SettingsPage student names", () => {
     await userEvent.click(saveButton())
     expect(screen.getByText("settings.noChangesToSave")).toBeTruthy()
     expect(window.localStorage.getItem(NAME_ORDER_KEY)).toBeNull()
+  })
+})
+
+// The save flow itself is covered by AnalyticsPreferenceForm.test.tsx; here
+// only the page wiring matters.
+describe("SettingsPage usage analytics", () => {
+  it("renders the analytics form defaulting to on, with a link to the notice", () => {
+    renderPage()
+    expect(radio("settings.analytics.on").checked).toBe(true)
+    expect(saveButtonFor("analytics-pref")).toBeTruthy()
+    expect(screen.getByText("settings.analytics.privacyLink")).toBeTruthy()
   })
 })

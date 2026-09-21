@@ -261,6 +261,12 @@ jobs:
       - id: sha
         run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      # Cloudflare Web Analytics site token (public, ships in the HTML; see
+      # web/README.md "Usage analytics"). Delete this step to ship without it.
+      - name: Enable Cloudflare Web Analytics
+        if: vars.VITE_CF_BEACON_TOKEN != ''
+        run: echo "VITE_CF_BEACON_TOKEN=${{ vars.VITE_CF_BEACON_TOKEN }}" >> "$GITHUB_ENV"
+
       - run: npm run build
         env:
           VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}

@@ -210,6 +210,9 @@ export function GitHubAuthCard() {
             <Link className="link link-info link-hover" to="/accessibility">
               {t("auth.accessibility")}
             </Link>
+            <Link className="link link-info link-hover" to="/privacy">
+              {t("auth.privacy")}
+            </Link>
             <a
               className="link link-info link-hover"
               href={WIKI_URL}

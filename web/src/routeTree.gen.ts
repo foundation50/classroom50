@@ -13,6 +13,7 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AccessibilityRouteImport } from './routes/accessibility'
 import { Route as AssessRouteImport } from './routes/assess'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedOrgRouteRouteImport } from './routes/_authed/$org/route'
 import { Route as AuthIndexRouteImport } from './routes/auth/index'
@@ -56,6 +57,11 @@ const AssessRoute = AssessRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/accessibility': typeof AccessibilityRoute
   '/assess': typeof AssessRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/$org': typeof AuthedOrgRouteRouteWithChildren
   '/auth/': typeof AuthIndexRoute
   '/$org/$classroom': typeof AuthedOrgClassroomRouteRouteWithChildren
@@ -230,6 +237,7 @@ export interface FileRoutesByTo {
   '/accessibility': typeof AccessibilityRoute
   '/assess': typeof AssessRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/': typeof AuthedIndexRoute
   '/auth': typeof AuthIndexRoute
   '/$org': typeof AuthedOrgIndexRoute
@@ -260,6 +268,7 @@ export interface FileRoutesById {
   '/accessibility': typeof AccessibilityRoute
   '/assess': typeof AssessRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/_authed/$org': typeof AuthedOrgRouteRouteWithChildren
   '/_authed/': typeof AuthedIndexRoute
   '/auth/': typeof AuthIndexRoute
@@ -293,6 +302,7 @@ export interface FileRouteTypes {
     | '/accessibility'
     | '/assess'
     | '/login'
+    | '/privacy'
     | '/$org'
     | '/auth/'
     | '/$org/$classroom'
@@ -322,6 +332,7 @@ export interface FileRouteTypes {
     | '/accessibility'
     | '/assess'
     | '/login'
+    | '/privacy'
     | '/'
     | '/auth'
     | '/$org'
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | '/accessibility'
     | '/assess'
     | '/login'
+    | '/privacy'
     | '/_authed/$org'
     | '/_authed/'
     | '/auth/'
@@ -383,6 +395,7 @@ export interface RootRouteChildren {
   AccessibilityRoute: typeof AccessibilityRoute
   AssessRoute: typeof AssessRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   AuthIndexRoute: typeof AuthIndexRoute
 }
 
@@ -414,6 +427,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed/': {
@@ -686,6 +706,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccessibilityRoute: AccessibilityRoute,
   AssessRoute: AssessRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   AuthIndexRoute: AuthIndexRoute,
 }
 export const routeTree = rootRouteImport

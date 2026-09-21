@@ -61,3 +61,37 @@ The GitHub OAuth client ID comes from the `VITE_GITHUB_CLIENT_ID` repository
 variable (Settings → Secrets and variables → Actions → Variables) — it is a
 public identifier, not a secret. If preview reuses the same OAuth app, include
 `https://preview.classroom50.org/login` in its allowed callback URLs.
+
+### Usage analytics
+
+`webAnalyticsPlugin` in `vite.config.ts` adds the
+[Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
+snippet to `index.html` when `VITE_CF_BEACON_TOKEN` holds a site token. No
+token, no script. Tokens are public identifiers, not secrets. Cloudflare
+processes the data under its
+[data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
+
+Cloudflare attributes traffic by token and accepts beacons only from the
+hostname registered for that token, so each environment gets its own Cloudflare
+site (**Web Analytics**, then **Add a site**):
+
+| Environment             | Cloudflare site hostname  | Token                                                                                                                                         |
+| ----------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| classroom50.org         | `classroom50.org`         | Repository variable `VITE_CF_BEACON_TOKEN`, read by the "Enable Cloudflare Web Analytics" step in `release-please.yaml` and `web-deploy.yaml` |
+| preview.classroom50.org | `preview.classroom50.org` | Repository variable `VITE_CF_BEACON_TOKEN_PREVIEW`, read by the same step in `web-deploy-preview.yaml`                                        |
+| Local development       | A hostname you own        | `VITE_CF_BEACON_TOKEN` in `.env.local`, used by `npm run dev` and `npm run build`                                                             |
+
+Each workflow step is self-contained and shows as skipped when its variable is
+unset. Delete the step to ship that environment without analytics.
+
+Cloudflare rejects beacons from `localhost`, so to track local traffic, register
+a hostname such as `dev.classroom50.org` as its own Cloudflare site, point it at
+`127.0.0.1` in `/etc/hosts`, and open the dev server through it. Don't reuse
+the production token for this: Cloudflare matches hostnames by suffix, so it
+would count local traffic as production.
+
+The script never loads when the browser sends Global Privacy Control or Do Not
+Track, or when the visitor has opted out. The opt-out is the `analytics`
+preference (`classroom50:analytics` in localStorage, stored only as `off`),
+offered in Settings and on the public `/privacy` page. To check a build, look
+for `beacon.min.js` in `dist/index.html`.
