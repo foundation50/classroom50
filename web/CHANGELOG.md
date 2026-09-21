@@ -17,6 +17,14 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.54.0](https://github.com/foundation50/classroom50/compare/web-v1.53.0...web-v1.54.0) (2026-09-21)
+
+
+### Features
+
+* **web:** add a name order preference for student names ([#1039](https://github.com/foundation50/classroom50/issues/1039)) ([30efcb7](https://github.com/foundation50/classroom50/commit/30efcb7fde41566575eb6e61734d3b0ffe4d1bd2))
+* **web:** add privacy-first Cloudflare Web Analytics ([#1042](https://github.com/foundation50/classroom50/issues/1042)) ([84c7d0e](https://github.com/foundation50/classroom50/commit/84c7d0e848e7a779d9287288f376248663eee2cb))
+
 ## [1.53.0](https://github.com/foundation50/classroom50/compare/web-v1.52.2...web-v1.53.0) (2026-09-21)
 
 
