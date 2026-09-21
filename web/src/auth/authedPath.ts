@@ -4,9 +4,10 @@
 export const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "")
 
 // Public routes that must NOT bounce to /login when the session ends: the auth
-// screens plus the public accessibility report (readable by an ADA/VPAT
-// reviewer without a GitHub login — see routes/accessibility.tsx). Everything
-// else (incl. the app home "/") is authed. When a session ends mid-flight the
+// screens, the public accessibility report (readable by an ADA/VPAT reviewer
+// without a GitHub login — see routes/accessibility.tsx), and the privacy
+// notice (a visitor must be able to read it and object before signing in — see
+// routes/privacy.tsx). Everything else (incl. the app home "/") is authed. When a session ends mid-flight the
 // router keeps the authed route mounted for a frame — the subtree re-renders
 // against a now-null GitHub client and useGitHubClient() throws — so App renders
 // a redirect state instead (see sessionEndedOnAuthedRoute).
@@ -20,7 +21,9 @@ export function isAuthedPath(pathname: string): boolean {
     path !== "/auth" &&
     path !== "/auth/" &&
     path !== "/accessibility" &&
-    path !== "/accessibility/"
+    path !== "/accessibility/" &&
+    path !== "/privacy" &&
+    path !== "/privacy/"
   )
 }
 

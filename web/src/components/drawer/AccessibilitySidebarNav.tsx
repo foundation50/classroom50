@@ -1,16 +1,14 @@
 import {
-  ArrowLeftIcon,
   ChecklistIcon,
   DownloadIcon,
   FileIcon,
   PaintbrushIcon,
-  SignInIcon,
 } from "@/components/ui/icons"
 import { Link, useRouterState } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import type { ReactNode } from "react"
 
-import { useGithubAuth } from "@/auth/useGithubAuth"
+import { PublicWayBackItem } from "./PublicWayBackItem"
 import {
   ACCESSIBILITY_SECTIONS,
   sectionFromHash,
@@ -37,37 +35,13 @@ const SECTION_ICON: Record<AccessibilitySection, ReactNode> = {
 // it matches the app's other drawer items, including the sliding active pill.
 export function AccessibilitySidebarNav() {
   const { t } = useTranslation()
-  const { status } = useGithubAuth()
-  const signedIn = status === "authenticated"
   const hash = useRouterState({ select: (s) => s.location.hash })
   const activeSection = sectionFromHash(hash)
 
   return (
     <div className="py-4">
       <ul className="flex flex-col gap-1">
-        {signedIn ? (
-          <SidebarNavItem label={t("nav.backToApp")}>
-            <Link to="/">
-              <SidebarItemBody
-                label={t("nav.backToApp")}
-                icon={<ArrowLeftIcon aria-hidden="true" />}
-                active={false}
-                groupId="accessibility"
-              />
-            </Link>
-          </SidebarNavItem>
-        ) : (
-          <SidebarNavItem label={t("nav.signIn")}>
-            <Link to="/login">
-              <SidebarItemBody
-                label={t("nav.signIn")}
-                icon={<SignInIcon aria-hidden="true" />}
-                active={false}
-                groupId="accessibility"
-              />
-            </Link>
-          </SidebarNavItem>
-        )}
+        <PublicWayBackItem groupId="accessibility" />
 
         {ACCESSIBILITY_SECTIONS.map((s) => (
           <SidebarNavItem key={s.id} label={t(s.navLabelKey)}>
