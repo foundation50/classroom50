@@ -4229,7 +4229,7 @@
       "intro": "classroom50.org uses Cloudflare Web Analytics to count visits and see which countries and sites they come from. It sets no cookies and doesn't track you across sites.",
       "collectedHeading": "Collected",
       "collected": {
-        "path": "The page path, for example /cs50-fall-2026/assignments",
+        "path": "The page path, for example /cs1-fall-2026/assignments",
         "referrer": "The site that linked to the page",
         "country": "Your country, worked out from your connection",
         "device": "Browser, operating system, and device type",

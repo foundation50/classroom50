@@ -437,7 +437,7 @@ cookies and doesn't track you across sites.
 
 | Collected | Not collected |
 |---|---|
-| The page path, for example `/cs50-fall-2026/assignments` | Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device. |
+| The page path, for example `/cs1-fall-2026/assignments` | Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device. |
 | The site that linked to the page | Cookies, local storage, or fingerprints |
 | Your country, worked out from your connection | Your GitHub username or roster data |
 | Browser, operating system, and device type | |
