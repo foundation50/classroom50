@@ -182,12 +182,13 @@ function buildDetailItems(
     (e) => e.kind === "commit",
   )
   // sha (short or full, whichever the collected commit URL ends with) -> the
-  // collected attempt graded at that commit, so a detected push or tag can link
+  // newest collected attempt graded at that commit (a regrade or a hand-made
+  // release can grade one commit twice), so a detected push or tag can link
   // its grade and carry the collector's mark.
   const attemptByCommit = new Map<string, SubmissionAttempt>()
   for (const s of row.submissions) {
     const sha = s.commit?.split("/").pop()
-    if (sha) attemptByCommit.set(sha, s)
+    if (sha && !attemptByCommit.has(sha)) attemptByCommit.set(sha, s)
   }
   const attemptFor = (sha: string) =>
     attemptByCommit.get(sha) ?? attemptByCommit.get(sha.slice(0, 7))
