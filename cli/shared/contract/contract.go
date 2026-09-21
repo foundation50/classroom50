@@ -245,6 +245,12 @@ const (
 	ResultFilename      = "result.json"
 	ReleaseBodyFilename = "release-body.md"
 
+	// ResultSchemaV1 is the sentinel a result.json must carry to be read as a
+	// score (download, collect_scores.py validate_result) and that the runner
+	// refuses to attach as a release asset. Mirrors RESULT_SCHEMA_V1 in
+	// runner.py and collect_scores.py; test_contract_parity.py pins all three.
+	ResultSchemaV1 = "classroom50/result/v1"
+
 	// RosterFilename is the per-classroom roster file
 	// (<classroom>/roster.csv). Hand-mirrored with NO compile-time link in the
 	// web GUI (web/src/util/configRepoPaths.ts) and the Python collect-scores

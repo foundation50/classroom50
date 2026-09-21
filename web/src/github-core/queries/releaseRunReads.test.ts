@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 import { describe, expect, it, vi } from "vitest"
 
@@ -205,20 +205,12 @@ describe("releaseProvenanceProblem", () => {
   // The collector and gh teacher download run the same cases
   // (test_contract_parity.py, download_test.go), so one reader drifting from
   // the shared verdict fails here rather than in a gradebook.
-  it("reaches the shared verdict on every schemas/fixtures case", () => {
-    // web/ is process.cwd() in vitest; schemas/ is a sibling.
-    const doc = JSON.parse(
-      readFileSync(
-        path.join(
-          process.cwd(),
-          "..",
-          "schemas",
-          "fixtures",
-          "release-provenance.json",
-        ),
-        "utf-8",
-      ),
-    ) as {
+  it("reaches the shared verdict on every cli/shared/testdata case", () => {
+    const fixtureUrl = new URL(
+      "../../../../cli/shared/testdata/release_provenance_cases.json",
+      import.meta.url,
+    )
+    const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
       cases: {
         name: string
         release: GitHubRelease
@@ -234,66 +226,17 @@ describe("releaseProvenanceProblem", () => {
     }
   })
 
-  const honest = release("submit/1", "2026-01-01T00:00:00Z")
-
-  it("accepts the runner's release, with or without assets", () => {
-    expect(releaseProvenanceProblem(honest)).toBeNull()
-    expect(releaseProvenanceProblem({ ...honest, assets: [] })).toBeNull()
+  // JSON can't express an absent key on a typed object, so the two undefined
+  // shapes stay here; the fixture covers null and every login variant.
+  it("treats absent author and assets like the fixture's null cases", () => {
+    const honest = release("submit/1", "2026-01-01T00:00:00Z")
     expect(
       releaseProvenanceProblem({ ...honest, assets: undefined }),
     ).toBeNull()
-  })
-
-  // A hand-made release carries the student's login as author, the one mark
-  // they can't forge; a missing author counts as someone else.
-  it("names the author of a release published by anyone else, or by no one", () => {
-    expect(
-      releaseProvenanceProblem({ ...honest, author: { login: "alice" } }),
-    ).toEqual({ kind: "author", login: "alice" })
-    expect(releaseProvenanceProblem({ ...honest, author: null })).toEqual({
-      kind: "author",
-      login: null,
-    })
     expect(releaseProvenanceProblem({ ...honest, author: undefined })).toEqual({
       kind: "author",
       login: null,
     })
-  })
-
-  // A clobbered result.json keeps the bot as author; the uploader gives it away.
-  it("names the uploader of a result.json someone else uploaded", () => {
-    const asset = honest.assets![0]
-    expect(
-      releaseProvenanceProblem({
-        ...honest,
-        assets: [
-          { ...asset, name: "Result.JSON", uploader: { login: "alice" } },
-        ],
-      }),
-    ).toEqual({ kind: "uploader", login: "alice" })
-    expect(
-      releaseProvenanceProblem({
-        ...honest,
-        assets: [{ ...asset, uploader: null }],
-      }),
-    ).toEqual({ kind: "uploader", login: null })
-  })
-
-  it("ignores other assets, whoever uploaded them", () => {
-    expect(
-      releaseProvenanceProblem({
-        ...honest,
-        assets: [
-          ...honest.assets!,
-          {
-            id: 2,
-            name: "screenshot.png",
-            browser_download_url: "u",
-            uploader: { login: "alice" },
-          },
-        ],
-      }),
-    ).toBeNull()
   })
 })
 

@@ -1002,19 +1002,26 @@ def _copy_release_asset(
     return copied
 
 
-def _looks_like_result_document(path: pathlib.Path) -> bool:
+def _looks_like_result_document(path: pathlib.Path, size: int | None = None) -> bool:
     """True when a staged release asset is itself a result document.
 
     Anyone with push access can rename a Release asset, and the readers accept
     any result.json the workflow token uploaded. A student-authored file that
     already carries the result schema is the one attachment a rename would turn
-    into a forged score, so the runner never attaches one."""
+    into a forged score, so the runner never attaches one. `size` is the byte
+    count when the caller already has it."""
     try:
-        if path.stat().st_size > RESULT_SNIFF_MAX_BYTES:
+        if (path.stat().st_size if size is None else size) > RESULT_SNIFF_MAX_BYTES:
             return False
-        # errors="replace": a decode failure must never clear a file, since a
-        # reader with a laxer decoder would still accept it.
-        data = json.loads(path.read_bytes().decode("utf-8", errors="replace"))
+        with path.open("rb") as fh:
+            # Most assets are PDFs, images, or archives: a first byte that can't
+            # open a JSON object or array settles it without reading the rest.
+            head = fh.read(64).lstrip(b" \t\n\r")
+            if head and head[:1] not in (b"{", b"["):
+                return False
+            # errors="replace": a decode failure must never clear a file, since
+            # a reader with a laxer decoder would still accept it.
+            data = json.loads((head + fh.read()).decode("utf-8", errors="replace"))
     except (OSError, ValueError):
         return False
     except RecursionError:
@@ -1068,7 +1075,7 @@ def stage_release_assets(
                 )
             finally:
                 os.close(source_fd)
-            if _looks_like_result_document(target):
+            if _looks_like_result_document(target, copied):
                 raise ValueError(
                     f"{configured_path!r} is a {RESULT_SCHEMA_PREFIX}* document; "
                     f"only the runner publishes one"

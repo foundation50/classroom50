@@ -51,10 +51,6 @@ const (
 	resultAssetName = "result.json"
 	submitTagPrefix = "submit/"
 	maxResultBytes  = 10 * 1024 * 1024
-	// resultSchemaV1 is the sentinel a downloaded result.json must carry to be
-	// written as a score. Mirrors RESULT_SCHEMA_V1 in collect_scores.py and
-	// runner.py; test_contract_parity.py pins all three.
-	resultSchemaV1 = "classroom50/result/v1"
 )
 
 // resultsAssetName: the per-repo history file written alongside the clone.
@@ -984,10 +980,9 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 	}
 
 	// API returns releases newest-first; preserve that so results.json[0] is
-	// the most recent submission. latestPayloadSeen tracks which release's
-	// payload lands in result.json so its mark line can name the unmarked file.
+	// the most recent submission and latestPayload is what result.json gets.
 	history := make([]submissionRecord, 0, len(releases))
-	latestPayloadSeen := false
+	var latestPayload json.RawMessage
 	for _, rel := range releases {
 		assetURL, err := selectResultAsset(rel)
 		if err != nil {
@@ -1006,16 +1001,15 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 				// someone with push access passes provenance; the schema is
 				// what tells it apart from the runner's own upload.
 				_, _ = fmt.Fprintf(errOut, "%s/%s: release %q: %s is not a %s document; treated as missing. Check the repository's Releases tab.\n",
-					org, repo, rel.TagName, resultAssetName, resultSchemaV1)
+					org, repo, rel.TagName, resultAssetName, contract.ResultSchemaV1)
 			}
 		}
 		problem := releaseProvenanceProblem(rel)
-		// History is newest-first; the first release with a payload becomes
-		// result.json. Say so on that release's mark line so the unmarked
-		// back-compat file isn't mistaken for the marked view.
-		isLatestPayload := len(payload) > 0 && !latestPayloadSeen
-		if len(payload) > 0 {
-			latestPayloadSeen = true
+		// The mark line names result.json when this payload is the one it will
+		// hold, so the unmarked back-compat file isn't mistaken for the marked view.
+		isLatestPayload := len(payload) > 0 && latestPayload == nil
+		if isLatestPayload {
+			latestPayload = payload
 		}
 		if problem != "" {
 			msg := fmt.Sprintf("%s/%s: release %q was %s; recorded and marked in %s",
@@ -1053,14 +1047,11 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 		return err
 	}
 
-	// Back-compat: point <repo>/result.json at the latest submission's payload
-	// (first history entry with an asset).
-	for _, rec := range history {
-		if len(rec.Result) > 0 {
-			return writeGuarded(root, resultAssetName, rec.Result)
-		}
+	// Back-compat: <repo>/result.json holds the latest submission's payload.
+	if len(latestPayload) == 0 {
+		return nil
 	}
-	return nil
+	return writeGuarded(root, resultAssetName, latestPayload)
 }
 
 // writeGuarded writes data to name inside root, never following or writing
@@ -1137,7 +1128,7 @@ func releaseProvenanceProblem(rel release) string {
 		return fmt.Sprintf("published by '%s', not by the autograde workflow", describe(rel.Author.Login))
 	}
 	for _, a := range rel.Assets {
-		if !strings.EqualFold(a.Name, resultAssetName) {
+		if !isResultAsset(a) {
 			continue
 		}
 		if a.Uploader.Login != contract.AutogradeReleaseAuthor {
@@ -1163,15 +1154,20 @@ func isResultDocument(body []byte) bool {
 		return false
 	}
 	var schema string
-	return json.Unmarshal(doc["schema"], &schema) == nil && schema == resultSchemaV1
+	return json.Unmarshal(doc["schema"], &schema) == nil && schema == contract.ResultSchemaV1
+}
+
+// isResultAsset matches the release asset that carries the score. Case-folded
+// like the collector's `.lower()` compare.
+func isResultAsset(a releaseAsset) bool {
+	return strings.EqualFold(a.Name, resultAssetName)
 }
 
 // listAllSubmitReleases returns every submit-tag release for a repo, newest
 // first, walking the full /releases pagination. Non-submit releases (a
 // student's hand-created tag) and drafts (the runner never publishes one, and a
-// draft's assets aren't downloadable) are filtered out; publisher identity is
-// not (see releaseProvenanceProblem). Mirrors all_submit_releases in
-// collect_scores.py.
+// draft's assets aren't downloadable) are filtered out. Mirrors
+// all_submit_releases in collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
 		func(page int) string {
@@ -1210,7 +1206,7 @@ var errNoReleases = errors.New("no releases")
 func selectResultAsset(rel release) (string, error) {
 	var matches []string
 	for _, a := range rel.Assets {
-		if strings.EqualFold(a.Name, resultAssetName) {
+		if isResultAsset(a) {
 			matches = append(matches, a.URL)
 		}
 	}

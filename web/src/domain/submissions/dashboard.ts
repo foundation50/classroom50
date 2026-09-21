@@ -204,7 +204,7 @@ export function mergeLiveRows(
       // otherwise a pending late submission reads as on-time until the next
       // collect. Left undefined (never guessed) without a parseable pair.
       late: liveLateness(live.datetime, dueDate),
-      ...(live.provenance ? { provenance: live.provenance } : {}),
+      provenance: live.provenance,
       submissions: [],
     }))
 

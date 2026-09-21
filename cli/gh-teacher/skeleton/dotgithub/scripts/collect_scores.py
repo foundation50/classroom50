@@ -2895,8 +2895,8 @@ def validate_result(
     """Raise ValueError if the payload fails the v1 contract. The
     classroom/assignment/owner checks defend against a hostile result.json
     trying to land in someone else's scores.json: the triple must match the
-    source repo's expected identity. Provenance is judged separately by
-    release_provenance_problem and never used to reject.
+    source repo's expected identity. Who published the release is a separate
+    judgment; see release_provenance_problem.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
     (the roster/repo-name-derived owner; for a team assignment the repo-name
@@ -3377,6 +3377,11 @@ def _login(user: Any) -> str:
     return ""
 
 
+def _is_result_asset(asset: dict[str, Any]) -> bool:
+    """The release asset that carries the score, matched case-insensitively."""
+    return (asset.get("name") or "").lower() == RESULT_ASSET_NAME
+
+
 def release_provenance_problem(release: dict[str, Any]) -> str | None:
     """Why a submit/* release did not come from the autograde workflow, or None.
 
@@ -3391,9 +3396,7 @@ def release_provenance_problem(release: dict[str, Any]) -> str | None:
     if author != AUTOGRADE_RELEASE_AUTHOR:
         return f"published by {author or 'an unknown account'!r}, not by the autograde workflow"
     for asset in release.get("assets") or []:
-        if not isinstance(asset, dict):
-            continue
-        if (asset.get("name") or "").lower() != RESULT_ASSET_NAME:
+        if not isinstance(asset, dict) or not _is_result_asset(asset):
             continue
         uploader = _login(asset.get("uploader"))
         if uploader != AUTOGRADE_RELEASE_AUTHOR:
@@ -3410,8 +3413,7 @@ def all_submit_releases(
     """Every submit-tag release for a repo, newest first, walking the full
     /releases pagination: the complete submission history (a student who pushed
     N times has N submit/* releases, all returned). Non-submit releases (a
-    hand-created tag) are filtered out; publisher identity is not (see
-    release_provenance_problem). A 404 (no releases, or repo not accepted)
+    hand-created tag) are filtered out. A 404 (no releases, or repo not accepted)
     yields an empty list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
@@ -3990,7 +3992,7 @@ def download_result_asset(
     """
     matches = [
         c for c in (release.get("assets") or [])
-        if (c.get("name") or "").lower() == RESULT_ASSET_NAME
+        if _is_result_asset(c)
     ]
     # Runs once per release in the history walk, so errors name THIS release.
     release_label = release.get("tag_name") or release.get("url") or "release"

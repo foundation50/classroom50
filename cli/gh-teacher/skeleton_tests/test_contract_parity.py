@@ -42,7 +42,7 @@ _WEB_RELEASE_READS_TS = (
 _DOWNLOAD_GO = (
     _REPO_ROOT / "cli" / "gh-teacher" / "internal" / "download" / "download.go"
 )
-_FIXTURES = _REPO_ROOT / "schemas" / "fixtures"
+_FIXTURES = _REPO_ROOT / "cli" / "shared" / "testdata"
 
 
 def _go_staff_roles() -> list[str]:
@@ -112,19 +112,18 @@ class TestResultSniff:
 
     def test_sniff_prefix_matches_the_schema_the_readers_accept(self):
         assert cs.RESULT_SCHEMA_V1.startswith(runner.RESULT_SCHEMA_PREFIX)
-        go = re.search(r'resultSchemaV1\s*=\s*"([^"]+)"', _DOWNLOAD_GO.read_text())
-        assert go, "resultSchemaV1 not found in download.go"
+        go = re.search(r'ResultSchemaV1\s*=\s*"([^"]+)"', _CONTRACT_GO.read_text())
+        assert go, "contract.ResultSchemaV1 not found in contract.go"
         assert go.group(1) == cs.RESULT_SCHEMA_V1 == runner.RESULT_SCHEMA_V1
 
 
-def _sniff_cases():
-    doc = json.loads((_FIXTURES / "result-document-sniff.json").read_text())
+def _fixture_cases(name: str):
+    doc = json.loads((_FIXTURES / name).read_text())
     return [pytest.param(c, id=c["name"]) for c in doc["cases"]]
 
 
-def _provenance_cases():
-    doc = json.loads((_FIXTURES / "release-provenance.json").read_text())
-    return [pytest.param(c, id=c["name"]) for c in doc["cases"]]
+_SNIFF_CASES = _fixture_cases("result_document_sniff_cases.json")
+_PROVENANCE_CASES = _fixture_cases("release_provenance_cases.json")
 
 
 class TestResultDocumentFixtures:
@@ -133,19 +132,19 @@ class TestResultDocumentFixtures:
     quirk one side has and another lacks (key case, invalid UTF-8) is the
     rename route reopening."""
 
-    @pytest.mark.parametrize("case", _sniff_cases())
+    @pytest.mark.parametrize("case", _SNIFF_CASES)
     def test_fixture_is_self_consistent(self, case):
         # A file every reader takes as a result must never be one the runner
         # publishes under the bot identity.
         assert not (case["is_result_document"] and case["runner_attaches"]), case["name"]
 
-    @pytest.mark.parametrize("case", _sniff_cases())
+    @pytest.mark.parametrize("case", _SNIFF_CASES)
     def test_runner_sniff(self, case, tmp_path):
         path = tmp_path / "asset.json"
         path.write_bytes(base64.b64decode(case["body_base64"]))
         assert runner._looks_like_result_document(path) is not case["runner_attaches"]
 
-    @pytest.mark.parametrize("case", _sniff_cases())
+    @pytest.mark.parametrize("case", _SNIFF_CASES)
     def test_collector_read(self, case, monkeypatch):
         body = base64.b64decode(case["body_base64"])
         monkeypatch.setattr(cs, "_http_get", lambda *a, **k: body)
@@ -169,7 +168,7 @@ class TestResultDocumentFixtures:
 
 
 class TestReleaseProvenanceFixtures:
-    @pytest.mark.parametrize("case", _provenance_cases())
+    @pytest.mark.parametrize("case", _PROVENANCE_CASES)
     def test_collector_verdict(self, case):
         want = case["problem"]["message"] if case["problem"] else None
         assert cs.release_provenance_problem(case["release"]) == want

@@ -1084,7 +1084,7 @@ func TestRefreshResultJSON(t *testing.T) {
 
 // The Go check must accept nothing the runner's sniff clears, or a staged
 // release_assets file renamed to result.json becomes a score. The cases live in
-// schemas/fixtures so the runner and collector run the same bytes
+// cli/shared/testdata so the runner and collector run the same bytes
 // (test_contract_parity.py); here the Go reader must reach the shared verdict.
 func TestIsResultDocument_SharedFixtures(t *testing.T) {
 	var doc struct {
@@ -1094,7 +1094,7 @@ func TestIsResultDocument_SharedFixtures(t *testing.T) {
 			IsResultDocument bool   `json:"is_result_document"`
 		} `json:"cases"`
 	}
-	readSharedFixture(t, "result-document-sniff.json", &doc)
+	readSharedFixture(t, "result_document_sniff_cases.json", &doc)
 	if len(doc.Cases) == 0 {
 		t.Fatal("no cases in fixture")
 	}
@@ -1123,7 +1123,7 @@ func TestReleaseProvenanceProblem_SharedFixtures(t *testing.T) {
 			} `json:"problem"`
 		} `json:"cases"`
 	}
-	readSharedFixture(t, "release-provenance.json", &doc)
+	readSharedFixture(t, "release_provenance_cases.json", &doc)
 	if len(doc.Cases) == 0 {
 		t.Fatal("no cases in fixture")
 	}
@@ -1140,14 +1140,11 @@ func TestReleaseProvenanceProblem_SharedFixtures(t *testing.T) {
 	}
 }
 
-// readSharedFixture decodes schemas/fixtures/<name> from the repo root.
+// readSharedFixture decodes a cross-language golden fixture from
+// cli/shared/testdata, the same file the Python and web mirrors run.
 func readSharedFixture(t *testing.T, name string, into any) {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	raw, err := os.ReadFile(filepath.Join(root, "schemas", "fixtures", name))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "shared", "testdata", name))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
@@ -1362,24 +1359,17 @@ func TestListAllSubmitReleases(t *testing.T) {
 	})
 
 	// A hand-made release or a clobbered result.json carries the student's login
-	// as author or uploader, the one mark they can't forge. The listing keeps
-	// them all; releaseProvenanceProblem names the reason for the results.json entry.
-	t.Run("keeps releases the workflow didn't publish; releaseProvenanceProblem names why", func(t *testing.T) {
+	// as author or uploader. The listing keeps them all; the verdicts themselves
+	// are pinned by TestReleaseProvenanceProblem_SharedFixtures.
+	t.Run("keeps releases the workflow didn't publish", func(t *testing.T) {
 		alice := map[string]any{"login": "alice"}
-		forgedRelease := botRelease("submit/2026-06-04T10-00-00Z", botAsset("result.json", "u"))
+		forgedRelease := botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", "u"))
 		forgedRelease["author"] = alice
-		noAuthor := botRelease("submit/2026-06-03T10-00-00Z")
-		delete(noAuthor, "author")
-		replacedAsset := botRelease("submit/2026-06-02T10-00-00Z",
-			map[string]any{"name": "Result.JSON", "url": "u", "uploader": alice})
-		noUploader := botRelease("submit/2026-06-01T20-00-00Z",
-			map[string]any{"name": "result.json", "url": "u"})
-		extraAsset := botRelease("submit/2026-06-01T10-00-00Z",
-			botAsset("result.json", "u"),
-			map[string]any{"name": "screenshot.png", "url": "u", "uploader": alice})
+		replacedAsset := botRelease("submit/2026-06-01T10-00-00Z",
+			map[string]any{"name": "result.json", "url": "u", "uploader": alice})
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode([]map[string]any{forgedRelease, noAuthor, replacedAsset, noUploader, extraAsset})
+			_ = json.NewEncoder(w).Encode([]map[string]any{forgedRelease, replacedAsset})
 		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
@@ -1389,20 +1379,8 @@ func TestListAllSubmitReleases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
-		if len(rels) != 5 {
-			t.Fatalf("kept %d releases, want all 5", len(rels))
-		}
-		want := []string{
-			`published by 'alice', not by the autograde workflow`,
-			`published by 'an unknown account', not by the autograde workflow`,
-			`result.json uploaded by 'alice', not by the autograde workflow`,
-			`result.json uploaded by 'an unknown account', not by the autograde workflow`,
-			"",
-		}
-		for i, rel := range rels {
-			if got := releaseProvenanceProblem(rel); got != want[i] {
-				t.Errorf("releaseProvenanceProblem(%s) = %q, want %q", rel.TagName, got, want[i])
-			}
+		if len(rels) != 2 {
+			t.Fatalf("kept %d releases, want both", len(rels))
 		}
 	})
 
