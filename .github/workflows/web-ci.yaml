@@ -24,11 +24,15 @@ on:
     paths:
       - "web/**"
       - "cli/gh-teacher/skeleton/dotgithub/**"
+      - "cli/shared/testdata/**"
+      - "schemas/**"
       - ".github/workflows/web-ci.yaml"
   pull_request:
     paths:
       - "web/**"
       - "cli/gh-teacher/skeleton/dotgithub/**"
+      - "cli/shared/testdata/**"
+      - "schemas/**"
       - ".github/workflows/web-ci.yaml"
 
 # Cancel superseded runs on the same ref so a quick succession of pushes

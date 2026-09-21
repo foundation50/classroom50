@@ -52,6 +52,21 @@ describe("commitDetailItems", () => {
     ).toEqual({ label: "alice", avatarUrl: "https://avatars/alice" })
   })
 
+  it("carries a collected attempt's provenance onto the detail item", () => {
+    const mark = {
+      kind: "recorded" as const,
+      reason: "published by 'alice', not by the autograde workflow",
+    }
+    expect(
+      commitDetailItems([{ key: "c", provenance: mark }], t)[0].provenance,
+    ).toEqual(mark)
+    expect(
+      collectedTagDetailItems([{ key: "t", provenance: mark }], t)[0]
+        .provenance,
+    ).toEqual(mark)
+    expect(commitDetailItems([{ key: "c" }], t)[0].provenance).toBeUndefined()
+  })
+
   it("names an unlinked commit by its git author, without an avatar", () => {
     const [item] = commitDetailItems(
       [{ key: "c", author: { name: "Alice Git" } }],

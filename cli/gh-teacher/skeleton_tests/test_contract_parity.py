@@ -11,8 +11,13 @@ text the three surfaces each phrase themselves.
 
 from __future__ import annotations
 
+import base64
+import json
+import math
 import pathlib
 import re
+
+import pytest
 
 from conftest import _load_module, _SCRIPTS_DIR
 from conftest import collect_scores as cs
@@ -31,6 +36,13 @@ _TEST_CMD_GO = (
     _REPO_ROOT / "cli" / "gh-teacher" / "internal" / "assignmentcmd" / "test_cmd.go"
 )
 _WEB_CLASSROOM_TS = _REPO_ROOT / "web" / "src" / "types" / "classroom.ts"
+_WEB_RELEASE_READS_TS = (
+    _REPO_ROOT / "web" / "src" / "github-core" / "queries" / "releaseRunReads.ts"
+)
+_DOWNLOAD_GO = (
+    _REPO_ROOT / "cli" / "gh-teacher" / "internal" / "download" / "download.go"
+)
+_FIXTURES = _REPO_ROOT / "cli" / "shared" / "testdata"
 
 
 def _go_staff_roles() -> list[str]:
@@ -72,6 +84,109 @@ class TestAcceptMarkerPath:
         assert go, "contract.MetadataPath not found in contract.go"
         for module in (runner, cs, rr):
             assert module.ACCEPT_MARKER_PATH == go.group(1), module.__name__
+
+
+class TestAutogradeReleaseAuthor:
+    def test_collector_matches_go_and_web(self):
+        # Three hand spellings; a drift makes one reader disagree with the others.
+        go = re.search(r'AutogradeReleaseAuthor\s*=\s*"([^"]+)"', _CONTRACT_GO.read_text())
+        assert go, "contract.AutogradeReleaseAuthor not found in contract.go"
+        web = re.search(
+            r'export const AUTOGRADE_RELEASE_AUTHOR\s*=\s*"([^"]+)"',
+            _WEB_RELEASE_READS_TS.read_text(),
+        )
+        assert web, "web AUTOGRADE_RELEASE_AUTHOR not found in releaseRunReads.ts"
+        assert cs.AUTOGRADE_RELEASE_AUTHOR == go.group(1) == web.group(1)
+
+
+class TestResultSniff:
+    def test_sniff_ceiling_covers_every_reader(self):
+        # The runner refuses a release_assets file shaped like a result only up
+        # to RESULT_SNIFF_MAX_BYTES. A reader that accepted a larger result.json
+        # would reopen the rename route for files between the two sizes.
+        # Anchored to a full product of integer literals ending the line, so a
+        # rewrite such as `10 << 20` or a named constant fails here instead of
+        # matching a prefix and passing on a tiny number.
+        go = re.search(
+            r"^\s*maxResultBytes\s*=\s*(\d+(?:\s*\*\s*\d+)*)\s*$",
+            _DOWNLOAD_GO.read_text(),
+            re.M,
+        )
+        assert go, "maxResultBytes not found in download.go as a product of integer literals"
+        go_bytes = math.prod(int(factor) for factor in go.group(1).split("*"))
+        # download.go documents the two reader ceilings as aligned; pin that
+        # rather than the weaker ordering, so a drift in either shows up.
+        assert go_bytes == cs.MAX_RESULT_BYTES
+        assert runner.RESULT_SNIFF_MAX_BYTES >= cs.MAX_RESULT_BYTES
+
+    def test_sniff_prefix_matches_the_schema_the_readers_accept(self):
+        assert cs.RESULT_SCHEMA_V1.startswith(runner.RESULT_SCHEMA_PREFIX)
+        go = re.search(r'ResultSchemaV1\s*=\s*"([^"]+)"', _CONTRACT_GO.read_text())
+        assert go, "contract.ResultSchemaV1 not found in contract.go"
+        assert go.group(1) == cs.RESULT_SCHEMA_V1 == runner.RESULT_SCHEMA_V1
+
+
+def _fixture_cases(name: str):
+    doc = json.loads((_FIXTURES / name).read_text())
+    return [pytest.param(c, id=c["name"]) for c in doc["cases"]]
+
+
+_SNIFF_CASES = _fixture_cases("result_document_sniff_cases.json")
+_PROVENANCE_CASES = _fixture_cases("release_provenance_cases.json")
+
+
+class TestResultDocumentFixtures:
+    """The same asset bytes through the runner's sniff and the collector's
+    read; download_test.go runs the Go reader over the same file. A parser
+    quirk one side has and another lacks (key case, invalid UTF-8) is the
+    rename route reopening."""
+
+    @pytest.mark.parametrize("case", _SNIFF_CASES)
+    def test_fixture_is_self_consistent(self, case):
+        # A file every reader takes as a result must never be one the runner
+        # publishes under the bot identity.
+        assert not (case["is_result_document"] and case["runner_attaches"]), case["name"]
+
+    @pytest.mark.parametrize("case", _SNIFF_CASES)
+    def test_runner_sniff(self, case, tmp_path):
+        path = tmp_path / "asset.json"
+        path.write_bytes(base64.b64decode(case["body_base64"]))
+        try:
+            refused = runner._looks_like_result_document(path)
+        except ValueError:
+            # The sniff raises for a file it can't parse (deep nesting, the
+            # int digit limit); stage_release_assets skips it either way.
+            refused = True
+        assert refused is not case["runner_attaches"]
+
+    @pytest.mark.parametrize("case", _SNIFF_CASES)
+    def test_collector_read(self, case, monkeypatch):
+        body = base64.b64decode(case["body_base64"])
+        monkeypatch.setattr(cs, "_http_get", lambda *a, **k: body)
+        release = {"tag_name": "submit/x", "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}
+        try:
+            payload = cs.download_result_asset("https://api.github.com", release, "token")
+        except ValueError:
+            # JSONDecodeError and UnicodeDecodeError both: the bytes never
+            # became a payload, as collect_release_history skips them.
+            is_result = False
+        else:
+            try:
+                # Only the sentinel gate is under test; the fixture payloads
+                # carry none of the identity fields, so anything past it raises too.
+                cs.validate_result(payload, "c", "a", "u")
+            except ValueError as exc:
+                is_result = not str(exc).startswith(("schema = ", "top-level value"))
+            else:
+                is_result = True
+        assert is_result is case["is_result_document"]
+
+
+class TestReleaseProvenanceFixtures:
+    @pytest.mark.parametrize("case", _PROVENANCE_CASES)
+    def test_collector_verdict(self, case):
+        want = case["problem"]["message"] if case["problem"] else None
+        assert cs.release_provenance_problem(case["release"]) == want
 
 
 class TestStaffTeamSlug:

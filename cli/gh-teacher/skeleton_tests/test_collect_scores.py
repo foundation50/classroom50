@@ -2546,19 +2546,37 @@ class TestCollectAllSubmissions:
         assert cs.apply_updates(scores, results) == 0
 
 
+BOT = {"login": cs.AUTOGRADE_RELEASE_AUTHOR}
+
+
+def bot_release(tag: str, **extra):
+    """A submit/* release exactly as the runner publishes it: authored by the
+    workflow token, with a result.json the same token uploaded."""
+    release = {
+        "tag_name": tag,
+        "author": dict(BOT),
+        "assets": [{"name": "result.json", "url": f"https://api.github.com/a/{tag}", "uploader": dict(BOT)}],
+    }
+    release.update(extra)
+    return release
+
+
+class _NoHeaders:
+    def get(self, name):
+        return None
+
+
 class TestAllSubmitReleases:
+    def _listing(self, monkeypatch, releases):
+        body = json.dumps(releases).encode("utf-8")
+        monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, _NoHeaders()))
+
     def test_filters_non_submit_and_keeps_order(self, monkeypatch):
-        body = json.dumps([
-            {"tag_name": "submit/2026-06-03T10-00-00Z"},
-            {"tag_name": "v2.0.0"},
-            {"tag_name": "submit/2026-06-01T10-00-00Z"},
-        ]).encode("utf-8")
-
-        class NoHeaders:
-            def get(self, name):
-                return None
-
-        monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, NoHeaders()))
+        self._listing(monkeypatch, [
+            bot_release("submit/2026-06-03T10-00-00Z"),
+            bot_release("v2.0.0"),
+            bot_release("submit/2026-06-01T10-00-00Z"),
+        ])
         releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
         assert [r["tag_name"] for r in releases] == [
             "submit/2026-06-03T10-00-00Z",
@@ -2577,26 +2595,36 @@ class TestAllSubmitReleases:
         # publishes drafts, so a draft submit/* tag is hand-made noise — a
         # draft's assets aren't downloadable via the public asset URL either,
         # so ingesting it would fail downstream. Skip drafts entirely.
-        body = json.dumps([
-            {"tag_name": "submit/2026-06-03T10-00-00Z", "draft": True},
-            {"tag_name": "submit/2026-06-01T10-00-00Z", "draft": False},
-            {"tag_name": "submit/2026-05-01T10-00-00Z"},
-        ]).encode("utf-8")
-
-        class NoHeaders:
-            def get(self, name):
-                return None
-
-        monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, NoHeaders()))
+        self._listing(monkeypatch, [
+            bot_release("submit/2026-06-03T10-00-00Z", draft=True),
+            bot_release("submit/2026-06-01T10-00-00Z", draft=False),
+            bot_release("submit/2026-05-01T10-00-00Z"),
+        ])
         releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
         assert [r["tag_name"] for r in releases] == [
             "submit/2026-06-01T10-00-00Z",
             "submit/2026-05-01T10-00-00Z",
         ]
 
+    def test_keeps_releases_someone_else_published(self, monkeypatch, capsys):
+        # Who published is judged per release at ingest and recorded on the
+        # stored submission; the listing itself drops nothing for it.
+        self._listing(monkeypatch, [
+            bot_release("submit/2026-06-03T10-00-00Z", author={"login": "alice"}),
+            bot_release("submit/2026-06-02T10-00-00Z", author=None),
+            bot_release("submit/2026-06-01T10-00-00Z"),
+        ])
+        releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
+        assert [r["tag_name"] for r in releases] == [
+            "submit/2026-06-03T10-00-00Z",
+            "submit/2026-06-02T10-00-00Z",
+            "submit/2026-06-01T10-00-00Z",
+        ]
+        assert capsys.readouterr().err == ""
+
     def test_paginates_via_link_header(self, monkeypatch):
-        page1 = json.dumps([{"tag_name": f"submit/p1-{i}"} for i in range(100)]).encode("utf-8")
-        page2 = json.dumps([{"tag_name": "submit/last"}]).encode("utf-8")
+        page1 = json.dumps([bot_release(f"submit/p1-{i}") for i in range(100)]).encode("utf-8")
+        page2 = json.dumps([bot_release("submit/last")]).encode("utf-8")
 
         class Headers:
             def __init__(self, link):
@@ -4033,6 +4061,69 @@ def test_autograded_graded_repo_is_visited_but_never_probed(monkeypatch):
     _, records, visited = detected["hw1"]
     assert records == []
     assert visited == {"alice", "bob"}
+
+
+def test_collect_release_history_skips_a_deeply_nested_result_json(monkeypatch, capsys):
+    # json.loads raises RecursionError, not ValueError, once nesting exhausts
+    # the C stack (the depth varies by platform, so the fake raises it
+    # outright); one hostile asset must skip that submission, not abort the run.
+    def nested(api_url, release, token):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr(cs, "download_result_asset", nested)
+    history, rejected = cs.collect_release_history(
+        "https://api.github.com", "cs50", "cs-principles-hw1-alice",
+        [bot_release("submit/2026-06-01T10-00-00Z")], "token",
+        classroom_short="cs-principles", slug="hw1", username="alice",
+        assignment_type="individual", renamed_from=None, due=None,
+    )
+    assert history == [] and rejected == 0
+    assert "result.json malformed for 'submit/2026-06-01T10-00-00Z'" in capsys.readouterr().err
+
+
+def _history_for(monkeypatch, release, payload_extra=None):
+    payload = make_result(classroom="cs-principles", assignment="hw1", username="alice")
+    payload.update(payload_extra or {})
+    monkeypatch.setattr(cs, "download_result_asset", lambda *a, **k: dict(payload))
+    return cs.collect_release_history(
+        "https://api.github.com", "cs50", "cs-principles-hw1-alice", [release], "token",
+        classroom_short="cs-principles", slug="hw1", username="alice",
+        assignment_type="individual", renamed_from=None, due=None,
+    )
+
+
+def test_hand_published_release_is_collected_and_marked(monkeypatch, capsys):
+    # A teacher (or student) who publishes by hand still gets the score
+    # collected; the record says who published so the gradebook can show it.
+    history, rejected = _history_for(monkeypatch, bot_release("submit/2026-06-01T10-00-00Z", author={"login": "alice"}))
+    assert rejected == 0
+    assert len(history) == 1
+    assert history[0]["provenance_warning"] == "published by 'alice', not by the autograde workflow"
+    assert history[0]["score"] == 10
+    err = capsys.readouterr().err
+    assert "'submit/2026-06-01T10-00-00Z' was published by 'alice'" in err
+    assert "collected and marked in scores.json" in err
+
+
+def test_workflow_published_release_carries_no_mark(monkeypatch, capsys):
+    history, _ = _history_for(monkeypatch, bot_release("submit/2026-06-01T10-00-00Z"))
+    assert "provenance_warning" not in history[0]
+    assert "marked" not in capsys.readouterr().err
+
+
+def test_provenance_warning_inside_result_json_never_survives(monkeypatch):
+    # validate_result tolerates extra top-level keys, so a hand-written mark in
+    # result.json must be stripped and only the release metadata may set it.
+    history, _ = _history_for(
+        monkeypatch, bot_release("submit/2026-06-01T10-00-00Z"),
+        payload_extra={"provenance_warning": "looks legitimate"},
+    )
+    assert "provenance_warning" not in history[0]
+    history, _ = _history_for(
+        monkeypatch, bot_release("submit/2026-06-01T10-00-00Z", author={"login": "alice"}),
+        payload_extra={"provenance_warning": "looks legitimate"},
+    )
+    assert history[0]["provenance_warning"] == "published by 'alice', not by the autograde workflow"
 
 
 def test_autograded_detection_respects_tag_mode(monkeypatch):

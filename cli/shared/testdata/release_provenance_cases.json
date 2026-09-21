@@ -1,0 +1,360 @@
+{
+  "description": "Shared parity fixtures for the three release-provenance judgments: collect_scores.py release_provenance_problem, download.go releaseProvenanceProblem, and web releaseRunReads.ts releaseProvenanceProblem. `release` is a GitHub Releases API object as each reader decodes it. `problem` is null when the autograde workflow published the release, else the kind (author or result.json uploader), the login GitHub reported (null when absent), and the exact message the Python and Go readers store as provenance_warning. Consumed by test_contract_parity.py, download_test.go, and releaseRunReads.test.ts.",
+  "cases": [
+    {
+      "name": "workflow release",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        },
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": {
+              "login": "github-actions[bot]"
+            }
+          }
+        ]
+      },
+      "problem": null
+    },
+    {
+      "name": "workflow release with no assets",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        },
+        "assets": []
+      },
+      "problem": null
+    },
+    {
+      "name": "workflow release with assets omitted",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        }
+      },
+      "problem": null
+    },
+    {
+      "name": "hand-published by a student",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "alice"
+        },
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": {
+              "login": "github-actions[bot]"
+            }
+          }
+        ]
+      },
+      "problem": {
+        "kind": "author",
+        "login": "alice",
+        "message": "published by 'alice', not by the autograde workflow"
+      }
+    },
+    {
+      "name": "author null",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": null,
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": {
+              "login": "github-actions[bot]"
+            }
+          }
+        ]
+      },
+      "problem": {
+        "kind": "author",
+        "login": null,
+        "message": "published by 'an unknown account', not by the autograde workflow"
+      }
+    },
+    {
+      "name": "author omitted",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": {
+              "login": "github-actions[bot]"
+            }
+          }
+        ]
+      },
+      "problem": {
+        "kind": "author",
+        "login": null,
+        "message": "published by 'an unknown account', not by the autograde workflow"
+      }
+    },
+    {
+      "name": "result.json replaced by a student, case-variant name",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        },
+        "assets": [
+          {
+            "id": 1,
+            "name": "Result.JSON",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/Result.JSON",
+            "uploader": {
+              "login": "alice"
+            }
+          }
+        ]
+      },
+      "problem": {
+        "kind": "uploader",
+        "login": "alice",
+        "message": "result.json uploaded by 'alice', not by the autograde workflow"
+      }
+    },
+    {
+      "name": "result.json uploader null",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        },
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": null
+          }
+        ]
+      },
+      "problem": {
+        "kind": "uploader",
+        "login": null,
+        "message": "result.json uploaded by 'an unknown account', not by the autograde workflow"
+      }
+    },
+    {
+      "name": "result.json uploader omitted",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        },
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json"
+          }
+        ]
+      },
+      "problem": {
+        "kind": "uploader",
+        "login": null,
+        "message": "result.json uploaded by 'an unknown account', not by the autograde workflow"
+      }
+    },
+    {
+      "name": "extra asset by a student is ignored",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        },
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": {
+              "login": "github-actions[bot]"
+            }
+          },
+          {
+            "id": 2,
+            "name": "screenshot.png",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/screenshot.png",
+            "uploader": {
+              "login": "alice"
+            }
+          }
+        ]
+      },
+      "problem": null
+    },
+    {
+      "name": "student author and uploader: author named first",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "alice"
+        },
+        "assets": [
+          {
+            "id": 1,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": {
+              "login": "alice"
+            }
+          }
+        ]
+      },
+      "problem": {
+        "kind": "author",
+        "login": "alice",
+        "message": "published by 'alice', not by the autograde workflow"
+      }
+    },
+    {
+      "name": "honest result.json after a student one",
+      "release": {
+        "id": 1,
+        "tag_name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "name": "submit/2026-06-01T10-00-00Z-abc1234",
+        "html_url": "https://github.com/o/r/releases/tag/submit/2026-06-01T10-00-00Z-abc1234",
+        "draft": false,
+        "prerelease": false,
+        "created_at": "2026-06-01T10:00:00Z",
+        "published_at": "2026-06-01T10:00:00Z",
+        "author": {
+          "login": "github-actions[bot]"
+        },
+        "assets": [
+          {
+            "id": 2,
+            "name": "screenshot.png",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/screenshot.png",
+            "uploader": {
+              "login": "alice"
+            }
+          },
+          {
+            "id": 3,
+            "name": "result.json",
+            "url": "https://api.github.com/repos/o/r/releases/assets/1",
+            "browser_download_url": "https://github.com/o/r/releases/download/x/result.json",
+            "uploader": {
+              "login": "alice"
+            }
+          }
+        ]
+      },
+      "problem": {
+        "kind": "uploader",
+        "login": "alice",
+        "message": "result.json uploaded by 'alice', not by the autograde workflow"
+      }
+    }
+  ]
+}

@@ -6,10 +6,12 @@ import {
   REPO_READ_CONCURRENCY,
   githubKeys,
   latestSubmitReleaseAndCount,
+  releaseProvenanceProblem,
   retryOnRateLimit,
   withGithubReadSlot,
 } from "@/github-core/queries"
 import type { GitHubRelease } from "@/github-core/types"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import { studentRepoName } from "@/util/studentRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 
@@ -31,6 +33,9 @@ export type LiveSubmission = {
   // the collected snapshot row so a student who pushed again after the last
   // collection shows the up-to-date count.
   submissionCount: number
+  // The newest release was not the autograde workflow's own (see
+  // releaseProvenanceProblem); absent when it was.
+  provenance?: SubmissionProvenance
 }
 
 export type UseLiveSubmissionsResult = {
@@ -135,6 +140,7 @@ export function useLiveSubmissions({
                 releaseUrl: release.html_url,
                 tag: release.tag_name,
                 submissionCount: count,
+                provenance: releaseProvenanceProblem(release) ?? undefined,
               })
             }
           } catch (err) {

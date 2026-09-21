@@ -7,6 +7,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { scoresFilePath } from "@/util/configRepoPaths"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import type {
   DetectedSubmitter,
   NormalizedScores,
@@ -49,6 +50,20 @@ type SubmissionRecord = {
     username: string
     id?: number | null
   }
+  // Collection-added: why the autograde workflow didn't publish this release.
+  // Absent when it did. Stored English from the collector, shown as data.
+  provenance_warning?: string
+}
+
+// The stored reason as the row model carries it; undefined when absent or not a
+// non-empty string (a hand-edited file shouldn't render a blank badge).
+function recordedProvenance(
+  record: SubmissionRecord,
+): SubmissionProvenance | undefined {
+  const reason = record.provenance_warning
+  return typeof reason === "string" && reason !== ""
+    ? { kind: "recorded", reason }
+    : undefined
 }
 
 type ScoreEntry = {
@@ -155,9 +170,11 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
         submissionCount: entry.submissions.length,
         late: latest.late,
         gradedAt: latest.graded_at,
+        provenance: recordedProvenance(latest),
         overridden: entry.override === true,
         autogradedScore: autograded?.score,
         autogradedMax: autograded?.["max-score"],
+        autogradedProvenance: autograded && recordedProvenance(autograded),
         submissions: sorted.map((s) => ({
           datetime: s.datetime,
           commit: s.commit,
@@ -167,6 +184,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
           late: s.late,
           gradedAt: s.graded_at,
           submittedBy: s.submitted_by?.username,
+          provenance: recordedProvenance(s),
         })),
       }
     })

@@ -12,6 +12,7 @@ import { repoTagsUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import { formatSubmissionDateTime } from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import type { SubmissionDetailItem } from "@/components/submissions/SubmissionDetailsModal"
 
 // Translator shape both submission views already thread into their item
@@ -24,12 +25,15 @@ type Translate = (key: string, opts?: Record<string, unknown>) => string
 // the student maps its live default-branch commits. `commitHref`/`releaseHref`
 // are raw (possibly unsafe) URLs — the builder guards them. `author` is who made
 // the commit, when the source knows (live commits do; collected attempts don't).
+// `provenance` marks an attempt whose release the autograde workflow didn't
+// publish (collected attempts only; live student commits have none).
 export type PushSubmission = {
   key: string
   commitHref?: string | null
   datetime?: string
   releaseHref?: string | null
   author?: CommitAuthor
+  provenance?: SubmissionProvenance
 }
 
 // A normalized tag submission collected in scores.json — the FALLBACK tag
@@ -37,25 +41,33 @@ export type PushSubmission = {
 // staff viewer, or the owner before detection resolves). The collected count is
 // present for everyone, so the modal lists these rather than a false "no tagged
 // submissions" state that contradicts the count chip. Jump targets (release,
-// else commit) are raw URLs the builder guards.
+// else commit) are raw URLs the builder guards. `provenance` is the collector's
+// mark when the graded release wasn't the workflow's own.
 export type CollectedTagSubmission = {
   key: string
   datetime?: string
   commitHref?: string | null
   releaseHref?: string | null
+  provenance?: SubmissionProvenance
 }
+
+// Resolves a detected entry's commit sha (short or full) to the collector's
+// mark on the attempt graded at that commit, if any. Teacher view only.
+export type ProvenanceBySha = (sha: string) => SubmissionProvenance | undefined
 
 // Map detected tag/tag-group entries to details-modal items. Shared by the
 // teacher table and the student page (byte-identical before extraction): an
 // exact tag shows its stripped label and jumps to its tree; a glob group shows
 // its pattern + match count and jumps to its representative commit. A group's
 // `count` is its match count so the modal header (sum of item counts) matches
-// the count chip even though the group renders as one row.
+// the count chip even though the group renders as one row. A group bundles
+// several attempts under one representative sha, so only an exact tag is marked.
 export function tagDetailItems(
   entries: DetectedSubmission[],
   org: string,
   repo: string,
   t: Translate,
+  { provenanceBySha }: { provenanceBySha?: ProvenanceBySha } = {},
 ): SubmissionDetailItem[] {
   return jumpableTagEntries(entries).map((entry) => ({
     key: `${entry.kind}-${entry.label}`,
@@ -72,6 +84,10 @@ export function tagDetailItems(
       : undefined,
     href: detectedTagHref(entry, org, repo),
     count: entry.count,
+    provenance:
+      entry.kind === "tag" && entry.sha
+        ? provenanceBySha?.(entry.sha)
+        : undefined,
   }))
 }
 
@@ -96,6 +112,7 @@ export function collectedTagDetailItems(
     href:
       safeHttpUrl(submission.releaseHref) ?? safeHttpUrl(submission.commitHref),
     count: 1,
+    provenance: submission.provenance,
   }))
 }
 
@@ -130,6 +147,7 @@ export function commitDetailItems(
       ? detailItemAuthor(commit.author, authorName)
       : undefined,
     count: 1,
+    provenance: commit.provenance,
   }))
 }
 
@@ -163,12 +181,14 @@ export function buildSubmissionDetailItems(
     tags,
     commits,
     collectedTags = [],
+    provenanceBySha,
     showAuthors = false,
     authorName,
   }: {
     tags: DetectedSubmission[]
     commits: PushSubmission[]
     collectedTags?: CollectedTagSubmission[]
+    provenanceBySha?: ProvenanceBySha
   } & AuthorLabelOptions,
   mode: SubmissionMode | undefined,
   org: string,
@@ -178,7 +198,7 @@ export function buildSubmissionDetailItems(
   if (resolveSubmissionMode(mode) !== "tag") {
     return commitDetailItems(commits, t, { showAuthors, authorName })
   }
-  const detected = tagDetailItems(tags, org, repo, t)
+  const detected = tagDetailItems(tags, org, repo, t, { provenanceBySha })
   return detected.length > 0
     ? detected
     : collectedTagDetailItems(collectedTags, t)

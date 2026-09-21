@@ -1185,7 +1185,15 @@ gh teacher download --pull -d <dir> <org> <classroom> <assignment> # update exis
 **Team-driven (default):** lists the classroom team's members and, for each,
 probes the expected `<classroom>-<assignment>-<username>` repo, clones it (or
 reports `Missing: <username>`), and refreshes `result.json` (latest) and
-`results.json` (all submissions) from its releases. Then writes a `scores.csv`
+`results.json` (all submissions) from its releases. A `submit/*` release the
+autograde workflow didn't publish is still recorded, with a
+`provenance_warning` on its `results.json` entry naming who published it and
+a line on standard error. `result.json` still holds the newest score without
+the mark, so tools that read only that file keep working. A `result.json`
+asset that isn't a `classroom50/result/v1` document is treated as missing, and
+the entry's `result_problem` says why. The `scores.csv` `provenance_warning`
+column comes from the last score collection, not from the download. Then
+writes a `scores.csv`
 at the destination root, one line per submission (a student with several pushes
 contributes several lines), plus a blank-score line for each non-submitter.
 

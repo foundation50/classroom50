@@ -1,11 +1,11 @@
 import { PencilIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Badge, Button } from "@/components/ui"
-import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
+import { Button } from "@/components/ui"
+import { GradeBadges } from "@/pages/submissions/GradeBadges"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 
-// The idle score cell with an override trigger. Shows the current grade (or an
-// ungraded/pending affordance), a "Manual" badge when overridden, and an edit
+// The idle score cell with an override trigger: the grade cluster plus an edit
 // button that opens the score-override modal. The modal itself (and its state)
 // lives in the parent table; this cell is presentational plus one onEdit
 // callback.
@@ -16,6 +16,7 @@ export function ScoreCell({
   score,
   max,
   overridden,
+  provenance,
   thresholdFraction,
   onEdit,
 }: {
@@ -28,32 +29,23 @@ export function ScoreCell({
   score: number
   max: number
   overridden: boolean
+  // The latest release wasn't the autograde workflow's own; see ProvenanceBadge.
+  provenance?: SubmissionProvenance
   thresholdFraction: number | null
   onEdit: () => void
 }) {
   const { t } = useTranslation()
   return (
     <div className="flex items-center gap-1.5">
-      {hasGrade ? (
-        <ScoreBadge
-          score={score}
-          max={max}
-          thresholdFraction={thresholdFraction}
-        />
-      ) : pending ? (
-        <Badge ghost size="sm" title={t("submissions.table.pendingGradeTitle")}>
-          {t("submissions.table.pendingGrade")}
-        </Badge>
-      ) : (
-        <span className="text-sm text-base-content/50">
-          {t("submissions.scoreOverride.notGraded")}
-        </span>
-      )}
-      {hasGrade && overridden ? (
-        <Badge ghost size="sm" title={t("submissions.table.overriddenTitle")}>
-          {t("submissions.table.overridden")}
-        </Badge>
-      ) : null}
+      <GradeBadges
+        hasGrade={hasGrade}
+        pending={pending}
+        score={score}
+        max={max}
+        overridden={overridden}
+        provenance={provenance}
+        thresholdFraction={thresholdFraction}
+      />
       <Button
         type="button"
         variant="ghost"

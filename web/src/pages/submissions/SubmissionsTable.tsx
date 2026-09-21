@@ -20,7 +20,6 @@ import { repoCommitUrl } from "@/util/orgUrl"
 import { defaultRepoPagesUrl } from "@/util/repoPages"
 import Avatar from "@/components/avatar"
 import {
-  Badge,
   Button,
   SkeletonRows,
   SortableTh,
@@ -62,8 +61,9 @@ import {
 } from "@/pages/submissions/SubmissionsRowActions"
 import { FeedbackPrIconButton } from "@/pages/submissions/ReviewButton"
 import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
-import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
+import { GradeBadges } from "@/pages/submissions/GradeBadges"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import {
   ScoreOverrideModal,
   type ScoreOverrideCapability,
@@ -88,7 +88,7 @@ import {
   LastSubmittedCell,
   SubmissionCountCell,
 } from "@/components/submissions/SubmissionRowCells"
-import type { SubmissionRow } from "@/hooks/useGetScores"
+import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupDisplayName } from "@/util/groupTeam"
@@ -102,11 +102,6 @@ import type { ClassroomRole } from "@/util/teamRoster"
 import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { blockEnter } from "@/lib/motion"
-
-// Score chip: the shared ScoreBadge (one recipe, one source — see
-// ./ScoreBadge). Imported rather than re-implemented so the manual-grade cell
-// and this table can't drift.
-const ScoreBadge = SharedScoreBadge
 
 // The row context the submission hub (ManageSubmissionModal) renders from,
 // captured when the row's Manage control is clicked. `title`/`subtitle` are the
@@ -146,6 +141,7 @@ type OverrideModalRow = {
   overridden: boolean
   autogradedScore?: number
   autogradedMax?: number
+  autogradedProvenance?: SubmissionProvenance
   // Absent when the row is a pending autograded submission — the modal then
   // asks the teacher to enter the max.
   maxPoints?: number
@@ -181,30 +177,42 @@ function buildDetailItems(
     (e) => e.kind === "commit",
   )
   // sha (short or full, whichever the collected commit URL ends with) -> the
-  // graded release URL for that attempt, so a detected push can link its grade.
-  const releaseByCommit = new Map<string, string>()
+  // newest collected attempt graded at that commit (a regrade or a hand-made
+  // release can grade one commit twice), so a detected push or tag can link
+  // its grade. A mark on any attempt at that commit stays on the item: the
+  // datetime that orders attempts comes from the student's own result.json,
+  // so a forged release can back-date itself behind the honest one.
+  const attemptByCommit = new Map<string, SubmissionAttempt>()
   for (const s of row.submissions) {
     const sha = s.commit?.split("/").pop()
-    if (sha && s.release) releaseByCommit.set(sha, s.release)
+    if (!sha) continue
+    const seen = attemptByCommit.get(sha)
+    if (!seen) attemptByCommit.set(sha, s)
+    else if (!seen.provenance && s.provenance)
+      attemptByCommit.set(sha, { ...seen, provenance: s.provenance })
   }
+  const attemptFor = (sha: string) =>
+    attemptByCommit.get(sha) ?? attemptByCommit.get(sha.slice(0, 7))
 
   const commits: PushSubmission[] =
     detectedCommits.length > 0
-      ? detectedCommits.map((e) => ({
-          key: `commit-${e.sha ?? e.label}`,
-          commitHref: e.sha ? repoCommitUrl(org, repo, e.sha) : undefined,
-          datetime: e.datetime,
-          releaseHref: e.sha
-            ? (releaseByCommit.get(e.sha) ??
-              releaseByCommit.get(e.sha.slice(0, 7)))
-            : undefined,
-          author: e.author,
-        }))
+      ? detectedCommits.map((e) => {
+          const attempt = e.sha ? attemptFor(e.sha) : undefined
+          return {
+            key: `commit-${e.sha ?? e.label}`,
+            commitHref: e.sha ? repoCommitUrl(org, repo, e.sha) : undefined,
+            datetime: e.datetime,
+            releaseHref: attempt?.release,
+            author: e.author,
+            provenance: attempt?.provenance,
+          }
+        })
       : row.submissions.map((s, i) => ({
           key: `${s.datetime}-${s.commit}-${i}`,
           commitHref: s.commit,
           datetime: s.datetime,
           releaseHref: s.release,
+          provenance: s.provenance,
         }))
 
   // Tag-mode fallback for a viewer without the detection overlay: the collected
@@ -215,6 +223,7 @@ function buildDetailItems(
       datetime: s.datetime,
       commitHref: s.commit,
       releaseHref: s.release,
+      provenance: s.provenance,
     }),
   )
 
@@ -223,6 +232,7 @@ function buildDetailItems(
       tags: row.detectedEntries ?? [],
       commits,
       collectedTags,
+      provenanceBySha: (sha) => attemptFor(sha)?.provenance,
       showAuthors: isTeam,
       authorName: (login) => getName(login, students),
     },
@@ -795,6 +805,7 @@ const SubmissionsTable = ({
                   score={score}
                   max={rest["max-score"]}
                   overridden={Boolean(rest.overridden)}
+                  provenance={rest.provenance}
                   thresholdFraction={passBar}
                   onEdit={() =>
                     setOverrideRow({
@@ -807,6 +818,7 @@ const SubmissionsTable = ({
                       overridden: Boolean(rest.overridden),
                       autogradedScore: rest.autogradedScore,
                       autogradedMax: rest.autogradedMax,
+                      autogradedProvenance: rest.autogradedProvenance,
                       maxPoints: cell.maxPoints,
                       memberUsernames: liveTeamMembers ?? usernames,
                       teamSlug: isTeam
@@ -825,26 +837,19 @@ const SubmissionsTable = ({
               >
                 —
               </span>
-            ) : rest.pending ? (
-              <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
-                {t("submissions.table.pendingGrade")}
-              </Badge>
             ) : (
+              // A non-pending row here always carries a grade: the ungraded
+              // affordance belongs to the override-capable cell above.
               <div className="flex items-center gap-1.5">
-                <ScoreBadge
+                <GradeBadges
+                  hasGrade={!rest.pending}
+                  pending={Boolean(rest.pending)}
                   score={score}
                   max={rest["max-score"]}
+                  overridden={Boolean(rest.overridden)}
+                  provenance={rest.provenance}
                   thresholdFraction={passBar}
                 />
-                {rest.overridden ? (
-                  <Badge
-                    ghost
-                    size="sm"
-                    title={t("submissions.table.overriddenTitle")}
-                  >
-                    {t("submissions.table.overridden")}
-                  </Badge>
-                ) : null}
               </div>
             )
           })()}
@@ -1401,6 +1406,7 @@ const SubmissionsTable = ({
           overridden={overrideRow.overridden}
           autogradedScore={overrideRow.autogradedScore}
           autogradedMax={overrideRow.autogradedMax}
+          autogradedProvenance={overrideRow.autogradedProvenance}
           thresholdFraction={passBar}
           ctx={{
             org: overrideGrade.org,

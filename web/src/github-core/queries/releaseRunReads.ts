@@ -9,6 +9,7 @@ import type {
   GitHubWorkflowRunList,
 } from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
 import {
   COLLECT_SCORES_WORKFLOW,
@@ -23,16 +24,49 @@ import { githubKeys } from "./keys"
 // the release page rather than reading result.json.
 export const SUBMISSION_TAG_PREFIX = "submit/"
 
+// The login GitHub gives a workflow's GITHUB_TOKEN; see
+// releaseProvenanceProblem. Mirrors contract.AutogradeReleaseAuthor and
+// collect_scores.py; keep byte-identical (parity-tested).
+export const AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
+
+const RESULT_ASSET_NAME = "result.json"
+
+// Why the autograde workflow did not publish this release, or null when it did.
+// Students can write to their repos, so they can publish a release or replace
+// its result.json as themselves. They can't act as the workflow token, so the
+// author and every result.json uploader must be that login; a missing one
+// counts as someone else. The release still counts (a teacher may publish by
+// hand); the view marks it. Mirrors release_provenance_problem in
+// collect_scores.py.
+export function releaseProvenanceProblem(
+  release: GitHubRelease,
+): SubmissionProvenance | null {
+  const author = release.author?.login ?? null
+  if (author !== AUTOGRADE_RELEASE_AUTHOR)
+    return { kind: "author", login: author }
+  for (const asset of release.assets ?? []) {
+    if (asset.name.toLowerCase() !== RESULT_ASSET_NAME) continue
+    const uploader = asset.uploader?.login ?? null
+    if (uploader !== AUTOGRADE_RELEASE_AUTHOR) {
+      return { kind: "uploader", login: uploader }
+    }
+  }
+  return null
+}
+
 // published_at is null for a draft; fall back to created_at so ordering holds.
 export function releaseTime(release: GitHubRelease): number {
   return new Date(release.published_at ?? release.created_at).getTime()
 }
 
-// The `submit/*` releases from a repo's release list, newest first — the shared
-// filter+sort both the full-list query and the latest-only read derive from.
+// The `submit/*` releases from a repo's release list, newest first: the shared
+// filter and sort the full-list query and the latest-only read derive from.
+// Drafts are dropped as the collector does (the runner never publishes one, and
+// a draft's assets aren't downloadable); publisher identity is not a filter
+// (see releaseProvenanceProblem).
 function submitReleasesNewestFirst(releases: GitHubRelease[]): GitHubRelease[] {
   return releases
-    .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
+    .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX) && !r.draft)
     .sort((a, b) => releaseTime(b) - releaseTime(a))
 }
 

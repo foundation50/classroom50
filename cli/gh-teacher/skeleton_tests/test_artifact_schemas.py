@@ -335,6 +335,25 @@ class TestResultsSchema:
     def test_empty_array_accepted(self):
         assert _errs(RESULTS_V, []) == []
 
+    def test_provenance_warning_accepted_and_must_be_non_empty(self):
+        marked = {
+            "submission_tag": "submit/x",
+            "result": None,
+            "provenance_warning": "published by 'alice', not by the autograde workflow",
+        }
+        assert _errs(RESULTS_V, [marked]) == []
+        assert _errs(RESULTS_V, [{**marked, "provenance_warning": ""}]) != []
+        assert _errs(RESULTS_V, [{**marked, "provenance_warning": True}]) != []
+
+    def test_result_problem_accepted_and_must_be_non_empty(self):
+        refused = {
+            "submission_tag": "submit/x",
+            "result": None,
+            "result_problem": "result.json is not a classroom50/result/v1 document",
+        }
+        assert _errs(RESULTS_V, [refused]) == []
+        assert _errs(RESULTS_V, [{**refused, "result_problem": ""}]) != []
+
     @pytest.mark.parametrize("doc, why", [
         ({"submission_tag": "submit/x", "result": None}, "top-level must be an array, not an object"),
         ([{"result": None}], "envelope missing submission_tag"),
@@ -402,6 +421,13 @@ def _individual_bucket(entries):
 class TestScoresSchema:
     def test_scaffold_empty_accepted(self):
         assert _errs(SCORES_V, {"schema": "classroom50/scores/v1", "assignments": {}}) == []
+
+    def test_provenance_warning_is_a_non_empty_string(self):
+        # Collection-added like `late`; absent on a workflow-published record.
+        marked = {**_SUBMISSION_RECORD, "provenance_warning": "published by 'alice', not by the autograde workflow"}
+        assert _errs(SCORES_V, _scores({"hello": _individual_bucket([_entry(submissions=[marked])])})) == []
+        empty = {**_SUBMISSION_RECORD, "provenance_warning": ""}
+        assert _errs(SCORES_V, _scores({"hello": _individual_bucket([_entry(submissions=[empty])])})) != []
 
     def test_rows_with_late_override_group_accepted(self):
         late_record = {**_SUBMISSION_RECORD, "late": False}

@@ -890,6 +890,10 @@ describe("buildScoresCsvRows", () => {
       commit: "c1",
       review: "r1",
       release: "rel1",
+      provenance: {
+        kind: "recorded",
+        reason: "published by 'alice', not by the autograde workflow",
+      },
     })
     // A group row is credited to all members; names come from the first
     // (owner/founder) login.
@@ -934,10 +938,13 @@ describe("buildScoresCsvRows", () => {
       commit: "c1",
       review: "r1",
       release: "rel1",
+      provenance_warning: "published by 'alice', not by the autograde workflow",
     })
     // The group row keeps all credited logins but takes the owner's name.
     expect(out[1].usernames).toBe("bob, carol")
     expect(out[1].name).toBe("Bob Brown")
+    // Workflow-published: the column is blank, not absent.
+    expect(out[1].provenance_warning).toBe("")
     // Non-submitter carries a name too, with an EMPTY score (not 0) and blank
     // fields — an ungraded student, not a graded zero.
     expect(out[2]).toEqual({
@@ -953,6 +960,7 @@ describe("buildScoresCsvRows", () => {
       commit: "",
       review: "",
       release: "",
+      provenance_warning: "",
     })
   })
 
@@ -1773,6 +1781,55 @@ describe("mergeLiveRows", () => {
     expect(bob?.pending).toBe(true)
     expect(bob?.submissionCount).toBe(3)
     expect(bob?.["max-score"]).toBe(0)
+  })
+
+  it("carries the live reader's provenance onto a pending live-only row", () => {
+    const merged = mergeLiveRows(
+      [],
+      [
+        {
+          ...live("bob", "2026-06-21T10:00:00Z"),
+          provenance: { kind: "uploader", login: null },
+        },
+      ],
+    )
+    expect(merged[0].provenance).toEqual({ kind: "uploader", login: null })
+    expect(
+      mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z")])[0].provenance,
+    ).toBeUndefined()
+  })
+
+  it("keeps the collected row's own mark when a live read overlays it", () => {
+    // The live mark describes a release the collector hasn't ingested; the row
+    // still shows the collected score, so it keeps the collected judgment.
+    const recorded = {
+      kind: "recorded" as const,
+      reason: "published by 'alice', not by the autograde workflow",
+    }
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", submissionCount: 1, provenance: recorded })],
+      [
+        {
+          ...live("alice", "2026-06-22T10:00:00Z", 2),
+          provenance: { kind: "author", login: "alice" },
+        },
+      ],
+    )
+    expect(merged[0].staleCount).toBe(true)
+    expect(merged[0].provenance).toEqual(recorded)
+  })
+
+  it("does not copy the live mark onto an overlaid collected row", () => {
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", submissionCount: 1 })],
+      [
+        {
+          ...live("alice", "2026-06-22T10:00:00Z", 2),
+          provenance: { kind: "author", login: "alice" },
+        },
+      ],
+    )
+    expect(merged[0].provenance).toBeUndefined()
   })
 
   it("floors a live-only row's count at 1 even if the live count is 0", () => {

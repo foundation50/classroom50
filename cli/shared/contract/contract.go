@@ -220,6 +220,13 @@ const (
 	// byte-identical; contract_test.go pins the Go half.
 	SubmitTagPrefix = "submit/"
 
+	// AutogradeReleaseAuthor is the login GitHub gives a workflow's GITHUB_TOKEN.
+	// A submit/* Release whose author or result.json uploader is any other login
+	// is still collected but marked with provenance_warning, since students
+	// can't act as this login. Hand-mirrored with NO compile-time link in
+	// collect_scores.py and the web (AUTOGRADE_RELEASE_AUTHOR); parity-tested.
+	AutogradeReleaseAuthor = "github-actions[bot]"
+
 	// Repo collaborator permission levels, GitHub's low-to-high ladder. Used
 	// for an assignment's optional student_permission (the access the enrolled
 	// student gets on their own repo at accept time) and mirrored in the web
@@ -237,6 +244,12 @@ const (
 	// RESULT_FILENAME / RELEASE_BODY_FILENAME.
 	ResultFilename      = "result.json"
 	ReleaseBodyFilename = "release-body.md"
+
+	// ResultSchemaV1 is the sentinel a result.json must carry to be read as a
+	// score (download, collect_scores.py validate_result) and that the runner
+	// refuses to attach as a release asset. Mirrors RESULT_SCHEMA_V1 in
+	// runner.py and collect_scores.py; test_contract_parity.py pins all three.
+	ResultSchemaV1 = "classroom50/result/v1"
 
 	// RosterFilename is the per-classroom roster file
 	// (<classroom>/roster.csv). Hand-mirrored with NO compile-time link in the

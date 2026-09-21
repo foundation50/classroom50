@@ -8,7 +8,9 @@ import {
   TagIcon,
 } from "@/components/ui/icons"
 
+import { ProvenanceBadge } from "@/components/submissions/ProvenanceBadge"
 import { Button, cx, ExternalLink, Modal, MonoLtr } from "@/components/ui"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 
 // One row in the submission-details list. `kind` picks the icon and action
 // label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
@@ -18,7 +20,8 @@ import { Button, cx, ExternalLink, Modal, MonoLtr } from "@/components/ui"
 // members); `avatarUrl` is an already-guarded URL. `count` is how many
 // submissions the row represents (1 for a single tag/commit; N for a glob
 // group that bundles N tags into one row), so the modal header count matches
-// the row's count chip even when a group renders as one row.
+// the row's count chip even when a group renders as one row. `provenance` marks
+// an attempt whose release the autograde workflow didn't publish.
 export type SubmissionDetailItem = {
   key: string
   kind: "tag" | "commit"
@@ -28,6 +31,7 @@ export type SubmissionDetailItem = {
   releaseHref?: string
   author?: { label: string; avatarUrl?: string }
   count: number
+  provenance?: SubmissionProvenance
 }
 
 // The number of SUBMISSIONS a detail-item list represents: the sum of each
@@ -168,9 +172,12 @@ export function SubmissionDetailsModal({
                   className="size-4 shrink-0 text-base-content/70"
                 />
                 <span className="flex min-w-[10rem] flex-1 flex-col">
-                  <MonoLtr className="truncate font-medium">
-                    {item.label}
-                  </MonoLtr>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <MonoLtr className="truncate font-medium">
+                      {item.label}
+                    </MonoLtr>
+                    <ProvenanceBadge provenance={item.provenance} />
+                  </span>
                   {item.author || item.sublabel ? (
                     <span className="flex min-w-0 items-center gap-x-1.5 text-xs text-base-content/60">
                       {item.author ? (

@@ -162,75 +162,6 @@ func TestCreditedUsernames(t *testing.T) {
 	}
 }
 
-func TestSelectResultAsset(t *testing.T) {
-	cases := []struct {
-		name        string
-		rel         release
-		wantURL     string
-		wantErrPart string
-	}{
-		{
-			name: "single result.json asset",
-			rel: release{
-				TagName: "submit/2026-06-01T14-32-05Z",
-				Assets: []releaseAsset{
-					{Name: "result.json", URL: "https://api.github.com/repos/o/r/releases/assets/1"},
-				},
-			},
-			wantURL: "https://api.github.com/repos/o/r/releases/assets/1",
-		},
-		{
-			name: "case-insensitive name match",
-			rel: release{
-				Assets: []releaseAsset{
-					{Name: "RESULT.JSON", URL: "https://example/assets/2"},
-				},
-			},
-			wantURL: "https://example/assets/2",
-		},
-		{
-			name:    "no result.json asset returns empty (not an error)",
-			rel:     release{Assets: []releaseAsset{{Name: "other.zip", URL: "x"}}},
-			wantURL: "",
-		},
-		{
-			name:    "empty assets list returns empty",
-			rel:     release{Assets: nil},
-			wantURL: "",
-		},
-		{
-			name: "duplicate result.json assets reject ambiguity",
-			rel: release{
-				Assets: []releaseAsset{
-					{Name: "result.json", URL: "a"},
-					{Name: "result.json", URL: "b"},
-				},
-			},
-			wantErrPart: "2 result.json assets",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := selectResultAsset(tc.rel)
-			if tc.wantErrPart != "" {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tc.wantErrPart)
-				}
-				if !strings.Contains(err.Error(), tc.wantErrPart) {
-					t.Fatalf("err = %q, want substring %q", err.Error(), tc.wantErrPart)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("selectResultAsset: %v", err)
-			}
-			if got != tc.wantURL {
-				t.Fatalf("selectResultAsset = %q, want %q", got, tc.wantURL)
-			}
-		})
-	}
-}
-
 func TestParseScores(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -404,13 +335,14 @@ func TestWriteScoresCSV(t *testing.T) {
 						"owner": "alice",
 						"submissions": []any{
 							map[string]any{
-								"score":        float64(20),
-								"max-score":    float64(30),
-								"datetime":     "2026-06-02T09:00:00Z",
-								"submission":   "submit/2026-06-02T08-59-00Z",
-								"review":       "https://github.com/cs50/cs-principles-hello-alice/commit/ghi",
-								"late":         false,
-								"submitted_by": map[string]any{"username": "alice", "id": float64(111)},
+								"score":              float64(20),
+								"provenance_warning": "published by 'alice', not by the autograde workflow",
+								"max-score":          float64(30),
+								"datetime":           "2026-06-02T09:00:00Z",
+								"submission":         "submit/2026-06-02T08-59-00Z",
+								"review":             "https://github.com/cs50/cs-principles-hello-alice/commit/ghi",
+								"late":               false,
+								"submitted_by":       map[string]any{"username": "alice", "id": float64(111)},
 							},
 							map[string]any{
 								"score":      float64(18),
@@ -466,11 +398,11 @@ func TestWriteScoresCSV(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override",
-		"alice,Ada,Lovelace,ada@uni.edu,A,20,30,2026-06-02T09:00:00Z,submit/2026-06-02T08-59-00Z,alice,https://github.com/cs50/cs-principles-hello-alice/commit/ghi,false,",
-		"alice,Ada,Lovelace,ada@uni.edu,A,18,30,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,,https://github.com/cs50/cs-principles-hello-alice/commit/abc,false,",
-		"Bob,Bob,Jones,bob@uni.edu,B,25,30,2026-06-01T15:00:00Z,submit/2026-06-01T14-59-00Z,,https://github.com/cs50/cs-principles-hello-bob/commit/def,true,true",
-		"carol,,,,,,,,,,,,",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
+		"alice,Ada,Lovelace,ada@uni.edu,A,20,30,2026-06-02T09:00:00Z,submit/2026-06-02T08-59-00Z,alice,https://github.com/cs50/cs-principles-hello-alice/commit/ghi,false,,\"published by 'alice', not by the autograde workflow\"",
+		"alice,Ada,Lovelace,ada@uni.edu,A,18,30,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,,https://github.com/cs50/cs-principles-hello-alice/commit/abc,false,,",
+		"Bob,Bob,Jones,bob@uni.edu,B,25,30,2026-06-01T15:00:00Z,submit/2026-06-01T14-59-00Z,,https://github.com/cs50/cs-principles-hello-bob/commit/def,true,true,",
+		"carol,,,,,,,,,,,,,",
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -517,8 +449,8 @@ func TestWriteScoresCSV_ManualOverride(t *testing.T) {
 		t.Fatalf("read file: %v", err)
 	}
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override",
-		"alice,,,,,42,50,2026-06-02T09:00:00Z,submit/manual-2026-06-02T09-00-00Z,,submit/manual-2026-06-02T09-00-00Z,,true",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
+		"alice,,,,,42,50,2026-06-02T09:00:00Z,submit/manual-2026-06-02T09-00-00Z,,submit/manual-2026-06-02T09-00-00Z,,true,",
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -574,13 +506,13 @@ func TestWriteScoresCSV_GroupFanOut(t *testing.T) {
 
 	// No CSV metadata here (blank name/section/email): 4 empty cells after
 	// the username, then the shared submission columns.
-	row := ",,,,,90,100,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,bob,https://github.com/cs50/cs-principles-project-alice/commit/abc,false,"
+	row := ",,,,,90,100,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,bob,https://github.com/cs50/cs-principles-project-alice/commit/abc,false,,"
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
 		"alice" + row,
 		"bob" + row,
 		"carol" + row,
-		"dan,,,,,,,,,,,,", // not a group member → blank
+		"dan,,,,,,,,,,,,,", // not a group member → blank
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -601,7 +533,7 @@ func TestWriteScoresCSV_EmptyRoster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	want := "username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override\n"
+	want := "username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning\n"
 	if string(got) != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -829,14 +761,8 @@ func TestRefreshResultJSON(t *testing.T) {
 	// result.json is the latest.
 	mux.HandleFunc("/repos/o/has-result/releases", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{
-			{
-				"tag_name": "submit/2026-06-02T10-00-00Z",
-				"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset-new.json"}},
-			},
-			{
-				"tag_name": "submit/2026-06-01T14-32-05Z",
-				"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset-old.json"}},
-			},
+			botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-new.json")),
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
 		})
 	})
 	// A repo whose releases mix submit-tag and non-submit tags: only
@@ -844,10 +770,7 @@ func TestRefreshResultJSON(t *testing.T) {
 	mux.HandleFunc("/repos/o/mixed/releases", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{
 			{"tag_name": "v1.0.0"},
-			{
-				"tag_name": "submit/2026-06-01T14-32-05Z",
-				"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset-old.json"}},
-			},
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
 		})
 	})
 	// No submit-tag release anywhere → silent no-op.
@@ -857,14 +780,34 @@ func TestRefreshResultJSON(t *testing.T) {
 	// A submit-tag release with no result.json asset: it appears in
 	// results.json with a null result, but result.json is not written.
 	mux.HandleFunc("/repos/o/no-asset/releases", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"tag_name": "submit/2026-06-01T14-32-05Z",
-			"assets":   []map[string]string{{"name": "other.txt", "url": "ignored"}},
-		}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("other.txt", "ignored")),
+		})
 	})
 	// 404 on the releases walk (no releases / not accepted) → no-op.
 	mux.HandleFunc("/repos/o/no-release/releases", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
+	})
+	// A release the workflow didn't publish is still recorded, with the reason
+	// on its results.json entry and a line on errOut.
+	mux.HandleFunc("/repos/o/hand-published/releases", func(w http.ResponseWriter, r *http.Request) {
+		byHand := botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-new.json"))
+		byHand["author"] = map[string]any{"login": "alice"}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			byHand,
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
+		})
+	})
+	// The bot uploaded it, but it isn't a result document: a release_assets
+	// file renamed to result.json. Treated as a missing asset.
+	mux.HandleFunc("/repos/o/renamed-asset/releases", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-report.json")),
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
+		})
+	})
+	mux.HandleFunc("/asset-report.json", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"schema":"other/v1","score":100}`))
 	})
 	mux.HandleFunc("/asset-new.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"schema":"classroom50/result/v1","score":25}`))
@@ -882,7 +825,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := refreshResultJSON(client, "test-token", server.URL, "o", "has-result", target); err != nil {
+		if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "has-result", target); err != nil {
 			t.Fatalf("refreshResultJSON: %v", err)
 		}
 
@@ -921,7 +864,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := refreshResultJSON(client, "test-token", server.URL, "o", "mixed", target); err != nil {
+		if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "mixed", target); err != nil {
 			t.Fatalf("refreshResultJSON: %v", err)
 		}
 		var history []submissionRecord
@@ -942,7 +885,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := refreshResultJSON(client, "test-token", server.URL, "o", "no-asset", target); err != nil {
+		if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "no-asset", target); err != nil {
 			t.Fatalf("refreshResultJSON: %v", err)
 		}
 		var history []submissionRecord
@@ -955,6 +898,10 @@ func TestRefreshResultJSON(t *testing.T) {
 		}
 		if len(history) != 1 || len(history[0].Result) != 0 && string(history[0].Result) != "null" {
 			t.Fatalf("history = %#v, want one entry with null result", history)
+		}
+		// No asset is not a refused asset: the entry carries no result_problem.
+		if strings.Contains(string(historyBytes), "result_problem") {
+			t.Errorf("no-asset entry must not carry result_problem:\n%s", historyBytes)
 		}
 		if _, err := os.Stat(filepath.Join(target, resultAssetName)); !os.IsNotExist(err) {
 			t.Errorf("result.json should not exist when no release has an asset (stat err: %v)", err)
@@ -974,7 +921,7 @@ func TestRefreshResultJSON(t *testing.T) {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				t.Fatalf("mkdir: %v", err)
 			}
-			if err := refreshResultJSON(client, "test-token", server.URL, "o", tc.repo, target); err != nil {
+			if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", tc.repo, target); err != nil {
 				t.Fatalf("refreshResultJSON: %v", err)
 			}
 			if _, err := os.Stat(filepath.Join(target, resultsAssetName)); !os.IsNotExist(err) {
@@ -985,6 +932,75 @@ func TestRefreshResultJSON(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("a release the workflow didn't publish is recorded and marked", func(t *testing.T) {
+		target := filepath.Join(dir, "hand-published")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		var errOut bytes.Buffer
+		if err := refreshResultJSON(client, &errOut, "test-token", server.URL, "o", "hand-published", target); err != nil {
+			t.Fatalf("refreshResultJSON: %v", err)
+		}
+		var history []submissionRecord
+		historyBytes, err := os.ReadFile(filepath.Join(target, resultsAssetName))
+		if err != nil {
+			t.Fatalf("read results.json: %v", err)
+		}
+		if err := json.Unmarshal(historyBytes, &history); err != nil {
+			t.Fatalf("decode results.json: %v", err)
+		}
+		if len(history) != 2 {
+			t.Fatalf("history = %s, want both releases", historyBytes)
+		}
+		if history[0].ProvenanceWarning != `published by 'alice', not by the autograde workflow` {
+			t.Errorf("newest provenance_warning = %q", history[0].ProvenanceWarning)
+		}
+		if history[1].ProvenanceWarning != "" || strings.Contains(string(historyBytes), `"provenance_warning": ""`) {
+			t.Errorf("the workflow's release must carry no provenance_warning:\n%s", historyBytes)
+		}
+		// The hand-published release is still the latest; the mark, not a
+		// drop, is what tells the teacher.
+		latest, err := os.ReadFile(filepath.Join(target, resultAssetName))
+		if err != nil || !strings.Contains(string(latest), `"score":25`) {
+			t.Errorf("result.json = %q, %v; want the newest payload", latest, err)
+		}
+		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z" was published by 'alice', not by the autograde workflow; recorded and marked in results.json; result.json holds this payload unmarked`) {
+			t.Errorf("errOut lacks the mark line naming the unmarked result.json:\n%s", errOut.String())
+		}
+	})
+
+	t.Run("a result.json without the result schema is treated as missing", func(t *testing.T) {
+		target := filepath.Join(dir, "renamed-asset")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		var errOut bytes.Buffer
+		if err := refreshResultJSON(client, &errOut, "test-token", server.URL, "o", "renamed-asset", target); err != nil {
+			t.Fatalf("refreshResultJSON: %v", err)
+		}
+		var history []submissionRecord
+		historyBytes, err := os.ReadFile(filepath.Join(target, resultsAssetName))
+		if err != nil {
+			t.Fatalf("read results.json: %v", err)
+		}
+		if err := json.Unmarshal(historyBytes, &history); err != nil {
+			t.Fatalf("decode results.json: %v", err)
+		}
+		if len(history) != 2 || string(history[0].Result) != "null" || !strings.Contains(string(history[1].Result), `"score": 18`) {
+			t.Fatalf("history = %s, want a null newest payload and the honest older one", historyBytes)
+		}
+		if history[0].ResultProblem != "result.json is not a classroom50/result/v1 document" || history[1].ResultProblem != "" {
+			t.Errorf("result_problem must name the refused asset and only it:\n%s", historyBytes)
+		}
+		latest, err := os.ReadFile(filepath.Join(target, resultAssetName))
+		if err != nil || !strings.Contains(string(latest), `"score":18`) {
+			t.Errorf("result.json = %q, %v; want the honest payload, not the renamed asset", latest, err)
+		}
+		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z": result.json is not a classroom50/result/v1 document; treated as missing`) {
+			t.Errorf("errOut lacks the schema warning:\n%s", errOut.String())
+		}
+	})
 }
 
 // mustWrite writes contents to path, failing the test on error.
@@ -1019,16 +1035,14 @@ func TestRefreshResultJSON_SymlinkGuard(t *testing.T) {
 	var server *httptest.Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/o/has-result/releases", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"tag_name": "submit/2026-06-02T10-00-00Z",
-			"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset.json"}},
-		}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset.json")),
+		})
 	})
 	mux.HandleFunc("/repos/o/no-asset/releases", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"tag_name": "submit/2026-06-01T14-32-05Z",
-			"assets":   []map[string]string{{"name": "other.txt", "url": "ignored"}},
-		}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("other.txt", "ignored")),
+		})
 	})
 	mux.HandleFunc("/asset.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"schema":"classroom50/result/v1","score":99}`))
@@ -1100,7 +1114,7 @@ func TestRefreshResultJSON_SymlinkGuard(t *testing.T) {
 			// call so a blocking FIFO open fails the test instead of the suite.
 			done := make(chan error, 1)
 			go func() {
-				done <- refreshResultJSON(client, "test-token", server.URL, "o", tc.repo, target)
+				done <- refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", tc.repo, target)
 			}()
 			select {
 			case err := <-done:
@@ -1148,7 +1162,7 @@ func TestRefreshResultJSON_SymlinkGuard(t *testing.T) {
 
 		// has-result writes results.json (first) then result.json; both are
 		// symlinks, so neither victim may change regardless of write ordering.
-		_ = refreshResultJSON(client, "test-token", server.URL, "o", "has-result", target)
+		_ = refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "has-result", target)
 		for _, v := range []string{vA, vB} {
 			got, err := os.ReadFile(v)
 			if err != nil {
@@ -1157,88 +1171,6 @@ func TestRefreshResultJSON_SymlinkGuard(t *testing.T) {
 			if string(got) != safe {
 				t.Errorf("victim %s overwritten: got %q, want %q", v, got, safe)
 			}
-		}
-	})
-}
-
-func TestListAllSubmitReleases(t *testing.T) {
-	t.Run("returns every submit-tag release newest-first, filtering non-submit", func(t *testing.T) {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"tag_name": "submit/2026-06-03T10-00-00Z"},
-				{"tag_name": "v2.0.0"},
-				{"tag_name": "submit/2026-06-02T10-00-00Z"},
-				{"tag_name": "submit/2026-06-01T10-00-00Z"},
-			})
-		})
-		server := httptest.NewServer(mux)
-		t.Cleanup(server.Close)
-		client := githubtest.NewTestClient(t, server)
-
-		rels, err := listAllSubmitReleases(client, "o", "r")
-		if err != nil {
-			t.Fatalf("listAllSubmitReleases: %v", err)
-		}
-		gotTags := make([]string, len(rels))
-		for i, rel := range rels {
-			gotTags[i] = rel.TagName
-		}
-		want := []string{
-			"submit/2026-06-03T10-00-00Z",
-			"submit/2026-06-02T10-00-00Z",
-			"submit/2026-06-01T10-00-00Z",
-		}
-		if strings.Join(gotTags, ",") != strings.Join(want, ",") {
-			t.Fatalf("tags = %v, want %v", gotTags, want)
-		}
-	})
-
-	t.Run("404 → empty, not an error", func(t *testing.T) {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/repos/o/missing/releases", func(w http.ResponseWriter, r *http.Request) {
-			http.NotFound(w, r)
-		})
-		server := httptest.NewServer(mux)
-		t.Cleanup(server.Close)
-		client := githubtest.NewTestClient(t, server)
-
-		rels, err := listAllSubmitReleases(client, "o", "missing")
-		if err != nil {
-			t.Fatalf("listAllSubmitReleases: %v", err)
-		}
-		if len(rels) != 0 {
-			t.Fatalf("got %d releases, want 0", len(rels))
-		}
-	})
-
-	t.Run("paginates across pages", func(t *testing.T) {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/repos/o/many/releases", func(w http.ResponseWriter, r *http.Request) {
-			page := r.URL.Query().Get("page")
-			if page == "1" {
-				batch := make([]map[string]string, allReleasesPerPage)
-				for i := range batch {
-					batch[i] = map[string]string{"tag_name": fmt.Sprintf("submit/p1-%d", i)}
-				}
-				_ = json.NewEncoder(w).Encode(batch)
-				return
-			}
-			_ = json.NewEncoder(w).Encode([]map[string]string{{"tag_name": "submit/last"}})
-		})
-		server := httptest.NewServer(mux)
-		t.Cleanup(server.Close)
-		client := githubtest.NewTestClient(t, server)
-
-		rels, err := listAllSubmitReleases(client, "o", "many")
-		if err != nil {
-			t.Fatalf("listAllSubmitReleases: %v", err)
-		}
-		if len(rels) != allReleasesPerPage+1 {
-			t.Fatalf("got %d releases, want %d", len(rels), allReleasesPerPage+1)
-		}
-		if rels[len(rels)-1].TagName != "submit/last" {
-			t.Errorf("last tag = %q, want submit/last", rels[len(rels)-1].TagName)
 		}
 	})
 }

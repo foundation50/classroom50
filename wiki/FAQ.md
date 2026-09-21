@@ -235,6 +235,21 @@ Your organization's public GitHub Pages site serves the folder, though, so a
 determined student can still read it. See
 [Teacher-only test files](Autograding-Basics#teacher-only-test-files).
 
+### Can a student change the score that gets recorded?
+
+Not without leaving a mark, and yes from inside the grading run. The score is a
+Release the grading workflow publishes in the student's own repository. A
+Release a student creates, or a `result.json` they replace, is collected but
+marked **Unverified** on the submissions page and in the exports, naming who
+published it, and collection warns about each one. But grading and publishing
+share one job, so code that runs during it
+(the workflow file, another workflow file the student adds, or the student's
+own code while the tests run) can publish a forged score under that identity.
+That leaves a run in the **Actions** tab, so it's detectable, not prevented.
+For a final score students can't have influenced, close the assignment,
+download the repositories, and run the tests yourself. See
+[How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
+
 ### Can I turn autograding off, or reduce Actions usage?
 
 Yes. Grade only on explicit submits (**Submission type: A tagged commit**),

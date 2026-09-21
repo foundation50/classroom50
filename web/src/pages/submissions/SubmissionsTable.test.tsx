@@ -447,6 +447,84 @@ describe("SubmissionsTable empty_repo score cell", () => {
   })
 })
 
+describe("SubmissionsTable provenance mark", () => {
+  const recorded = {
+    kind: "recorded" as const,
+    reason: "published by 'alice', not by the autograde workflow",
+  }
+  const overrideGrade = {
+    org: "acme",
+    classroom: "cs101",
+    assignment: "hw1",
+    assignmentType: "individual" as const,
+    mode: "auto" as const,
+    maxPoints: 10,
+  }
+
+  it("marks a collected row whose release the workflow didn't publish", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow({ provenance: recorded })]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    const badge = screen.getByText("submissions.table.unverified")
+    expect(badge.getAttribute("title")).toContain(
+      "submissions.table.unverifiedRecordedTitle",
+    )
+  })
+
+  it("marks the row on the override-capable score cell too", () => {
+    // Teachers with override capability take the ScoreCell path; the mark must
+    // not disappear for the audience it exists for.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow({ provenance: recorded })]}
+        acceptedUsernames={new Set(["alice"])}
+        overrideGrade={overrideGrade}
+      />,
+    )
+    expect(screen.getByText("submissions.table.unverified")).toBeTruthy()
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.scoreOverride.editLabel",
+      }),
+    ).toBeTruthy()
+  })
+
+  it("marks a pending live row from the live reader's own judgment", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[
+          scoreRow({
+            pending: true,
+            provenance: { kind: "author", login: null },
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    const badge = screen.getByText("submissions.table.unverified")
+    expect(badge.getAttribute("title")).toContain(
+      "submissions.table.unverifiedAuthorTitle",
+    )
+  })
+
+  it("shows no mark for a workflow-published row", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    expect(screen.queryByText("submissions.table.unverified")).toBeNull()
+  })
+})
+
 describe("SubmissionsTable score override on a no-autograder manual assignment", () => {
   // A templated manual-graded assignment is written as no_autograder (the
   // skipsGrading prop here), so manual grading must win over the no-grading
@@ -905,6 +983,280 @@ describe("SubmissionsTable submission details modal", () => {
     )
     expect(tagLinks[1].getAttribute("href")).toBe(
       "https://github.com/acme/cs101-hw1-alice/commit/aaa",
+    )
+  })
+
+  it("marks a non-latest collected attempt whose release the workflow didn't publish", async () => {
+    // Per-attempt provenance lives on the history rows, not only the summary
+    // score cell — a older hand-published attempt must still show Unverified.
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/bbb",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fz",
+                score: 9,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit: "https://github.com/acme/cs101-hw1-alice/commit/aaa",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fy",
+                score: 8,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    const badges = screen.getAllByText("submissions.table.unverified")
+    expect(badges).toHaveLength(1)
+    expect(badges[0].getAttribute("title")).toContain(
+      "submissions.table.unverifiedRecordedTitle",
+    )
+  })
+
+  it("marks a detected tag whose collected attempt the workflow didn't publish", async () => {
+    // The owner's tag-mode view goes through the detection overlay, not the
+    // collected fallback; the mark must follow the attempt via its sha. A glob
+    // group bundles several attempts, so it is never marked from one of them.
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 3,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/bbb2222",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/phase2",
+                score: 9,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/aaa1111",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/phase1",
+                score: 8,
+                "max-score": 10,
+              },
+            ],
+            detectedEntries: [
+              {
+                kind: "tag",
+                label: "phase2",
+                count: 1,
+                sha: "bbb2222bbb2222bbb2222bbb2222bbb2222bbb22",
+              },
+              { kind: "tag", label: "phase1", count: 1, sha: "aaa1111" },
+              {
+                kind: "tag-group",
+                label: "submit/*",
+                count: 1,
+                sha: "bbb2222",
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    const badges = screen.getAllByText("submissions.table.unverified")
+    expect(badges).toHaveLength(1)
+    expect(badges[0].closest("li")?.textContent).toContain("phase2")
+  })
+
+  it("marks a detected push when a hand-made release regraded the same commit", async () => {
+    // Seen live: a forged submit/* release reused the honest attempt's commit,
+    // so two collected attempts share one sha. The newest (marked) one is the
+    // attempt the detected push must carry, not the older honest one.
+    const user = userEvent.setup()
+    const commit = "https://github.com/acme/cs101-hw1-alice/commit/99a57f2"
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit,
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fforged",
+                score: 10,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit,
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fhonest",
+                score: 0,
+                "max-score": 10,
+              },
+            ],
+            detectedEntries: [
+              { kind: "commit", label: "99a57f2", count: 1, sha: "99a57f2" },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    expect(screen.getAllByText("submissions.table.unverified")).toHaveLength(1)
+  })
+
+  it("keeps the mark when the forged attempt at the same commit is back-dated", async () => {
+    // Attempts sort by the datetime inside the student's own result.json, so a
+    // forged release can sort itself beneath the honest one. The honest
+    // attempt still wins the release link, but the mark must survive.
+    const user = userEvent.setup()
+    const commit = "https://github.com/acme/cs101-hw1-alice/commit/99a57f2"
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit,
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fhonest",
+                score: 0,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit,
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fforged",
+                score: 10,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+            ],
+            detectedEntries: [
+              { kind: "commit", label: "99a57f2", count: 1, sha: "99a57f2" },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    expect(screen.getAllByText("submissions.table.unverified")).toHaveLength(1)
+    expect(
+      screen
+        .getByRole("link", { name: "submissions.details.viewGrade" })
+        .getAttribute("href"),
+    ).toContain("submit%2Fhonest")
+  })
+
+  it("marks a detected push whose collected attempt the workflow didn't publish", async () => {
+    // Every-push rows join detected commits to collected attempts by sha, full
+    // or 7-char, whichever the collected commit URL ends with.
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/bbb2222",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fz",
+                score: 9,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/aaa1111",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fy",
+                score: 8,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+            ],
+            detectedEntries: [
+              { kind: "commit", label: "bbb2222", count: 1, sha: "bbb2222" },
+              {
+                kind: "commit",
+                label: "aaa1111",
+                count: 1,
+                sha: "aaa1111aaa1111aaa1111aaa1111aaa1111aaa11",
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    const badges = screen.getAllByText("submissions.table.unverified")
+    expect(badges).toHaveLength(1)
+    expect(badges[0].getAttribute("title")).toContain(
+      "submissions.table.unverifiedRecordedTitle",
     )
   })
 

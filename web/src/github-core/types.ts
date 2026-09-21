@@ -141,6 +141,8 @@ export type GitHubReleaseAsset = {
   name: string
   browser_download_url: string
   size?: number
+  // Who uploaded it; the submission readers require the workflow token.
+  uploader?: { login: string } | null
 }
 
 export type GitHubRelease = {
@@ -152,6 +154,10 @@ export type GitHubRelease = {
   prerelease: boolean
   created_at: string
   published_at: string | null
+  // Who published it. Null for a deleted account and absent on older API
+  // shapes; the submission readers treat both as "not the workflow"
+  // (releaseProvenanceProblem).
+  author?: { login: string } | null
   // Present on the list endpoint; absent-tolerant so existing release readers
   // (student submissions list) that ignore assets keep working.
   assets?: GitHubReleaseAsset[]

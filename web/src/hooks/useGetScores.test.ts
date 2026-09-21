@@ -74,6 +74,34 @@ describe("normalizeScores — manual override entries", () => {
     // Preserved autograded value the clear reverts to.
     expect(rows[0].autogradedScore).toBe(30)
     expect(rows[0].autogradedMax).toBe(50)
+    expect(rows[0].autogradedProvenance).toBeUndefined()
+  })
+
+  it("carries the autograded attempt's own provenance beneath an override", () => {
+    const reason = "published by 'alice', not by the autograde workflow"
+    const normalized = normalizeScores(
+      scoresWith([
+        {
+          owner: "alice",
+          override: true,
+          submissions: [
+            overrideRecord,
+            {
+              ...overrideRecord,
+              submission: "submit/2026-01-01T00-00-00Z-abc1234",
+              datetime: "2026-01-01T00:00:00Z",
+              score: 30,
+              "max-score": 50,
+              provenance_warning: reason,
+            },
+          ],
+        },
+      ]) as never,
+    )
+    const rows = normalized?.submissions.hw1 ?? []
+    // The override record itself carries no mark; the attempt beneath does.
+    expect(rows[0].provenance).toBeUndefined()
+    expect(rows[0].autogradedProvenance).toEqual({ kind: "recorded", reason })
   })
 
   it("omits the autograded score when an override has no real history", () => {
@@ -106,6 +134,52 @@ describe("normalizeScores — manual override entries", () => {
     expect(rows[0].overridden).toBe(false)
     // A non-overridden entry never exposes the autograded-revert fields.
     expect(rows[0].autogradedScore).toBeUndefined()
+  })
+})
+
+describe("normalizeScores — provenance_warning", () => {
+  const graded = (over: Record<string, unknown>) => ({
+    ...overrideRecord,
+    submission: "submit/2026-01-01T00-00-00Z-abc1234",
+    ...over,
+  })
+
+  it("carries the collector's reason onto the row and its attempt", () => {
+    const reason = "published by 'alice', not by the autograde workflow"
+    const normalized = normalizeScores(
+      scoresWith([
+        {
+          owner: "alice",
+          submissions: [
+            graded({
+              datetime: "2026-02-02T00:00:00Z",
+              provenance_warning: reason,
+            }),
+            graded({ datetime: "2026-01-01T00:00:00Z" }),
+          ],
+        },
+      ]) as never,
+    )
+    const [row] = normalized?.submissions.hw1 ?? []
+    expect(row.provenance).toEqual({ kind: "recorded", reason })
+    expect(row.submissions.map((s) => s.provenance)).toEqual([
+      { kind: "recorded", reason },
+      undefined,
+    ])
+  })
+
+  it("ignores an empty or non-string value", () => {
+    for (const value of ["", 7, null, true]) {
+      const normalized = normalizeScores(
+        scoresWith([
+          {
+            owner: "alice",
+            submissions: [graded({ provenance_warning: value })],
+          },
+        ]) as never,
+      )
+      expect(normalized?.submissions.hw1[0].provenance).toBeUndefined()
+    }
   })
 })
 

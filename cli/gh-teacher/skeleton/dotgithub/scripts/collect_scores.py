@@ -79,6 +79,10 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (created by autograde-runner.yaml on push to the repo's default branch).
 SUBMIT_TAG_PREFIX = "submit/"
 
+# The login GitHub gives a workflow's GITHUB_TOKEN; see release_provenance_problem.
+# Hand-mirrored from Go contract.AutogradeReleaseAuthor (parity-tested).
+AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
+
 # Repo permission the collect-time grant gives each staff role's team on every
 # student assignment repo. Hand-mirrored from Go StaffTeamRepoPermissions
 # (source of truth; parity-tested); keep in lockstep. Both non-owner staff teams
@@ -1355,7 +1359,9 @@ def collect_release_history(
                 f"skipping that submission"
             )
             continue
-        except (json.JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, ValueError, RecursionError) as exc:
+            # RecursionError: json.loads on a deeply nested asset; one hostile
+            # release must skip, not abort the run.
             emit_warning(
                 f"{org}/{repo_name}: result.json malformed for "
                 f"{release.get('tag_name')!r} ({exc}); skipping that submission"
@@ -1390,6 +1396,17 @@ def collect_release_history(
                 f"{org}/{repo_name}: result.json datetime = "
                 f"{candidate.get('datetime')!r} is not an RFC 3339 timestamp; "
                 f"cannot mark lateness"
+            )
+        # Judged from the release metadata, never the payload: strip any copy a
+        # hand-written result.json carries. See release_provenance_problem.
+        candidate.pop("provenance_warning", None)
+        problem = release_provenance_problem(release)
+        if problem is not None:
+            candidate["provenance_warning"] = problem
+            emit_warning(
+                f"{org}/{repo_name}: release {release.get('tag_name')!r} was {problem}; "
+                f"collected and marked in scores.json. Check the repository's "
+                f"Releases tab and Actions history."
             )
         # The stored record is the validated payload minus the bucket-key
         # `assignment`. Keeps result/v1 shape: owner + assignment_type +
@@ -2878,7 +2895,8 @@ def validate_result(
     """Raise ValueError if the payload fails the v1 contract. The
     classroom/assignment/owner checks defend against a hostile result.json
     trying to land in someone else's scores.json: the triple must match the
-    source repo's expected identity.
+    source repo's expected identity. Who published the release is a separate
+    judgment; see release_provenance_problem.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
     (the roster/repo-name-derived owner; for a team assignment the repo-name
@@ -3352,14 +3370,51 @@ def detected_record(
     return record
 
 
+def _login(user: Any) -> str:
+    """A GitHub user object's login, or "" when the object or login is absent."""
+    if isinstance(user, dict) and isinstance(user.get("login"), str):
+        return user["login"]
+    return ""
+
+
+def _is_result_asset(asset: dict[str, Any]) -> bool:
+    """The release asset that carries the score, matched case-insensitively."""
+    return (asset.get("name") or "").lower() == RESULT_ASSET_NAME
+
+
+def release_provenance_problem(release: dict[str, Any]) -> str | None:
+    """Why a submit/* release did not come from the autograde workflow, or None.
+
+    Students can write to their repos, so they can publish a release or replace
+    its result.json as themselves. They can't act as the workflow's
+    GITHUB_TOKEN, so the release author and every result.json uploader must be
+    that login; a missing one counts as someone else. The reason is stored on
+    the collected submission as `provenance_warning` so the teacher sees it
+    beside the score; a teacher who publishes a release by hand is marked the
+    same way. gh teacher download and the web apply the same rule."""
+    author = _login(release.get("author"))
+    if author != AUTOGRADE_RELEASE_AUTHOR:
+        return f"published by {author or 'an unknown account'!r}, not by the autograde workflow"
+    for asset in release.get("assets") or []:
+        if not isinstance(asset, dict) or not _is_result_asset(asset):
+            continue
+        uploader = _login(asset.get("uploader"))
+        if uploader != AUTOGRADE_RELEASE_AUTHOR:
+            return (
+                f"{RESULT_ASSET_NAME} uploaded by {uploader or 'an unknown account'!r}, "
+                f"not by the autograde workflow"
+            )
+    return None
+
+
 def all_submit_releases(
     api_url: str, owner: str, repo: str, token: str
 ) -> list[dict[str, Any]]:
     """Every submit-tag release for a repo, newest first, walking the full
     /releases pagination: the complete submission history (a student who pushed
-    N times has N submit/* releases, all returned). Non-submit releases (e.g., a
-    hand-created tag) are filtered out. A 404 (no releases, or repo not
-    accepted) yields an empty list.
+    N times has N submit/* releases, all returned). Non-submit releases (a
+    hand-created tag) are filtered out. A 404 (no releases, or repo not accepted)
+    yields an empty list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
     chain or the page cap) raises IncompleteListing rather than returning a
@@ -3937,7 +3992,7 @@ def download_result_asset(
     """
     matches = [
         c for c in (release.get("assets") or [])
-        if (c.get("name") or "").lower() == RESULT_ASSET_NAME
+        if _is_result_asset(c)
     ]
     # Runs once per release in the history walk, so errors name THIS release.
     release_label = release.get("tag_name") or release.get("url") or "release"

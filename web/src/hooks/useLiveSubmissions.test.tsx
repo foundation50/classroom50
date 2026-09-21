@@ -10,6 +10,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 }))
 
 import { useLiveSubmissions } from "./useLiveSubmissions"
+import { AUTOGRADE_RELEASE_AUTHOR } from "@/github-core/queries"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
 const noRateLimit: GitHubRateLimit = {
@@ -39,6 +40,7 @@ const submitRelease = (tag: string, when: string) => ({
   prerelease: false,
   created_at: when,
   published_at: when,
+  author: { login: AUTOGRADE_RELEASE_AUTHOR },
 })
 
 const makeClient = () =>
@@ -79,6 +81,36 @@ describe("useLiveSubmissions", () => {
 
     await waitFor(() => expect(result.current.submissions.length).toBe(5))
     expect(request).toHaveBeenCalledTimes(5)
+  })
+
+  it("marks a release the workflow didn't publish; leaves the workflow's own unmarked", async () => {
+    request.mockResolvedValue([
+      {
+        ...submitRelease("submit/x", "2026-01-01T00:00:00Z"),
+        author: { login: "alice" },
+      },
+    ])
+    const { result } = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["alice"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.submissions.length).toBe(1))
+    expect(result.current.submissions[0].provenance).toEqual({
+      kind: "author",
+      login: "alice",
+    })
+
+    request.mockResolvedValue([
+      submitRelease("submit/y", "2026-01-02T00:00:00Z"),
+    ])
+    const honest = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["bob"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() =>
+      expect(honest.result.current.submissions.length).toBe(1),
+    )
+    expect(honest.result.current.submissions[0].provenance).toBeUndefined()
   })
 
   it("treats a repo with no submit release as not-submitted, not an error", async () => {

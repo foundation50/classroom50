@@ -577,6 +577,66 @@ score with links to the repository, the graded **commit**, the Release
 commit), and the feedback pull request (**View feedback PR** on the row, or
 **Review** in its manage dialog).
 
+### How much to trust a collected score
+
+Grading runs inside the student's repository, and students can write to that
+repository. A collected score is reliable feedback, not proof. What it does and
+doesn't guarantee:
+
+- **Test files.** Tests, fixtures, and the runner are fetched from your
+  `classroom50` repository on every run and never enter the student's
+  repository, so students can't change them. See
+  [Teacher-only test files](#teacher-only-test-files).
+- **Hand-made Releases.** A Release that `github-actions[bot]` (the workflow's
+  identity, which students can't use) did not author, or whose `result.json`
+  someone else uploaded, is still collected but marked. The submissions page
+  shows an **Unverified** badge beside the score with who published it,
+  `scores.json` and both CSV exports carry the reason in `provenance_warning`,
+  and collection names each one in its warnings. A Release you publish by hand
+  to record a grade is marked the same way; `"override": true` on the entry is
+  the path that isn't.
+- **Removed Releases.** The latest score follows the newest Release that
+  exists. A student who deletes the newest honest Release, or converts it to a
+  draft, makes an older honest score the latest, and that score carries no
+  mark. The **Actions** tab still lists every grading run, so more runs than
+  Releases is the sign.
+- **Code that runs during grading.** Grading and publishing share one job, so
+  the caller workflow, any other workflow file a student adds, and the
+  student's own code that the tests run can all publish a forged score under
+  the workflow's identity. A changed workflow file leaves a commit; a process
+  left behind by student code does not. Every run appears in the **Actions**
+  tab. This is detectable, not prevented.
+- **Submission time.** The committer date of the graded commit, which the
+  student's Git client sets. The **late** flag is advisory. See
+  [Due dates mark late; closing enforces](Course-Lifecycle-and-End-of-Term#due-dates-mark-late-closing-enforces).
+
+For a final score students can't have influenced, grade again in a context
+they never had write access to:
+
+1. After the due date, use **Close submission** to make every repository
+   read-only.
+2. Run `gh teacher download cs50-fall-2026 cs-principles hello`, replacing the
+   organization, classroom, and assignment with yours. It clones every
+   repository and writes each one's `result.json` and `results.json` next to
+   the clone. See [Score exports](#score-exports).
+3. Run the same tests against the clones, locally or in a workflow in your
+   `classroom50` repository. The declarative tests and any `autograder.py` are
+   already there, so the result matches the on-submit score unless something
+   was tampered with.
+
+To spot-check one repository instead, use the `result.json` asset as the score
+of record: a Release's title and notes can be edited by anyone with write
+access while the author stays `github-actions[bot]`. Confirm that the Release
+author and the `result.json` uploader are both `github-actions[bot]` and that
+the file itself starts with `"schema": "classroom50/result/v1"` (a file the
+runner attached for the student can be renamed to `result.json` but never
+carries that schema), open the
+run from the commit's `classroom50/autograde` status and read its job summary,
+and check that `.github/workflows/` at the graded commit holds only the
+`autograde.yaml` that `gh student accept` writes. A forged result left behind
+by student code during the run still passes these checks, which is why the
+re-grade above is the trustworthy path.
+
 ### Latest score versus history
 
 The score on a row, and in the web CSV's summary columns, is the **latest
@@ -695,6 +755,7 @@ submission's data:
 | `submitted_at` | The latest submission instant (ISO 8601 UTC). |
 | `late` | `yes` / `no` against the due date; blank for non-submitters. |
 | `commit` / `review` / `release` | Links: the graded commit, the full starter-to-graded diff, and the Release. |
+| `provenance_warning` | Why the autograde workflow didn't publish the latest Release (who did); blank when it did. See [How much to trust a collected score](#how-much-to-trust-a-collected-score). |
 
 #### CLI: `gh teacher download`
 
@@ -714,6 +775,7 @@ newest first), plus one blank-score line per non-submitter:
 | `review_url` | The starter-to-graded diff for this attempt. |
 | `late` | `true` / `false` against the due date; blank when unknown. |
 | `override` | `true` when a teacher override is in effect for the entry. |
+| `provenance_warning` | Why the autograde workflow didn't publish this attempt's Release (who did); blank when it did. |
 
 Per-test breakdowns aren't in either CSV. They're in each attempt's Release
 (and in the per-repository `result.json` / `results.json` files the download

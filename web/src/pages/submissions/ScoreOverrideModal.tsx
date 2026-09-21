@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Alert, Button, FormField, Input, Modal } from "@/components/ui"
+import { ProvenanceBadge } from "@/components/submissions/ProvenanceBadge"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { useSetScoreOverride } from "@/hooks/mutations/useSetScoreOverride"
 import { isComposingKey } from "@/util/imeComposition"
+import type { SubmissionProvenance } from "@/types/submissionProvenance"
 
 // The write context an override edit needs, independent of the row's current
 // value. Mirrors the fields editScoreOverride consumes.
@@ -60,6 +62,7 @@ export function ScoreOverrideModal({
   overridden,
   autogradedScore,
   autogradedMax,
+  autogradedProvenance,
   thresholdFraction,
   ctx,
 }: {
@@ -75,9 +78,11 @@ export function ScoreOverrideModal({
   score: number
   // The row carries a teacher override — enables the Clear override action.
   overridden: boolean
-  // The autograded score/max preserved beneath an override (revert target).
+  // The autograded score/max preserved beneath an override (revert target),
+  // and that attempt's own provenance mark when the workflow didn't publish it.
   autogradedScore?: number
   autogradedMax?: number
+  autogradedProvenance?: SubmissionProvenance
   thresholdFraction: number | null
   ctx: ScoreOverrideContext
 }) {
@@ -272,6 +277,7 @@ export function ScoreOverrideModal({
               thresholdFraction={thresholdFraction}
               size="sm"
             />
+            <ProvenanceBadge provenance={autogradedProvenance} />
           </div>
         ) : null}
 

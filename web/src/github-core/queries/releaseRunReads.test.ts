@@ -1,13 +1,18 @@
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+
 import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import {
+  AUTOGRADE_RELEASE_AUTHOR,
   classifyServiceTokenExpiry,
   getCollectScoresRunAfterId,
   getLastCollectScoresRun,
   getRunAnnotations,
   getServiceTokenStatus,
   latestSubmitReleaseAndCount,
+  releaseProvenanceProblem,
   latestSubmitReleaseWithAssets,
 } from "./releaseRunReads"
 import type { GitHubClient } from "../client"
@@ -167,6 +172,10 @@ describe("classifyServiceTokenExpiry", () => {
 const clientReturning = (releases: GitHubRelease[]): GitHubClient =>
   ({ request: vi.fn().mockResolvedValue(releases) }) as unknown as GitHubClient
 
+const bot = { login: AUTOGRADE_RELEASE_AUTHOR }
+
+// A submit/* release exactly as the runner publishes it: authored by the
+// workflow token, with a result.json the same token uploaded.
 const release = (
   tag: string,
   when: string,
@@ -180,10 +189,74 @@ const release = (
   prerelease: false,
   created_at: when,
   published_at: when,
+  author: bot,
+  assets: [
+    {
+      id: 1,
+      name: "result.json",
+      browser_download_url: `https://github.com/o/r/releases/download/${tag}/result.json`,
+      uploader: bot,
+    },
+  ],
   ...extra,
 })
 
+describe("releaseProvenanceProblem", () => {
+  // The collector and gh teacher download run the same cases
+  // (test_contract_parity.py, download_test.go), so one reader drifting from
+  // the shared verdict fails here rather than in a gradebook.
+  it("reaches the shared verdict on every cli/shared/testdata case", () => {
+    const fixtureUrl = new URL(
+      "../../../../cli/shared/testdata/release_provenance_cases.json",
+      import.meta.url,
+    )
+    const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
+      cases: {
+        name: string
+        release: GitHubRelease
+        problem: { kind: "author" | "uploader"; login: string | null } | null
+      }[]
+    }
+    expect(doc.cases.length).toBeGreaterThan(0)
+    for (const c of doc.cases) {
+      const want = c.problem
+        ? { kind: c.problem.kind, login: c.problem.login }
+        : null
+      expect(releaseProvenanceProblem(c.release), c.name).toEqual(want)
+    }
+  })
+
+  // JSON can't express an absent key on a typed object, so the two undefined
+  // shapes stay here; the fixture covers null and every login variant.
+  it("treats absent author and assets like the fixture's null cases", () => {
+    const honest = release("submit/1", "2026-01-01T00:00:00Z")
+    expect(
+      releaseProvenanceProblem({ ...honest, assets: undefined }),
+    ).toBeNull()
+    expect(releaseProvenanceProblem({ ...honest, author: undefined })).toEqual({
+      kind: "author",
+      login: null,
+    })
+  })
+})
+
 describe("latestSubmitReleaseWithAssets", () => {
+  it("keeps a submit/* release the workflow did not publish as the latest", async () => {
+    // Collected and marked, not dropped: a teacher may publish by hand.
+    const client = clientReturning([
+      release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z", {
+        author: { login: "alice" },
+      }),
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+    ])
+    const latest = await latestSubmitReleaseWithAssets(client, "o", "r")
+    expect(latest?.tag_name).toBe("submit/2026-03-01T00:00:00Z-cccc")
+    expect(releaseProvenanceProblem(latest!)).toEqual({
+      kind: "author",
+      login: "alice",
+    })
+  })
+
   it("returns the newest submit/* release among several", async () => {
     const client = clientReturning([
       release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
@@ -227,6 +300,7 @@ describe("latestSubmitReleaseWithAssets", () => {
             id: 9,
             name: "result.json",
             browser_download_url: "https://github.com/o/r/releases/download/x",
+            uploader: bot,
           },
         ],
       }),
@@ -265,6 +339,33 @@ describe("latestSubmitReleaseAndCount", () => {
     )
     expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
     expect(count).toBe(1)
+  })
+
+  it("counts and surfaces a submit/* release the workflow did not publish", async () => {
+    // The count stays honest to what the repo holds; the row marks it.
+    const client = clientReturning([
+      release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z", {
+        author: { login: "alice" },
+      }),
+      release("submit/2026-02-01T00:00:00Z-bbbb", "2026-02-01T00:00:00Z", {
+        assets: [
+          {
+            id: 1,
+            name: "result.json",
+            browser_download_url: "u",
+            uploader: { login: "alice" },
+          },
+        ],
+      }),
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+    ])
+    const { latest, count } = await latestSubmitReleaseAndCount(
+      client,
+      "o",
+      "r",
+    )
+    expect(latest?.tag_name).toBe("submit/2026-03-01T00:00:00Z-cccc")
+    expect(count).toBe(3)
   })
 
   it("resolves { latest: null, count: 0 } on a 404 (repo not accepted)", async () => {

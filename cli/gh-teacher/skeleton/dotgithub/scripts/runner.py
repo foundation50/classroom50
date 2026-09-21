@@ -60,6 +60,13 @@ from typing import Any
 # Schema sentinel. Keep in lockstep with collect_scores.py::validate_result
 # (cli/gh-teacher/skeleton/dotgithub/scripts/collect_scores.py).
 RESULT_SCHEMA_V1 = "classroom50/result/v1"
+# Any version of the sentinel: a staged release asset carrying one is refused
+# (see _looks_like_result_document). Files above the readers' asset ceiling
+# can't be read as a score, so they aren't parsed. Keep in lockstep with
+# collect_scores.py::MAX_RESULT_BYTES and download.go maxResultBytes
+# (test_contract_parity.py pins the sniff at or above the collector's).
+RESULT_SCHEMA_PREFIX = "classroom50/result/"
+RESULT_SNIFF_MAX_BYTES = 10 * 1024 * 1024
 
 # result.json is required; release-body.md optional (synthesized when
 # missing). Lockstep with contract.ResultFilename / contract.ReleaseBodyFilename
@@ -995,6 +1002,48 @@ def _copy_release_asset(
     return copied
 
 
+def _looks_like_result_document(path: pathlib.Path, size: int | None = None) -> bool:
+    """True when a staged release asset is itself a result document.
+
+    Anyone with push access can rename a Release asset, and the readers accept
+    any result.json the workflow token uploaded. A student-authored file that
+    already carries the result schema is the one attachment a rename would turn
+    into a forged score, so the runner never attaches one. `size` is the byte
+    count when the caller already has it."""
+    try:
+        if (path.stat().st_size if size is None else size) > RESULT_SNIFF_MAX_BYTES:
+            return False
+        with path.open("rb") as fh:
+            # Most assets are PDFs, images, or archives: a first byte that can't
+            # open a JSON object or array settles it without reading the rest.
+            head = fh.read(64).lstrip(b" \t\n\r")
+            if head and head[:1] not in (b"{", b"["):
+                return False
+            # errors="replace": a decode failure must never clear a file, since
+            # a reader with a laxer decoder would still accept it.
+            text = (head + fh.read()).decode("utf-8", errors="replace")
+    except OSError:
+        return False
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    except RecursionError:
+        # json.loads raises this, not ValueError, on deep nesting. A file too
+        # deep to check can't be cleared, and letting it escape would crash the
+        # runner after grading, so refuse it.
+        raise ValueError("nested too deeply to check for a result document") from None
+    except ValueError as exc:
+        # A plain ValueError (not JSONDecodeError) is the integer digit limit:
+        # valid JSON Python won't parse but Go's decoder reads, so the sentinel
+        # could hide behind it. Not clearable either.
+        raise ValueError(f"could not check for a result document ({exc})") from None
+    if not isinstance(data, dict):
+        return False
+    schema = data.get("schema")
+    return isinstance(schema, str) and schema.startswith(RESULT_SCHEMA_PREFIX)
+
+
 def stage_release_assets(
     workspace: pathlib.Path,
     destination: pathlib.Path,
@@ -1035,6 +1084,11 @@ def stage_release_assets(
                 )
             finally:
                 os.close(source_fd)
+            if _looks_like_result_document(target, copied):
+                raise ValueError(
+                    f"{configured_path!r} is a {RESULT_SCHEMA_PREFIX}* document; "
+                    f"only the runner publishes one"
+                )
         except (OSError, ValueError) as exc:
             if copy_attempted:
                 try:
