@@ -444,9 +444,15 @@ cookies.
 | Browser, operating system, and device type | Your GitHub username or any roster data |
 | Page load timings | |
 
-You can opt out in your browser. When it sends the Global Privacy Control or Do
-Not Track signal, the page does not load the analytics script at all. Content
-blockers that block the script don't affect the app.
+You can opt out in two ways, and either one stops the script from loading:
+
+- In the app, open **Settings**, then **Usage analytics**, and select **Don't
+  count my visits**. The same choice is on the public
+  [privacy page](https://classroom50.org/privacy), so you don't need to sign
+  in. It applies to that browser from the next page load.
+- In your browser, turn on the Global Privacy Control or Do Not Track signal.
+
+Content blockers that block the script don't affect the app.
 
 The production site at classroom50.org and the preview site at
 preview.classroom50.org each report to their own Cloudflare site, so their

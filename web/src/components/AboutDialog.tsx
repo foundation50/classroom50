@@ -115,16 +115,25 @@ export const AboutDialog = forwardRef<
         </dd>
       </dl>
 
-      {/* In-app link (router <Link>, not target=_blank): navigating closes the
+      {/* In-app links (router <Link>, not target=_blank): navigating closes the
           dialog by hand since a router transition doesn't dismiss a native
           <dialog>. */}
-      <Link
-        to="/accessibility"
-        onClick={(event) => event.currentTarget.closest("dialog")?.close()}
-        className="link link-info link-hover mt-3 inline-block text-sm"
-      >
-        {t("nav.aboutViewAccessibility")}
-      </Link>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <Link
+          to="/accessibility"
+          onClick={(event) => event.currentTarget.closest("dialog")?.close()}
+          className="link link-info link-hover"
+        >
+          {t("nav.aboutViewAccessibility")}
+        </Link>
+        <Link
+          to="/privacy"
+          onClick={(event) => event.currentTarget.closest("dialog")?.close()}
+          className="link link-info link-hover"
+        >
+          {t("nav.aboutViewPrivacy")}
+        </Link>
+      </div>
 
       <div className="divider my-4" />
 

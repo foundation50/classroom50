@@ -1,5 +1,8 @@
 import { localStorageOrNull, setItemOrIgnore } from "@/lib/webStorage"
 import {
+  ANALYTICS_PREFS,
+  ANALYTICS_STORAGE_KEY,
+  DEFAULT_ANALYTICS_PREF,
   DEFAULT_NAME_ORDER,
   NAME_ORDERS,
   type UserPreferenceKey,
@@ -24,6 +27,11 @@ export const USER_PREFERENCE_SPECS: {
     storageKey: "classroom50:name-order",
     values: NAME_ORDERS,
     default: DEFAULT_NAME_ORDER,
+  },
+  analytics: {
+    storageKey: ANALYTICS_STORAGE_KEY,
+    values: ANALYTICS_PREFS,
+    default: DEFAULT_ANALYTICS_PREF,
   },
 }
 

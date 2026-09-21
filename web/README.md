@@ -91,4 +91,8 @@ production.
 The plugin that injects the script is `webAnalyticsPlugin` in
 `vite.config.ts`. The script is cookie-free, strips query strings before
 sending, and is skipped when the browser sends Global Privacy Control or Do Not
-Track. To verify a build, look for `beacon.min.js` in `dist/index.html`.
+Track, or when the visitor has opted out. The opt-out is the `analytics`
+preference (`classroom50:analytics` in localStorage, stored only as `off`),
+offered under Settings and on the public `/privacy` page, which also hosts the
+privacy notice. To verify a build, look for `beacon.min.js` in
+`dist/index.html`.

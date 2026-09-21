@@ -396,3 +396,42 @@ describe("SettingsPage student names", () => {
     expect(window.localStorage.getItem(NAME_ORDER_KEY)).toBeNull()
   })
 })
+
+describe("SettingsPage usage analytics", () => {
+  const ANALYTICS_KEY = USER_PREFERENCE_SPECS.analytics.storageKey
+  const radio = (label: string) =>
+    screen.getByLabelText(label) as HTMLInputElement
+  const saveButton = () =>
+    screen
+      .getAllByText("common.save")
+      .map((el) => el.closest("form"))
+      .find((form) => form?.querySelector('input[name="analytics-pref"]'))!
+      .querySelector('button[type="submit"]') as HTMLButtonElement
+
+  it("defaults to on and stores the opt-out only on Save", async () => {
+    renderPage()
+    expect(radio("settings.analytics.on").checked).toBe(true)
+
+    await userEvent.click(radio("settings.analytics.off"))
+    expect(window.localStorage.getItem(ANALYTICS_KEY)).toBeNull()
+
+    await userEvent.click(saveButton())
+    expect(window.localStorage.getItem(ANALYTICS_KEY)).toBe("off")
+    expect(screen.getByText("settings.analytics.saved")).toBeTruthy()
+  })
+
+  it("reflects a stored opt-out and clears the key when opting back in", async () => {
+    window.localStorage.setItem(ANALYTICS_KEY, "off")
+    renderPage()
+    expect(radio("settings.analytics.off").checked).toBe(true)
+
+    await userEvent.click(radio("settings.analytics.on"))
+    await userEvent.click(saveButton())
+    expect(window.localStorage.getItem(ANALYTICS_KEY)).toBeNull()
+  })
+
+  it("links to the privacy notice", () => {
+    renderPage()
+    expect(screen.getByText("settings.analytics.privacyLink")).toBeTruthy()
+  })
+})

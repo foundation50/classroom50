@@ -28,6 +28,7 @@ import {
   type VerdictOverlay,
 } from "./src/util/a11y/vpatModel.ts"
 import { ASSESSMENT_GUIDANCE } from "./src/util/a11y/assessmentGuidance.ts"
+import { ANALYTICS_STORAGE_KEY } from "./src/types/preferences.ts"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -100,11 +101,14 @@ function versionJsonPlugin(): Plugin {
 // the source page stays free of third-party script and its anti-flash drift
 // tests stay valid. The emitted HTML mirrors the dashboard's snippet (same
 // comment markers, tag, and attributes) except that the tag is created by a
-// tiny loader purely so it can honor the browser's Global Privacy Control / Do
-// Not Track signal. The beacon locates its config via `script[data-cf-beacon]`,
-// so a dynamically added module script is fine. It sends no cookies or storage,
-// and strips query strings client-side, so OAuth codes, invite link keys, and
-// roster searches never leave the browser.
+// tiny loader purely so it can honor an opt-out: the browser's Global Privacy
+// Control / Do Not Track signal, or the in-app preference (Settings and the
+// public /privacy page), which the registry stores as "off" under
+// ANALYTICS_STORAGE_KEY and clears when the visitor opts back in. The beacon
+// locates its config via `script[data-cf-beacon]`, so a dynamically added
+// module script is fine. It sends no cookies or storage, and strips query
+// strings client-side, so OAuth codes, invite link keys, and roster searches
+// never leave the browser.
 const CF_BEACON_SRC = "https://static.cloudflareinsights.com/beacon.min.js"
 
 function webAnalyticsPlugin(token: string | undefined): Plugin {
@@ -115,8 +119,13 @@ function webAnalyticsPlugin(token: string | undefined): Plugin {
       "VITE_CF_BEACON_TOKEN must be only the token value from the Cloudflare Web Analytics snippet, not the whole <script> tag",
     )
   }
+  // localStorage access throws in some hardened/private modes; treat that as
+  // no opt-out rather than crashing before the app boots.
+  const optedOut =
+    `(function(){try{return localStorage.getItem(${JSON.stringify(ANALYTICS_STORAGE_KEY)})==="off"}` +
+    `catch(e){return false}})()`
   const loader = [
-    `if(navigator.globalPrivacyControl!==true&&navigator.doNotTrack!=="1"){`,
+    `if(navigator.globalPrivacyControl!==true&&navigator.doNotTrack!=="1"&&!${optedOut}){`,
     `var s=document.createElement("script");`,
     `s.type="module";`,
     `s.src=${JSON.stringify(CF_BEACON_SRC)};`,
