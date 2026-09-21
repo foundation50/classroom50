@@ -423,11 +423,10 @@ const SubmissionsPageContent = () => {
   const [sort, setSort] = useState<SubmissionSort>(() =>
     defaultSubmissionSort(nameOrder),
   )
-  // The roster spine's name order follows the user's first/last choice in every
-  // mode. `sortNameMode` maps a time sort to first-name order, so a non-name
-  // sort is unaffected; the spine, the table display list, and the page-scoped
-  // fan-out all stay keyed on the same name mode.
-  const rosterSortMode = sortNameMode(sort)
+  // The roster spine's name order follows the active name sort, or the user's
+  // name order under a time sort; the spine, the table display list, and the
+  // page-scoped fan-out all stay keyed on the same name mode.
+  const rosterSortMode = sortNameMode(sort, nameOrder)
   const students: Student[] = useMemo(
     () =>
       sortStudentsByName(

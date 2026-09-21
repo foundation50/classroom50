@@ -23,6 +23,7 @@ import { dueDeadlineInstant } from "@/util/formatDate"
 import {
   compareStudentsByName,
   DEFAULT_NAME_ORDER,
+  defaultStudentSortMode,
   formatName,
   nameFromParts,
   nameSearchFields,
@@ -700,16 +701,32 @@ export function isNameSort(sort: SubmissionSort): boolean {
   return sort === "name-first" || sort === "name-last"
 }
 
-// The roster sort mode a name sort maps to; time sorts default to first-name
-// (used only when a caller needs a mode regardless of the sort).
-export function sortNameMode(sort: SubmissionSort): StudentSortMode {
-  return sort === "name-last" ? "last" : "first"
+// The roster sort mode a sort maps to. A time sort has no name direction of
+// its own, so it takes the one the user's name order leads with.
+export function sortNameMode(
+  sort: SubmissionSort,
+  nameOrder: NameOrder = DEFAULT_NAME_ORDER,
+): StudentSortMode {
+  if (sort === "name-last") return "last"
+  if (sort === "name-first") return "first"
+  return defaultStudentSortMode(nameOrder)
 }
 
 // The sort the submissions view opens in: by whichever name part the user's
 // name order leads with, so the default listing reads alphabetically.
 export function defaultSubmissionSort(nameOrder: NameOrder): SubmissionSort {
   return nameOrder === "last-first" ? "name-last" : "name-first"
+}
+
+// The Student column header's two sorts: "ascending" is the one that matches
+// the user's name order (and the default view), so the header never reports
+// the default listing as sorted descending.
+export function nameSortDirections(nameOrder: NameOrder): {
+  asc: SubmissionSort
+  desc: SubmissionSort
+} {
+  const asc = defaultSubmissionSort(nameOrder)
+  return { asc, desc: asc === "name-first" ? "name-last" : "name-first" }
 }
 
 // Who has accepted an INDIVIDUAL assignment, derived from the org repo list: a
@@ -1185,8 +1202,8 @@ export function buildScoresCsvRows(
   // submitters in submission-time order, then the (timeless) non-submitters.
   // Defaults to last-name so existing callers/tests keep the gradebook order.
   sort: SubmissionSort = "name-last",
-  // The user's name order, so the `name` column reads as it does on screen. The
-  // `first_name`/`last_name` columns stay split for sheets that sort themselves.
+  // The user's name order for the `name` column. The `first_name`/`last_name`
+  // columns stay split for sheets that sort themselves.
   nameOrder: NameOrder = DEFAULT_NAME_ORDER,
 ): ScoresCsvRow[] {
   // Carry the resolved student alongside each row so the final ordering can use

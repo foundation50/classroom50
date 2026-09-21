@@ -122,7 +122,11 @@ describe("CsvRosterView", () => {
       screen
         .getAllByRole("row")
         // Skip the header row (no data cell); read the bold display-name cell.
-        .map((r) => within(r).queryByText(/Zed Adams|Amy Brown/)?.textContent)
+        .map(
+          (r) =>
+            within(r).queryByText(/Zed Adams|Amy Brown|Adams, Zed|Brown, Amy/)
+              ?.textContent,
+        )
         .filter(Boolean)
 
     // Defaults to first-name order.
@@ -132,8 +136,10 @@ describe("CsvRosterView", () => {
       target: { value: "last" },
     })
 
-    // Last-name order: Adams (Zed) before Brown (Amy).
-    expect(names()).toEqual(["Zed Adams", "Amy Brown"])
+    // Last-name order: Adams (Zed) before Brown (Amy), labeled "Last, First"
+    // so each row reads in the order it sorts (same rule as the submissions
+    // table).
+    expect(names()).toEqual(["Adams, Zed", "Brown, Amy"])
   })
 
   it("renders the load error with retry instead of the empty state", () => {

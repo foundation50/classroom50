@@ -8,6 +8,8 @@ import {
   initialsFromParts,
   nameFromParts,
   nameLastFirst,
+  nameSearchFields,
+  orderedNameParts,
   sortStudentsByName,
   studentSortKeyByLastName,
 } from "@/util/students"
@@ -83,12 +85,16 @@ describe("getDisplayName — name-order and sort-mode-aware roster display name"
     )
   })
 
-  it("shows 'Last First' for a last-first user in either sort", () => {
-    expect(getDisplayName("alice", roster, "last-first", "first")).toBe(
-      "Zephyr Alice",
-    )
+  it("shows 'Last First' for a last-first user by default and under a last-name sort", () => {
+    expect(getDisplayName("alice", roster, "last-first")).toBe("Zephyr Alice")
     expect(getDisplayName("alice", roster, "last-first", "last")).toBe(
       "Zephyr Alice",
+    )
+  })
+
+  it("leads with the first name for a last-first user who sorts by first name", () => {
+    expect(getDisplayName("alice", roster, "last-first", "first")).toBe(
+      "Alice Zephyr",
     )
   })
 
@@ -131,6 +137,32 @@ describe("formatName / getName — name order preference", () => {
   it("defaultStudentSortMode sorts by whichever part leads", () => {
     expect(defaultStudentSortMode("first-last")).toBe("first")
     expect(defaultStudentSortMode("last-first")).toBe("last")
+  })
+
+  it("orderedNameParts is the one order switch formatName builds on", () => {
+    expect(orderedNameParts("ada", "lovelace", "first-last")).toEqual([
+      "ada",
+      "lovelace",
+    ])
+    expect(orderedNameParts("ada", "lovelace", "last-first")).toEqual([
+      "lovelace",
+      "ada",
+    ])
+  })
+})
+
+describe("nameSearchFields — a name in both orders for search", () => {
+  it("returns both orders, capitalized like the display forms", () => {
+    expect(nameSearchFields("ada", "lovelace")).toEqual([
+      "Ada Lovelace",
+      "Lovelace Ada",
+    ])
+  })
+
+  it("collapses to one entry when only one part is present, none when nameless", () => {
+    expect(nameSearchFields("cher", "")).toEqual(["Cher"])
+    expect(nameSearchFields(undefined, "prince")).toEqual(["Prince"])
+    expect(nameSearchFields("", "  ")).toEqual([])
   })
 })
 

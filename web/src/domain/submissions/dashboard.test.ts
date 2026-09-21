@@ -57,6 +57,9 @@ import {
   orgReposReadEnabled,
   unsubmittedGroupRepos,
   withSnapshotDetected,
+  defaultSubmissionSort,
+  nameSortDirections,
+  sortNameMode,
   type DisplayListInputs,
   type SubmissionFilters,
   type SubmissionSort,
@@ -340,6 +343,31 @@ describe("computeStats", () => {
   })
 })
 
+describe("name sort helpers follow the user's name order", () => {
+  it("defaultSubmissionSort opens on the leading name part", () => {
+    expect(defaultSubmissionSort("first-last")).toBe("name-first")
+    expect(defaultSubmissionSort("last-first")).toBe("name-last")
+  })
+
+  it("nameSortDirections makes the default view the ascending one", () => {
+    expect(nameSortDirections("first-last")).toEqual({
+      asc: "name-first",
+      desc: "name-last",
+    })
+    expect(nameSortDirections("last-first")).toEqual({
+      asc: "name-last",
+      desc: "name-first",
+    })
+  })
+
+  it("sortNameMode maps a time sort to the user's leading part", () => {
+    expect(sortNameMode("name-last", "first-last")).toBe("last")
+    expect(sortNameMode("name-first", "last-first")).toBe("first")
+    expect(sortNameMode("recent", "first-last")).toBe("first")
+    expect(sortNameMode("recent", "last-first")).toBe("last")
+  })
+})
+
 describe("rowMatchesQuery", () => {
   const students = [student({ username: "alice", first_name: "Alice" })]
 
@@ -357,6 +385,13 @@ describe("rowMatchesQuery", () => {
     expect(
       rowMatchesQuery(row({ usernames: ["alice"] }), "adams", students),
     ).toBe(true)
+  })
+
+  it("matches a full name typed in either order", () => {
+    const alice = row({ usernames: ["alice"] })
+    expect(rowMatchesQuery(alice, "alice adams", students)).toBe(true)
+    expect(rowMatchesQuery(alice, "adams alice", students)).toBe(true)
+    expect(rowMatchesQuery(alice, "adams bob", students)).toBe(false)
   })
 
   it("does not match an unrelated query", () => {
@@ -830,6 +865,13 @@ describe("filterNonSubmitters", () => {
     expect(out.map((s) => s.username)).toEqual(["bob"])
   })
 
+  it("matches a full name typed in either order", () => {
+    for (const q of ["bob brown", "brown bob"]) {
+      const out = filterNonSubmitters(roster, q, DEFAULT_FILTERS, accepted)
+      expect(out.map((s) => s.username)).toEqual(["bob"])
+    }
+  })
+
   it("accepted filter keeps only those who accepted", () => {
     const out = filterNonSubmitters(
       roster,
@@ -976,6 +1018,22 @@ describe("buildScoresCsvRows", () => {
     expect(out[0].first_name).toBe("")
     expect(out[0].last_name).toBe("")
     expect(out[0].usernames).toBe("ghost")
+  })
+
+  it("writes the name column in the user's name order, keeping the parts split", () => {
+    const roster = [
+      student({ username: "alice", first_name: "Alice", last_name: "Adams" }),
+    ]
+    const out = buildScoresCsvRows(
+      [row({ usernames: ["alice"], datetime: "2026-06-20T10:00:00Z" })],
+      [],
+      roster,
+      "name-last",
+      "last-first",
+    )
+    expect(out[0].name).toBe("Adams Alice")
+    expect(out[0].first_name).toBe("Alice")
+    expect(out[0].last_name).toBe("Adams")
   })
 
   it("exports a blank submitted_at (not a crash) for a dateless pending row", () => {

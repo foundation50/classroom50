@@ -44,7 +44,7 @@ export function useUserPreference<K extends UserPreferenceKey>(
 // Holds every registry preference (lib/userPreferences.ts) reactively, so the
 // Settings page and each consuming view re-render together on a change, in
 // this tab or another. Mirrors HiddenOrgsProvider's context-over-localStorage
-// shape; adding a preference needs no change here.
+// shape.
 export const UserPreferencesProvider = ({
   children,
 }: {

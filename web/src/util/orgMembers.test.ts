@@ -212,6 +212,33 @@ describe("aggregateOrgMembers", () => {
   })
 })
 
+describe("aggregateOrgMembers — name order", () => {
+  const ada = student({
+    username: "ada",
+    github_id: "7",
+    first_name: "Ada",
+    last_name: "Lovelace",
+  })
+
+  it("names the row in the user's order and carries both orders for search", () => {
+    const [row] = aggregateOrgMembers(
+      [member(7, "ada")],
+      [roster("cs101", [ada])],
+      undefined,
+      {},
+      "last-first",
+    )
+    expect(row.name).toBe("Lovelace Ada")
+    expect(row.searchNames).toEqual(["Ada Lovelace", "Lovelace Ada"])
+  })
+
+  it("leaves searchNames unset for a member known only by GitHub profile", () => {
+    const [row] = aggregateOrgMembers([member(9, "hubot", "Hubot")], [])
+    expect(row.name).toBe("Hubot")
+    expect(row.searchNames).toBeUndefined()
+  })
+})
+
 describe("aggregateOrgMembers — team-verified membership / unprovisioned", () => {
   it("marks a member on the team as enrolled with nothing unprovisioned", () => {
     const rows = aggregateOrgMembers(

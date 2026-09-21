@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_NAME_ORDER,
   formatName,
+  nameSearchFields,
   resolveGitHubId,
   type NameOrder,
 } from "./students"
@@ -59,6 +60,10 @@ export type OrgMemberRow = {
   username: string
   github_id: string
   name: string
+  // Every form of `name` a search should hit: both orders of a roster name
+  // (whichever order the user reads in). Absent for a GitHub profile name,
+  // which has no parts to reorder; search on `name` then.
+  searchNames?: string[]
   // The primary email (first seen across rosters) — identity keys fall back
   // to it. `emails` is every distinct address the rosters (or, for a
   // roster-less member, the GitHub profile) know.
@@ -162,6 +167,7 @@ export function aggregateOrgMembers(
     username: string
     github_id: string
     name: string
+    searchNames: string[]
     email: string
     emails: string[]
     classrooms: RawAccess[]
@@ -197,13 +203,20 @@ export function aggregateOrgMembers(
         if (!existing.email && student.email) existing.email = student.email
         addEmail(existing, student.email)
         const name = fullName(student, nameOrder)
-        if (!existing.name && name) existing.name = name
+        if (!existing.name && name) {
+          existing.name = name
+          existing.searchNames = nameSearchFields(
+            student.first_name,
+            student.last_name,
+          )
+        }
       } else {
         const acc: Acc = {
           key,
           username: student.username ?? "",
           github_id: student.github_id ?? "",
           name: fullName(student, nameOrder),
+          searchNames: nameSearchFields(student.first_name, student.last_name),
           email: student.email ?? "",
           emails: [],
           classrooms: [access],
@@ -272,6 +285,7 @@ export function aggregateOrgMembers(
       // that matched only by login would otherwise be shown/used.
       github_id: matchedId || acc.github_id,
       name: acc.name,
+      searchNames: acc.searchNames,
       email: acc.email,
       emails: acc.emails,
       isMember,

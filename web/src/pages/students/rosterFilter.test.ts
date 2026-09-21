@@ -53,6 +53,23 @@ describe("filterRosterRows", () => {
     expect(out.map((r) => r.username)).toEqual(["tessa"])
   })
 
+  it("matches a full name typed in either order", () => {
+    const named = [
+      row({
+        username: "ada",
+        first_name: "Ada",
+        last_name: "Lovelace",
+        roles: ["student"],
+      }),
+      ...rows,
+    ]
+    for (const query of ["ada lovelace", "lovelace ada"]) {
+      expect(
+        filterRosterRows(named, { ...base, query }).map((r) => r.username),
+      ).toEqual(["ada"])
+    }
+  })
+
   it("a multi-role person appears under each of their roles", () => {
     expect(
       filterRosterRows(rows, { ...base, roleFilter: "teacher" }).map(

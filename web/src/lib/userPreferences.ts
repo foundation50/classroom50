@@ -1,5 +1,6 @@
 import { localStorageOrNull, setItemOrIgnore } from "@/lib/webStorage"
 import {
+  DEFAULT_NAME_ORDER,
   NAME_ORDERS,
   type UserPreferenceKey,
   type UserPreferences,
@@ -10,10 +11,6 @@ import {
 // and clearable on its own). Theme, motion, and language stay in their own
 // modules: they also drive an anti-flash script or an OS media query, which
 // this plain enum store deliberately doesn't model.
-//
-// To add a preference: extend `UserPreferences` in types/preferences.ts and add
-// its entry here. The mapped type makes a missing or mistyped entry a compile
-// error, and the provider/settings page pick it up through the generic API.
 type PreferenceSpec<T extends string> = {
   storageKey: string
   values: readonly T[]
@@ -26,7 +23,7 @@ export const USER_PREFERENCE_SPECS: {
   nameOrder: {
     storageKey: "classroom50:name-order",
     values: NAME_ORDERS,
-    default: "first-last",
+    default: DEFAULT_NAME_ORDER,
   },
 }
 

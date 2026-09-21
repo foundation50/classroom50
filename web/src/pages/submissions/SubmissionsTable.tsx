@@ -39,6 +39,7 @@ import {
   buildSortedDisplayItems,
   hasAccepted,
   isNameSort,
+  nameSortDirections,
   pageBounds,
   paginateDisplayItems,
   paginationRange,
@@ -492,11 +493,11 @@ const SubmissionsTable = ({
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
 
-  // Row identity follows the user's name order; a first-last user sorting by
-  // last name additionally reads "Last, First" so the label matches the sort
-  // (getDisplayName). sortNameMode already maps time sorts to "first".
+  // Row identity reads in the order it sorts (getDisplayName); under a time
+  // sort sortNameMode falls back to the user's name order.
   const nameOrder = useUserPreference("nameOrder")
-  const nameDisplayMode = sortNameMode(sort)
+  const nameDisplayMode = sortNameMode(sort, nameOrder)
+  const nameSorts = nameSortDirections(nameOrder)
   const nameOf = (login: string) => getName(login, students, nameOrder)
 
   // The submission whose type-aware details modal is open, or null. Captured
@@ -956,8 +957,8 @@ const SubmissionsTable = ({
                   : t("submissions.table.colStudent")
               }
               sort={sort}
-              asc="name-first"
-              desc="name-last"
+              asc={nameSorts.asc}
+              desc={nameSorts.desc}
               onSortChange={onSortChange}
               title={t("submissions.table.sortByName")}
             />
