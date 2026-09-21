@@ -2,7 +2,14 @@ import { useMemo } from "react"
 
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { unassignedRosterStudents } from "@/domain/teams/groupTeams"
+import {
+  DEFAULT_NAME_ORDER,
+  formatName,
+  initialsFromParts,
+  type NameOrder,
+} from "@/util/students"
 import type { TeamRosterRow } from "@/util/teamRoster"
 
 // A roster student the group add pickers can offer (enrolled, on none of the
@@ -51,14 +58,15 @@ export function useGroupRoster(
     () => new Set(enrolled.map((row) => row.username.trim().toLowerCase())),
     [enrolled],
   )
+  const nameOrder = useUserPreference("nameOrder")
   const fullNameByLogin = useMemo(() => {
     const map = new Map<string, string>()
     for (const row of enrolled) {
-      const name = `${row.first_name} ${row.last_name}`.trim()
+      const name = formatName(row.first_name, row.last_name, nameOrder)
       if (name) map.set(row.username.trim().toLowerCase(), name)
     }
     return map
-  }, [enrolled])
+  }, [enrolled, nameOrder])
   return {
     enrolled,
     rosterLogins,
@@ -69,16 +77,15 @@ export function useGroupRoster(
 
 // Roster students on none of the assignment's teams, shaped for the add
 // pickers and the unassigned panel. Pure; callers memo on
-// (enrolled, assignedLogins).
+// (enrolled, assignedLogins, nameOrder).
 export function toGroupPickerStudents(
   enrolled: readonly TeamRosterRow[],
   assignedLogins: ReadonlySet<string>,
+  nameOrder: NameOrder = DEFAULT_NAME_ORDER,
 ): GroupPickerStudent[] {
   return unassignedRosterStudents(enrolled, assignedLogins).map((row) => {
-    const name = `${row.first_name} ${row.last_name}`.trim()
-    const initials = (
-      row.first_name.trim().charAt(0) + row.last_name.trim().charAt(0)
-    ).toUpperCase()
+    const name = formatName(row.first_name, row.last_name, nameOrder)
+    const initials = initialsFromParts(row.first_name, row.last_name)
     return {
       key: row.key,
       username: row.username,

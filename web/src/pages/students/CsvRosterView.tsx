@@ -15,15 +15,28 @@ import { coerceImportRole } from "./rosterImportParse"
 import type { Student } from "@/types/classroom"
 import { studentKey } from "@/util/identity"
 import {
-  DEFAULT_STUDENT_SORT,
+  defaultStudentSortMode,
+  formatSortedName,
   sortStudentsByName,
+  type NameOrder,
   type StudentSortMode,
 } from "@/util/students"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 
-function displayName(student: Student): string {
-  const full = `${student.first_name} ${student.last_name}`.trim()
-  // Fall back to the address for a pending email invite: it carries no username,
-  // and without this the row renders completely blank.
+// Reads in the order it sorts (formatSortedName), falling back to the address
+// for a pending email invite: it carries no username, and without this the
+// row renders completely blank.
+function displayName(
+  student: Student,
+  order: NameOrder,
+  sortMode: StudentSortMode,
+): string {
+  const full = formatSortedName(
+    student.first_name,
+    student.last_name,
+    order,
+    sortMode,
+  )
   return full || student.username || student.email
 }
 
@@ -49,8 +62,10 @@ const CsvRosterView = ({
   onRetryLoad?: () => void
 }) => {
   const { t } = useTranslation()
-  const [sortMode, setSortMode] =
-    useState<StudentSortMode>(DEFAULT_STUDENT_SORT)
+  const nameOrder = useUserPreference("nameOrder")
+  const [sortMode, setSortMode] = useState<StudentSortMode>(() =>
+    defaultStudentSortMode(nameOrder),
+  )
 
   const rows = useMemo(
     () => sortStudentsByName(students, sortMode),
@@ -96,7 +111,9 @@ const CsvRosterView = ({
               // don't collide on an empty key.
               <tr key={studentKey(student)}>
                 <td>
-                  <div className="font-bold">{displayName(student)}</div>
+                  <div className="font-bold">
+                    {displayName(student, nameOrder, sortMode)}
+                  </div>
                   {student.username ? (
                     <div className="font-mono text-xs text-base-content/70">
                       {student.username}

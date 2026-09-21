@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 
 import {
   Alert,
@@ -60,6 +61,7 @@ export function GroupsManager({
   formation: TeamFormation
 }) {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const { user } = useGithubAuth()
 
   const teamsQuery = useGroupTeams(org, classroom, assignmentSlug)
@@ -85,8 +87,8 @@ export function GroupsManager({
   // Students not on ANY of this assignment's teams — the add pickers' options
   // and the unassigned panel's rows.
   const availableStudents = useMemo(
-    () => toGroupPickerStudents(enrolled, assignedLogins),
-    [enrolled, assignedLogins],
+    () => toGroupPickerStudents(enrolled, assignedLogins, nameOrder),
+    [enrolled, assignedLogins, nameOrder],
   )
 
   // The classroom's OTHER team-mode assignments: the "Copy groups" sources.

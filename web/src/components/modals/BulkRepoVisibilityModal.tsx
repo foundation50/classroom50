@@ -16,7 +16,7 @@ import {
 } from "@/components/bulk/resultView"
 import {
   failedAndDeferredSections,
-  ownerDisplayName,
+  useOwnerDisplayName,
   partitionOutcomes,
   runBulkFanOut,
 } from "@/components/bulk/fanOut"
@@ -70,7 +70,7 @@ export function BulkRepoVisibilityModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = ownerDisplayName(students)
+  const displayFor = useOwnerDisplayName(students)
   const nothingSelected = choice === "keep"
 
   const run = async () => {

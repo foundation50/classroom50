@@ -651,7 +651,8 @@ const STATE_ORDER: Record<TeamRosterRowState, number> = {
 }
 
 // The roster table's header sorts — one comparator per sortable column:
-//   member   — display name (first-name collation, like the default sort);
+//   member   — display name, in the name mode the default sort uses (the part
+//              the user's name order leads with);
 //   username — GitHub handle, blanks (pending email invites) pinned last;
 //   role     — highest-ranked role, asc = teacher first (the natural "by role"
 //              reading);
@@ -666,11 +667,16 @@ export function sortTeamRosterRowsBy(
   rows: TeamRosterRow[],
   column: RosterTableSortColumn,
   direction: "asc" | "desc",
+  mode: StudentSortMode = DEFAULT_STUDENT_SORT,
 ): TeamRosterRow[] {
   const topRank = (row: TeamRosterRow) =>
     Math.max(0, ...row.roles.map((role) => ROLE_RANK[role]))
   const byName = (a: TeamRosterRow, b: TeamRosterRow) =>
-    sortName(a).localeCompare(sortName(b), undefined, NAME_COLLATION)
+    sortName(a, mode).localeCompare(
+      sortName(b, mode),
+      undefined,
+      NAME_COLLATION,
+    )
   return sortByColumn(
     rows,
     direction,

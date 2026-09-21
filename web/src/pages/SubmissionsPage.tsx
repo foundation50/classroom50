@@ -69,6 +69,7 @@ import {
   buildScoresCsvRows,
   buildSectionLookup,
   computeStats,
+  defaultSubmissionSort,
   displayPageOwners,
   distinctSections,
   existingGroupRepos,
@@ -128,6 +129,7 @@ import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { DeleteAssignmentConfirm } from "@/pages/assignments/AssignmentRowActions"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -417,12 +419,14 @@ const SubmissionsPageContent = () => {
     }
     return set
   }, [teamRows, orgRepos, isGroupFlavor, classroom, assignment])
-  const [sort, setSort] = useState<SubmissionSort>("name-first")
-  // The roster spine's name order follows the user's first/last choice in every
-  // mode. `sortNameMode` maps a time sort to first-name order, so a non-name
-  // sort is unaffected; the spine, the table display list, and the page-scoped
-  // fan-out all stay keyed on the same name mode.
-  const rosterSortMode = sortNameMode(sort)
+  const nameOrder = useUserPreference("nameOrder")
+  const [sort, setSort] = useState<SubmissionSort>(() =>
+    defaultSubmissionSort(nameOrder),
+  )
+  // The roster spine's name order follows the active name sort, or the user's
+  // name order under a time sort; the spine, the table display list, and the
+  // page-scoped fan-out all stay keyed on the same name mode.
+  const rosterSortMode = sortNameMode(sort, nameOrder)
   const students: Student[] = useMemo(
     () =>
       sortStudentsByName(
@@ -1194,6 +1198,7 @@ const SubmissionsPageContent = () => {
       csvNonSubmitters,
       students,
       sort,
+      nameOrder,
     )
 
     const csv = Papa.unparse(rows, {

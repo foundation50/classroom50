@@ -9,6 +9,7 @@ import {
 } from "@/components/memberList/memberPresentation"
 import { rowStatusBadges } from "@/util/classroomRoleUI"
 import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { ClickableTr } from "@/lib/motionComponents"
 import type { TeamRosterRow } from "@/util/teamRoster"
 
@@ -42,7 +43,8 @@ export const RosterRow = ({
   showSection?: boolean
 }) => {
   const { t } = useTranslation()
-  const member = rosterRowToMemberRow(row)
+  const nameOrder = useUserPreference("nameOrder")
+  const member = rosterRowToMemberRow(row, nameOrder)
   const displayName = member.name
   const displayHandle = row.username || row.email
   const displayInitials = rosterRowInitials(row)

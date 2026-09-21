@@ -1,4 +1,4 @@
-import { nameFromParts } from "@/util/students"
+import { nameSearchFields } from "@/util/students"
 import {
   hasExpiredInvite,
   type ClassroomRole,
@@ -51,7 +51,7 @@ export function filterRosterRows(
     return matchesQuery(
       query,
       row.username,
-      nameFromParts(row.first_name, row.last_name),
+      ...nameSearchFields(row.first_name, row.last_name),
       row.email,
     )
   })

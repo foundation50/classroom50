@@ -1,6 +1,8 @@
 import type { TFunction } from "i18next"
+import { useCallback } from "react"
 
 import { describeWriteFailure } from "@/components/modals/collaboratorHelpers"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { GitHubAPIError } from "@/github-core/errors"
 import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import type { Student } from "@/types/classroom"
@@ -108,11 +110,16 @@ export function partitionOutcomes<O extends AnyOutcome>(outcomes: O[]) {
   }
 }
 
-// How a bulk result names an owner: roster name when known, else the login.
-export const ownerDisplayName =
-  (students: Student[]) =>
-  (login: string): string =>
-    getName(login, students) || login
+// How a bulk result names an owner: roster name (in the user's name order) when
+// known, else the login. A hook so the eight bulk modals don't each read the
+// preference and rebind.
+export const useOwnerDisplayName = (students: Student[]) => {
+  const nameOrder = useUserPreference("nameOrder")
+  return useCallback(
+    (login: string): string => getName(login, students, nameOrder) || login,
+    [students, nameOrder],
+  )
+}
 
 // One result section from a group of outcomes, or none when the group is
 // empty. `titleKey` takes `count`; a row's own `detail` wins over the fallback

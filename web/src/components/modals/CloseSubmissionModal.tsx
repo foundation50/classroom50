@@ -6,7 +6,7 @@ import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
 import { BulkProgressBlock, BulkResultBody } from "@/components/bulk/resultView"
 import {
   failedAndDeferredSections,
-  ownerDisplayName,
+  useOwnerDisplayName,
   partitionOutcomes,
 } from "@/components/bulk/fanOut"
 import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
@@ -70,7 +70,7 @@ export function CloseSubmissionModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = ownerDisplayName(students)
+  const displayFor = useOwnerDisplayName(students)
 
   // Set every accepted student's role on their own repo. `flipFlag` runs the
   // full close/reopen (flag flip first, then fan-out); `finishOnly` skips the

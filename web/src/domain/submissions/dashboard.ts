@@ -22,12 +22,16 @@ import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import { dueDeadlineInstant } from "@/util/formatDate"
 import {
   compareStudentsByName,
-  getName,
+  DEFAULT_NAME_ORDER,
+  defaultStudentSortMode,
+  formatName,
   nameFromParts,
+  nameSearchFields,
   NAME_COLLATION,
   placeholderStudent,
   resolveStudent,
   studentSortKeyFor,
+  type NameOrder,
   type StudentSortMode,
 } from "@/util/students"
 import {
@@ -697,10 +701,32 @@ export function isNameSort(sort: SubmissionSort): boolean {
   return sort === "name-first" || sort === "name-last"
 }
 
-// The roster sort mode a name sort maps to; time sorts default to first-name
-// (used only when a caller needs a mode regardless of the sort).
-export function sortNameMode(sort: SubmissionSort): StudentSortMode {
-  return sort === "name-last" ? "last" : "first"
+// The roster sort mode a sort maps to. A time sort has no name direction of
+// its own, so it takes the one the user's name order leads with.
+export function sortNameMode(
+  sort: SubmissionSort,
+  nameOrder: NameOrder = DEFAULT_NAME_ORDER,
+): StudentSortMode {
+  if (sort === "name-last") return "last"
+  if (sort === "name-first") return "first"
+  return defaultStudentSortMode(nameOrder)
+}
+
+// The sort the submissions view opens in: by whichever name part the user's
+// name order leads with, so the default listing reads alphabetically.
+export function defaultSubmissionSort(nameOrder: NameOrder): SubmissionSort {
+  return nameOrder === "last-first" ? "name-last" : "name-first"
+}
+
+// The Student column header's two sorts: "ascending" is the one that matches
+// the user's name order (and the default view), so the header never reports
+// the default listing as sorted descending.
+export function nameSortDirections(nameOrder: NameOrder): {
+  asc: SubmissionSort
+  desc: SubmissionSort
+} {
+  const asc = defaultSubmissionSort(nameOrder)
+  return { asc, desc: asc === "name-first" ? "name-last" : "name-first" }
 }
 
 // Who has accepted an INDIVIDUAL assignment, derived from the org repo list: a
@@ -971,8 +997,8 @@ export function applyStatusSelection(
 }
 
 // Case-insensitive match of a query against a row's identities: each credited
-// username plus its roster display name (so searching a real name works though
-// scores.json only carries logins).
+// username plus its roster name in either order (so searching a real name works
+// though scores.json only carries logins, whichever way the user reads names).
 export function rowMatchesQuery(
   row: SubmissionRow,
   query: string,
@@ -982,8 +1008,10 @@ export function rowMatchesQuery(
   if (!q) return true
   return row.usernames.some((username) => {
     if (username.toLowerCase().includes(q)) return true
-    const name = getName(username, students)
-    return Boolean(name) && name.toLowerCase().includes(q)
+    const student = resolveStudent(username, students)
+    return nameSearchFields(student.first_name, student.last_name).some(
+      (name) => name.toLowerCase().includes(q),
+    )
   })
 }
 
@@ -1116,13 +1144,11 @@ export function filterNonSubmitters(
   const q = query.trim().toLowerCase()
   return nonSubmitters.filter((student) => {
     if (q) {
-      const name = `${student.first_name} ${student.last_name}`
-        .trim()
-        .toLowerCase()
-      if (
-        !student.username.toLowerCase().includes(q) &&
-        !(Boolean(name) && name.includes(q))
-      ) {
+      const nameHit = nameSearchFields(
+        student.first_name,
+        student.last_name,
+      ).some((name) => name.toLowerCase().includes(q))
+      if (!student.username.toLowerCase().includes(q) && !nameHit) {
         return false
       }
     }
@@ -1176,6 +1202,9 @@ export function buildScoresCsvRows(
   // submitters in submission-time order, then the (timeless) non-submitters.
   // Defaults to last-name so existing callers/tests keep the gradebook order.
   sort: SubmissionSort = "name-last",
+  // The user's name order for the `name` column. The `first_name`/`last_name`
+  // columns stay split for sheets that sort themselves.
+  nameOrder: NameOrder = DEFAULT_NAME_ORDER,
 ): ScoresCsvRow[] {
   // Carry the resolved student alongside each row so the final ordering can use
   // the shared name comparator (last name, then first, then username) — the
@@ -1189,7 +1218,7 @@ export function buildScoresCsvRows(
   // reported names are as untrusted as the login/URL columns.
   const nameColumns = (student: Student) => ({
     name: escapeCsvFormulaInjection(
-      nameFromParts(student.first_name, student.last_name),
+      formatName(student.first_name, student.last_name, nameOrder),
     ),
     first_name: escapeCsvFormulaInjection(student.first_name.trim()),
     last_name: escapeCsvFormulaInjection(student.last_name.trim()),
@@ -1644,8 +1673,10 @@ export function filterDisplayList({
           if (!groupInSection(repo.owner)) return false
           if (!q) return true
           if (repo.owner.toLowerCase().includes(q)) return true
-          const name = getName(repo.owner, students).toLowerCase()
-          return name.length > 0 && name.includes(q)
+          const founder = resolveStudent(repo.owner, students)
+          return nameSearchFields(founder.first_name, founder.last_name).some(
+            (name) => name.toLowerCase().includes(q),
+          )
         })
       : groupRepos,
     teamsWithoutRepos: filterGroups

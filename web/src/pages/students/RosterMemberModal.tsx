@@ -28,11 +28,12 @@ import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { errorText } from "@/types/localizedMessage"
 import {
+  formatName,
   isMalformedGitHubId,
-  nameFromParts,
   resolveGitHubId,
 } from "@/util/students"
-import { rosterRowInitials } from "@/util/memberRow"
+import { rosterRowInitials, rosterRowLabel } from "@/util/memberRow"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import {
   githubOrgRoleForRole,
   rowToStudent,
@@ -133,6 +134,7 @@ const RosterMemberModal = ({
   onError: (rowKey: string, message: string) => void
 }) => {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const client = useGitHubClient()
   const reinviteEmailRow = useReinviteEmailRow(org, classroom)
   const canManage = canManageProp
@@ -250,8 +252,7 @@ const RosterMemberModal = ({
   // team's name, so a rewrite would orphan the row from its own invitation. A
   // wrong address is fixed by cancelling and re-inviting.
   const lockEmail = row.state === "pending" && !row.username
-  const displayName =
-    nameFromParts(row.first_name, row.last_name) || row.username || row.email
+  const displayName = rosterRowLabel(row, nameOrder)
   const displayInitials = rosterRowInitials(row)
   const label = row.username || row.email
   const statusBadges = rowStatusBadges(row)
@@ -995,7 +996,7 @@ const RosterMemberModal = ({
           ) : (
             <dl className="divide-y divide-base-300 rounded-box border border-base-300">
               <DetailRow label={t("students.nameColumn")}>
-                {nameFromParts(row.first_name, row.last_name) || (
+                {formatName(row.first_name, row.last_name, nameOrder) || (
                   <NotSetValue>{t("students.notSet")}</NotSetValue>
                 )}
               </DetailRow>

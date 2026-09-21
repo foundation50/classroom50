@@ -237,7 +237,14 @@ const OrgMembersPage = () => {
   const filtered = useMemo(() => {
     const base = filterOrgMemberRows(
       rows.filter((row) => {
-        if (!matchesQuery(query, row.username, row.name, row.email)) {
+        if (
+          !matchesQuery(
+            query,
+            row.username,
+            ...(row.searchNames ?? [row.name]),
+            row.email,
+          )
+        ) {
           return false
         }
         // Classroom filter: all / no-classroom / a specific classroom.

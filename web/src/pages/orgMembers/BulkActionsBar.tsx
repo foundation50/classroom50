@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import {
   PaperAirplaneIcon,
   PlusIcon,
@@ -71,6 +72,7 @@ const BulkActionsBar = ({
   onDone: (input: BulkDoneInput) => void
 }) => {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const bulkAdd = useBulkAddToClassroom(org)
   const bulkInvite = useBulkInviteMembersToOrg(org)
   const bulkRemove = useBulkRemoveFromClassroom(org)
@@ -186,7 +188,7 @@ const BulkActionsBar = ({
           members,
           onProgress: bulk.setProgress,
         })
-        result = buildAddResult(res, targetName, t)
+        result = buildAddResult(res, targetName, t, nameOrder)
         onDone({
           classroom: target,
           action: "add",

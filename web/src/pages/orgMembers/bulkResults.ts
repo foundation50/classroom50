@@ -5,6 +5,7 @@ import type { BulkInviteMembersResult } from "@/domain/orgMembers/bulkInviteMemb
 import type { BulkRemoveFromClassroomResult } from "@/domain/orgMembers/bulkRemoveFromClassroom"
 import type { BulkRemoveFromOrgResult } from "@/domain/orgMembers/bulkRemoveFromOrg"
 import type { BulkResultView } from "@/components/bulk/resultView"
+import { DEFAULT_NAME_ORDER, formatName, type NameOrder } from "@/util/students"
 
 // Pure builders turning each bulk orchestrator's result into the shared
 // result-modal view (headline + sectioned rows).
@@ -13,6 +14,7 @@ export const buildAddResult = (
   res: BulkAddToClassroomResult,
   classroom: string,
   t: TFunction,
+  nameOrder: NameOrder = DEFAULT_NAME_ORDER,
 ): BulkResultView => {
   const added = res.enroll?.addedStudents ?? []
   const csvSkipped = res.enroll?.skippedStudents ?? []
@@ -26,7 +28,7 @@ export const buildAddResult = (
       rows: added.map((s) => ({
         key: s.username,
         label: s.username,
-        detail: [s.first_name, s.last_name].filter(Boolean).join(" "),
+        detail: formatName(s.first_name, s.last_name, nameOrder),
       })),
     })
   }

@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import { useQuery, useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import {
   csvFileQuery,
   jsonFileQuery,
@@ -209,18 +210,26 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
   // rather than as a pending invitation nobody verified.
   const pendingInvitations = pendingInvitesQuery.data
   const failedInvitations = failedInvitesQuery.data
+  const nameOrder = useUserPreference("nameOrder")
   const rows = useMemo(
     () =>
-      aggregateOrgMembers(members, rosters, teamMembersByClassroom, {
-        pending: pendingInvitations,
-        failed: failedInvitations,
-      }),
+      aggregateOrgMembers(
+        members,
+        rosters,
+        teamMembersByClassroom,
+        {
+          pending: pendingInvitations,
+          failed: failedInvitations,
+        },
+        nameOrder,
+      ),
     [
       members,
       rosters,
       teamMembersByClassroom,
       pendingInvitations,
       failedInvitations,
+      nameOrder,
     ],
   )
 

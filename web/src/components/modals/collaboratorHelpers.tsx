@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next"
 
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { getName } from "@/util/students"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { GitHubUser } from "@/github-core/types"
@@ -91,7 +92,8 @@ export const CollaboratorIdentity = ({
   login: string
   students: Student[]
 }) => {
-  const name = getName(login, students)
+  const nameOrder = useUserPreference("nameOrder")
+  const name = getName(login, students, nameOrder)
   return name ? (
     <>
       <span className="block truncate text-sm font-medium">{name}</span>

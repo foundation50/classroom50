@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { HIDDEN_ORGS_STORAGE_KEY } from "@/lib/hiddenOrgsStore"
+import { USER_PREFERENCE_SPECS } from "@/lib/userPreferences"
 import { HiddenOrgsProvider } from "@/context/hiddenOrgs/HiddenOrgsProvider"
+import { UserPreferencesProvider } from "@/context/userPreferences/UserPreferencesProvider"
 import type { DeleteRepoScopeState } from "@/context/github/GitHubProvider"
 
 vi.mock("@/components/PageShell", () => ({
@@ -142,7 +144,9 @@ import SettingsPage from "./SettingsPage"
 const renderPage = () =>
   render(
     <HiddenOrgsProvider>
-      <SettingsPage />
+      <UserPreferencesProvider>
+        <SettingsPage />
+      </UserPreferencesProvider>
     </HiddenOrgsProvider>,
   )
 
@@ -349,5 +353,46 @@ describe("SettingsPage service tokens", () => {
     expect(manage.closest("a")?.getAttribute("href")).toBe(
       "/cs50/settings#service-token",
     )
+  })
+})
+
+describe("SettingsPage student names", () => {
+  const NAME_ORDER_KEY = USER_PREFERENCE_SPECS.nameOrder.storageKey
+  const radio = (label: string) =>
+    screen.getByLabelText(label) as HTMLInputElement
+  const saveButton = () =>
+    screen
+      .getAllByText("common.save")
+      .map((el) => el.closest("form"))
+      .find((form) => form?.querySelector('input[name="name-order-pref"]'))!
+      .querySelector('button[type="submit"]') as HTMLButtonElement
+
+  it("defaults to first-last and only persists on Save", async () => {
+    renderPage()
+    expect(radio("settings.nameOrder.firstLast").checked).toBe(true)
+
+    await userEvent.click(radio("settings.nameOrder.lastFirst"))
+    expect(window.localStorage.getItem(NAME_ORDER_KEY)).toBeNull()
+
+    await userEvent.click(saveButton())
+    expect(window.localStorage.getItem(NAME_ORDER_KEY)).toBe("last-first")
+    expect(screen.getByText("settings.nameOrder.saved")).toBeTruthy()
+  })
+
+  it("reflects a stored choice and clears the key when reset to the default", async () => {
+    window.localStorage.setItem(NAME_ORDER_KEY, "last-first")
+    renderPage()
+    expect(radio("settings.nameOrder.lastFirst").checked).toBe(true)
+
+    await userEvent.click(radio("settings.nameOrder.firstLast"))
+    await userEvent.click(saveButton())
+    expect(window.localStorage.getItem(NAME_ORDER_KEY)).toBeNull()
+  })
+
+  it("reports no changes when Save is pressed without a new choice", async () => {
+    renderPage()
+    await userEvent.click(saveButton())
+    expect(screen.getByText("settings.noChangesToSave")).toBeTruthy()
+    expect(window.localStorage.getItem(NAME_ORDER_KEY)).toBeNull()
   })
 })

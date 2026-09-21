@@ -17,7 +17,8 @@ import {
 } from "@/domain/students"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { useReinviteEmailRow } from "@/hooks/mutations/useReinviteEmailRow"
-import { nameFromParts } from "@/util/students"
+import { rosterRowLabel } from "@/util/memberRow"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { sortRolesByRank, type TeamRosterRow } from "@/util/teamRoster"
 import MemberLinkPicker, {
   type OrgPoolStatus,
@@ -68,6 +69,7 @@ const UnlinkedRowSection = ({
   onError: (rowKey: string, message: string) => void
 }) => {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const client = useGitHubClient()
   // Which workflow is open. The three resolutions are exclusive, so the
   // toolbar hands off to exactly one panel at a time: the link picker or the
@@ -106,8 +108,7 @@ const UnlinkedRowSection = ({
     setLinkOpen(false)
   }
 
-  const displayName =
-    nameFromParts(row.first_name, row.last_name) || row.username || row.email
+  const displayName = rosterRowLabel(row, nameOrder)
 
   // Why the row is stranded, as specifically as GitHub lets us say: an expired
   // invite, a delivery failure with GitHub's reason, an address with no
