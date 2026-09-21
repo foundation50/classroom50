@@ -17,6 +17,18 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.53.0](https://github.com/foundation50/classroom50/compare/cli-v1.52.2...cli-v1.53.0) (2026-09-21)
+
+
+### Features
+
+* backfill the autograde workflow into already-accepted repos ([#1032](https://github.com/foundation50/classroom50/issues/1032)) ([12bef31](https://github.com/foundation50/classroom50/commit/12bef317db9a592766889e4ad7478ada53d54fa7))
+
+
+### Bug Fixes
+
+* mark submission releases the autograde workflow did not publish ([#1037](https://github.com/foundation50/classroom50/issues/1037)) ([8a68393](https://github.com/foundation50/classroom50/commit/8a6839341b1a6990afeb4d38be4d0fcae6fdd1cf))
+
 ## [1.52.2](https://github.com/foundation50/classroom50/compare/cli-v1.52.1...cli-v1.52.2) (2026-09-18)
 
 
