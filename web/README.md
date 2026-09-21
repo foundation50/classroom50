@@ -67,7 +67,9 @@ public identifier, not a secret. If preview reuses the same OAuth app, include
 `webAnalyticsPlugin` in `vite.config.ts` adds the
 [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
 snippet to `index.html` when `VITE_CF_BEACON_TOKEN` holds a site token. No
-token, no script. Tokens are public identifiers, not secrets.
+token, no script. Tokens are public identifiers, not secrets. Cloudflare
+processes the data under its
+[data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
 
 Cloudflare attributes traffic by token and accepts beacons only from the
 hostname registered for that token, so each environment gets its own Cloudflare

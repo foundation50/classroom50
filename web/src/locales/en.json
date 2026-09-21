@@ -4241,7 +4241,9 @@
         "storage": "Cookies, local storage, or fingerprints",
         "identity": "Your GitHub username or roster data"
       },
-      "processing": "Cloudflare processes this data for us under its data processing addendum. It keeps full data for 7 days and a sample for 6 months. Our legal basis is legitimate interest, and you can object at any time by opting out below."
+      "processing": "Cloudflare processes this data for us under its",
+      "processingLink": "data processing addendum",
+      "processingAfter": ". It keeps full data for 7 days and a sample for 6 months. Our legal basis is legitimate interest, and you can object at any time by opting out below."
     },
     "choice": {
       "heading": "Your choice",

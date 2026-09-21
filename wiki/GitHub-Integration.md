@@ -443,8 +443,9 @@ cookies and doesn't track you across sites.
 | Browser, operating system, and device type | |
 | Page load time | |
 
-Cloudflare processes this data for the Fifty Foundation under its data
-processing addendum. It keeps full data for 7 days and a sample for 6 months.
+Cloudflare processes this data for the Fifty Foundation under its
+[data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
+It keeps full data for 7 days and a sample for 6 months.
 The legal basis is legitimate interest, so you can object at any time:
 
 - In the app, open **Settings**, then **Usage analytics**, and select **Don't

@@ -9,6 +9,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { DISCUSSIONS_URL, WIKI_URL } from "@/version"
 
 const PRIVACY_WIKI_URL = `${WIKI_URL}/GitHub-Integration#privacy-and-ferpa`
+const CLOUDFLARE_DPA_URL = "https://www.cloudflare.com/cloudflare-customer-dpa/"
 
 // Public /privacy page: the plain-language privacy notice plus the analytics
 // opt-out, reachable before sign-in so a visitor can object (GDPR Art. 21)
@@ -73,7 +74,11 @@ export default function PrivacyPage() {
               />
             </div>
             <p className="text-base-content/80">
-              {t("privacy.analytics.processing")}
+              {t("privacy.analytics.processing")}{" "}
+              <ExternalLink className="link-primary" href={CLOUDFLARE_DPA_URL}>
+                {t("privacy.analytics.processingLink")}
+              </ExternalLink>
+              {t("privacy.analytics.processingAfter")}
             </p>
           </NoticeCard>
 
