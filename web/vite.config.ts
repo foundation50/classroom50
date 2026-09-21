@@ -28,7 +28,7 @@ import {
   type VerdictOverlay,
 } from "./src/util/a11y/vpatModel.ts"
 import { ASSESSMENT_GUIDANCE } from "./src/util/a11y/assessmentGuidance.ts"
-import { ANALYTICS_STORAGE_KEY } from "./src/types/preferences.ts"
+import { analyticsPlugin } from "./vite/analytics.ts"
 
 // Release identity, resolved once at build time and inlined as compile-time
 // constants (see src/vite-env.d.ts). Version is the single source of truth in
@@ -87,50 +87,6 @@ function versionJsonPlugin(): Plugin {
         res.setHeader("Content-Type", "application/json")
         res.end(body)
       })
-    },
-  }
-}
-
-const CF_BEACON_SRC = "https://static.cloudflareinsights.com/beacon.min.js"
-
-// Injects Cloudflare Web Analytics when VITE_CF_BEACON_TOKEN is set (setup per
-// environment is in web/README.md). Lives here rather than in index.html so the
-// source page stays free of third-party script and its anti-flash drift tests
-// stay valid. The output mirrors the dashboard snippet, except a small loader
-// creates the tag so it can honor GPC / Do Not Track and the in-app opt-out,
-// which the preferences registry stores as the literal "off" under
-// ANALYTICS_STORAGE_KEY. The beacon finds its config via
-// `script[data-cf-beacon]`, so a dynamically added module script works.
-function webAnalyticsPlugin(token: string | undefined): Plugin {
-  // Only the token value belongs in the variable. Quotes, whitespace, or angle
-  // brackets mean the whole dashboard snippet was pasted instead.
-  if (token && !/^[A-Za-z0-9_-]+$/.test(token)) {
-    throw new Error(
-      "VITE_CF_BEACON_TOKEN must be only the token value from the Cloudflare Web Analytics snippet, not the whole <script> tag",
-    )
-  }
-  // Wrapped in an IIFE like the anti-flash scripts so `s` and `off` stay local.
-  // localStorage access throws in some hardened/private modes; treat that as
-  // no opt-out rather than crashing before the app boots.
-  const loader =
-    `(function(){var off=false;` +
-    `try{off=localStorage.getItem(${JSON.stringify(ANALYTICS_STORAGE_KEY)})==="off"}catch(e){}` +
-    `if(navigator.globalPrivacyControl!==true&&navigator.doNotTrack!=="1"&&!off){` +
-    `var s=document.createElement("script");s.type="module";` +
-    `s.src=${JSON.stringify(CF_BEACON_SRC)};` +
-    `s.setAttribute("data-cf-beacon",${JSON.stringify(`{"token": "${token}"}`)});` +
-    `document.body.appendChild(s)}})()`
-  const snippet =
-    `<!-- Cloudflare Web Analytics --><script>${loader}</script>` +
-    `<!-- End Cloudflare Web Analytics -->`
-  return {
-    name: "classroom50:web-analytics",
-    transformIndexHtml(html) {
-      if (!token) return html
-      return html.replace(
-        /^([ \t]*)<\/body>/m,
-        (close, indent: string) => `${indent}  ${snippet}\n${close}`,
-      )
     },
   }
 }
@@ -443,7 +399,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       babel({ presets: [reactCompilerPreset()] }),
       versionJsonPlugin(),
-      webAnalyticsPlugin(env.VITE_CF_BEACON_TOKEN),
+      analyticsPlugin(env),
       contrastAuditPlugin(),
       vpatReportPlugin(),
       assessmentApiPlugin(),
@@ -472,7 +428,10 @@ export default defineConfig(({ mode }) => {
           test: {
             name: "node",
             environment: "node",
-            include: ["src/**/*.{test,spec}.{ts,tsx}"],
+            include: [
+              "src/**/*.{test,spec}.{ts,tsx}",
+              "vite/**/*.{test,spec}.ts",
+            ],
             exclude: ["src/**/*.browser.test.tsx"],
           },
         },

@@ -326,7 +326,7 @@ browser itself must reach these hosts.
 | `*.github.io` | Web app, Actions | The organization's Pages site (`YOUR-ORGANIZATION.github.io/classroom50/…`): the assignment manifest, autograders, and the runner. If the organization's Pages site uses a custom domain, allow that domain too. See [Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain). |
 | `codeload.github.com` | Web app | Repository archive (zip) downloads, reached through the proxy. |
 | `www.githubstatus.com` | Web app | GitHub status check for the outage banner (best-effort). |
-| `static.cloudflareinsights.com`, `cloudflareinsights.com` | Web app | Optional. Anonymous usage analytics on classroom50.org. Blocking them has no effect on the app. See [Usage analytics](#usage-analytics). |
+| `www.googletagmanager.com`, `*.google-analytics.com`, `static.cloudflareinsights.com`, `cloudflareinsights.com` | Web app | Optional. Usage analytics on classroom50.org. Blocking them has no effect on the app. See [Usage analytics](#usage-analytics). |
 
 ### The GitHub proxy
 
@@ -432,35 +432,42 @@ much student data reaches GitHub in the first place:
 
 ### Usage analytics
 
-classroom50.org uses [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
-to count visits and see which countries and sites they come from. It sets no
-cookies and doesn't track you across sites.
+classroom50.org counts visits to see how many people use it and which countries
+and sites they come from. Two services do this: Google Analytics, loaded through
+Google Tag Manager, and [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/).
+Neither is used for advertising, and neither knows who you are.
 
 | Collected | Not collected |
 |---|---|
-| The page path, for example `/cs1-fall-2026/assignments` | Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device. |
-| The site that linked to the page | Cookies, local storage, or fingerprints |
-| Your country, worked out from your connection | Your GitHub username or roster data |
+| The page path, for example `/cs1-fall-2026/assignments` | Query strings. Cloudflare removes them in your browser and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded. |
+| The site that linked to the page | Your GitHub username, email, or roster data |
+| Your country, worked out from your connection | Advertising identifiers or cross-site tracking. Advertising storage is switched off. |
 | Browser, operating system, and device type | |
 | Page load time | |
+| Google Analytics only: a cookie holding a random ID, so a returning browser is counted once. It expires after 2 years, and opting out removes it. | |
 
-Cloudflare processes this data for the Fifty Foundation under its
-[data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
-It keeps full data for 7 days and a sample for 6 months.
-The legal basis is legitimate interest, so you can object at any time:
+Google and Cloudflare process this data for the Fifty Foundation under their
+data processing terms: the
+[Google Ads Data Processing Terms](https://business.safety.google/adsprocessorterms/),
+[How Google uses information from sites that use its services](https://policies.google.com/technologies/partner-sites),
+and the
+[Cloudflare data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
+Google keeps event data for up to 14 months. Cloudflare keeps full data for 7
+days and a sample for 6 months. The legal basis is legitimate interest, so you
+can object at any time:
 
 - In the app, open **Settings**, then **Usage analytics**, and select **Don't
   count my visits**. The same choice is on the public
-  [privacy page](https://classroom50.org/privacy). It applies to that browser
-  from the next page load.
+  [privacy page](https://classroom50.org/privacy). It removes the analytics
+  cookies now and stops both services from the next page load in that browser.
 - In your browser, turn on the Global Privacy Control or Do Not Track signal.
 
 Content blockers and network filters that block the analytics hosts don't
 affect the app. See [Network and allowed domains](#network-and-allowed-domains).
 
-Only classroom50.org and preview.classroom50.org include the script, each
-reporting to its own Cloudflare site. `gh teacher` and `gh student` send no
-analytics.
+Only classroom50.org and preview.classroom50.org include the analytics scripts,
+each reporting to its own Google and Cloudflare properties. `gh teacher` and
+`gh student` send no analytics.
 
 This section describes how Classroom 50 handles data; it isn't legal advice.
 Confirm your obligations with your institution's privacy office.

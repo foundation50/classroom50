@@ -10,6 +10,10 @@ import { DISCUSSIONS_URL, WIKI_URL } from "@/version"
 
 const PRIVACY_WIKI_URL = `${WIKI_URL}/GitHub-Integration#privacy-and-ferpa`
 const CLOUDFLARE_DPA_URL = "https://www.cloudflare.com/cloudflare-customer-dpa/"
+const GOOGLE_DPT_URL = "https://business.safety.google/adsprocessorterms/"
+// Google's Analytics terms require a prominent link to this page.
+const GOOGLE_PARTNER_SITES_URL =
+  "https://policies.google.com/technologies/partner-sites"
 
 // Public /privacy page: the privacy notice plus the analytics opt-out, reachable
 // before sign-in so a visitor can object without an account.
@@ -23,11 +27,12 @@ export default function PrivacyPage() {
     t("privacy.analytics.collected.country"),
     t("privacy.analytics.collected.device"),
     t("privacy.analytics.collected.timings"),
+    t("privacy.analytics.collected.cookie"),
   ]
   const notCollected = [
     t("privacy.analytics.notCollected.queryStrings"),
-    t("privacy.analytics.notCollected.storage"),
     t("privacy.analytics.notCollected.identity"),
+    t("privacy.analytics.notCollected.ads"),
   ]
 
   return (
@@ -71,11 +76,33 @@ export default function PrivacyPage() {
               />
             </div>
             <p className="text-base-content/80">
-              {t("privacy.analytics.processing")}{" "}
-              <ExternalLink className="link-primary" href={CLOUDFLARE_DPA_URL}>
-                {t("privacy.analytics.processingLink")}
-              </ExternalLink>
-              {t("privacy.analytics.processingAfter")}
+              {t("privacy.analytics.processing")}
+            </p>
+            <ul className="list-disc space-y-1 ps-5 text-base-content/80">
+              <li>
+                <ExternalLink className="link-primary" href={GOOGLE_DPT_URL}>
+                  {t("privacy.analytics.googleTerms")}
+                </ExternalLink>
+              </li>
+              <li>
+                <ExternalLink
+                  className="link-primary"
+                  href={GOOGLE_PARTNER_SITES_URL}
+                >
+                  {t("privacy.analytics.googleUsage")}
+                </ExternalLink>
+              </li>
+              <li>
+                <ExternalLink
+                  className="link-primary"
+                  href={CLOUDFLARE_DPA_URL}
+                >
+                  {t("privacy.analytics.cloudflareTerms")}
+                </ExternalLink>
+              </li>
+            </ul>
+            <p className="text-base-content/80">
+              {t("privacy.analytics.retention")}
             </p>
           </NoticeCard>
 

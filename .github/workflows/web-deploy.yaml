@@ -48,11 +48,13 @@ jobs:
       # sees the same tree.
       - uses: ./.github/actions/web-build-gate
 
-      # Cloudflare Web Analytics site token (public, ships in the HTML; see
-      # web/README.md "Usage analytics"). Delete this step to ship without it.
-      - name: Enable Cloudflare Web Analytics
-        if: vars.VITE_CF_BEACON_TOKEN != ''
-        run: echo "VITE_CF_BEACON_TOKEN=${{ vars.VITE_CF_BEACON_TOKEN }}" >> "$GITHUB_ENV"
+      # Switches analytics vendors on for this build from repository variables.
+      # Which vendors exist, and which variable each reads, lives in the action.
+      - name: Enable analytics
+        uses: ./.github/actions/web-analytics-env
+        with:
+          environment: production
+          variables: ${{ toJSON(vars) }}
 
       # `npm run build` runs `tsc -b && vite build`; the type-check is
       # blocking, so a regression fails the deploy instead of silently

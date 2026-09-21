@@ -1135,11 +1135,11 @@
     },
     "analytics": {
       "heading": "Usage analytics",
-      "subheading": "Classroom 50 counts visits anonymously to see how many people use it and where they come from. Nothing identifies you.",
-      "on": "Count my visits anonymously",
-      "onHint": "Shares the page path, browser type, and load time. No cookies, no names, no query strings.",
+      "subheading": "Classroom 50 counts visits to see how many people use it and where they come from. No names or GitHub accounts are involved.",
+      "on": "Count my visits",
+      "onHint": "Shares the page path, browser type, and load time. Google Analytics also sets a cookie with a random ID so a returning browser is counted once.",
       "off": "Don't count my visits",
-      "offHint": "Applies to this browser from the next page load.",
+      "offHint": "Removes the analytics cookies now and applies to this browser from the next page load.",
       "groupAria": "Usage analytics preference",
       "saved": "Usage analytics preference saved. It applies from the next page load.",
       "privacyLink": "Read the privacy notice"
@@ -4226,29 +4226,32 @@
     },
     "analytics": {
       "heading": "Usage analytics",
-      "intro": "classroom50.org uses Cloudflare Web Analytics to count visits and see which countries and sites they come from. It sets no cookies and doesn't track you across sites.",
+      "intro": "classroom50.org uses two services to count visits and see which countries and sites they come from: Google Analytics, loaded through Google Tag Manager, and Cloudflare Web Analytics. Neither is used for advertising, and neither knows who you are.",
       "collectedHeading": "Collected",
       "collected": {
         "path": "The page path, for example /cs1-fall-2026/assignments",
         "referrer": "The site that linked to the page",
         "country": "Your country, worked out from your connection",
         "device": "Browser, operating system, and device type",
-        "timings": "Page load time"
+        "timings": "Page load time",
+        "cookie": "Google Analytics only: a cookie holding a random ID, so a returning browser is counted once. It expires after 2 years, and opting out removes it."
       },
       "notCollectedHeading": "Not collected",
       "notCollected": {
-        "queryStrings": "Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device.",
-        "storage": "Cookies, local storage, or fingerprints",
-        "identity": "Your GitHub username or roster data"
+        "queryStrings": "Query strings. Cloudflare removes them in your browser, and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded.",
+        "identity": "Your GitHub username, email, or roster data",
+        "ads": "Advertising identifiers or cross-site tracking. Advertising storage is switched off."
       },
-      "processing": "Cloudflare processes this data for us under its",
-      "processingLink": "data processing addendum",
-      "processingAfter": ". It keeps full data for 7 days and a sample for 6 months. Our legal basis is legitimate interest, and you can object at any time by opting out below."
+      "processing": "Google and Cloudflare process this data for us under their data processing terms:",
+      "googleTerms": "Google Ads Data Processing Terms",
+      "googleUsage": "How Google uses information from sites that use its services",
+      "cloudflareTerms": "Cloudflare data processing addendum",
+      "retention": "Google keeps event data for up to 14 months. Cloudflare keeps full data for 7 days and a sample for 6 months. Our legal basis is legitimate interest, and you can object at any time by opting out below."
     },
     "choice": {
       "heading": "Your choice",
-      "body": "Your choice is saved in this browser and applies from the next page load. When you're signed in, you can also change it in Settings.",
-      "signals": "If your browser sends the Global Privacy Control or Do Not Track signal, the analytics script never loads, regardless of this setting."
+      "body": "Your choice is saved in this browser. Opting out removes the analytics cookies now and stops both services from loading from the next page load. When you're signed in, you can also change it in Settings.",
+      "signals": "If your browser sends the Global Privacy Control or Do Not Track signal, neither service loads, regardless of this setting."
     },
     "contact": {
       "heading": "Questions",
