@@ -249,6 +249,7 @@ export async function copyAssignmentToClassroom(
     previousCommitSha: ctx.headSha,
     baseTreeSha: ctx.baseTreeSha,
     ...written,
+    assignments: nextAssignments,
     templateGrantWarning,
   }
 }

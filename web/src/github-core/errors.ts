@@ -193,13 +193,15 @@ export function parseSsoAuthorizationUrl(
 // Shared React Query `retry` predicate for fail-closed role/permission reads: a
 // definitive status (401 revoked/expired, 403 blocked, 404 not found / not a
 // member — see isDefinitiveGitHubStatus) must NOT retry, while a transient
-// 5xx/429/network blip self-heals (bounded to 2).
+// 5xx/429/network blip self-heals (bounded to 2). A rate-limited 403 (GitHub's
+// primary/secondary throttle) is a blip in 403 clothing, so it retries too.
 export function retryTransientGitHubError(
   failureCount: number,
   error: unknown,
 ): boolean {
   if (
     error instanceof GitHubAPIError &&
+    !error.isRateLimited &&
     isDefinitiveGitHubStatus(error.status)
   ) {
     log().debug("retry suppressed (definitive status)", {
@@ -212,6 +214,42 @@ export function retryTransientGitHubError(
     log().debug("retrying transient error", { failureCount })
   }
   return willRetry
+}
+
+// Longest a query retry will wait on a rate limit. GitHub's Retry-After on a
+// secondary limit is usually ~60s; anything longer is left to the next user
+// action rather than a silently hung query.
+export const MAX_QUERY_RATE_LIMIT_DELAY_MS = 60_000
+
+// React Query's built-in backoff (1s, 2s, ... capped at 30s), reproduced so the
+// non-rate-limit path is unchanged from the library default.
+function defaultRetryDelayMs(failureCount: number): number {
+  return Math.min(1000 * 2 ** failureCount, 30_000)
+}
+
+// Shared React Query `retryDelay`: a rate-limited error waits what GitHub asked
+// for (Retry-After, else the X-RateLimit-Reset instant), capped, instead of the
+// 1s/2s backoff that would spend the retries while the limit is still in force.
+// Everything else keeps the library default.
+export function retryDelayForGitHubError(
+  failureCount: number,
+  error: unknown,
+  now: number = Date.now(),
+): number {
+  const fallback = defaultRetryDelayMs(failureCount)
+  if (!(error instanceof GitHubAPIError) || !error.isRateLimited) {
+    return fallback
+  }
+  const { retryAfter, reset } = error.rateLimit
+  let askedMs: number | null = null
+  if (retryAfter !== null && Number.isFinite(retryAfter)) {
+    askedMs = retryAfter * 1000
+  } else if (reset !== null && Number.isFinite(reset)) {
+    askedMs = reset * 1000 - now
+  }
+  if (askedMs === null) return fallback
+  // Floor of 1s so a Retry-After of 0 or an already-passed reset can't spin.
+  return Math.min(Math.max(askedMs, 1000), MAX_QUERY_RATE_LIMIT_DELAY_MS)
 }
 
 // Statuses that are DEFINITIVE for a GitHub read — retrying can't change the

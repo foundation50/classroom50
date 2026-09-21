@@ -7,6 +7,8 @@
 export {
   githubKeys,
   invalidateAssignments,
+  seedAssignments,
+  seedJsonFile,
   invalidateInviteQueries,
   invalidateClassroomTeam,
   invalidateGroupTeams,

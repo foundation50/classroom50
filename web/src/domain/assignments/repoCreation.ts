@@ -16,6 +16,7 @@ import {
   is422NameTooLong,
 } from "@/github-core/errors"
 import { getRepo } from "@/github-core/repoReads"
+import { withFreshRepoRetry } from "@/github-core/queries"
 import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
@@ -34,6 +35,22 @@ import { createAssignment } from "./createEdit"
 const extractTemplate = (template: string) => {
   if (!/\//.test(template)) return template
   return template.split("/")?.[1] ?? template
+}
+
+// The repo behind a 422 "already exists" on create/generate. When the existence
+// came from a concurrent accept (a double-click, a second tab), GitHub's repo
+// read can still 404 for a few seconds after the create that won, so the GET
+// rides out that lag rather than failing an accept the student just watched
+// succeed. Bounded well under the accept-setup budget (~7s).
+function readExistingAssignmentRepo(
+  client: GitHubClient,
+  owner: string,
+  name: string,
+): Promise<GitHubRepo> {
+  return withFreshRepoRetry(
+    () => client.request<GitHubRepo>(`/repos/${owner}/${name}`),
+    { attempts: 5, baseDelayMs: 500, backoffFactor: 2 },
+  )
 }
 
 // Best-effort probe: return the fork's PARENT org login when `owner/repo` is a
@@ -183,9 +200,7 @@ async function createAssignmentRepoWithVisibility(
       }
 
       if (is422AlreadyExists(err)) {
-        const existing = await client.request<GitHubRepo>(
-          `/repos/${owner}/${name}`,
-        )
+        const existing = await readExistingAssignmentRepo(client, owner, name)
 
         return {
           kind: "already-accepted",
@@ -348,9 +363,7 @@ async function createEmptyAssignmentRepo(params: {
     }
 
     if (err instanceof GitHubAPIError && is422AlreadyExists(err)) {
-      const existing = await client.request<GitHubRepo>(
-        `/repos/${owner}/${name}`,
-      )
+      const existing = await readExistingAssignmentRepo(client, owner, name)
 
       return {
         kind: "already-accepted",
