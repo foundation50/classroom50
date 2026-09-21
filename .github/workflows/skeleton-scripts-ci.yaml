@@ -33,6 +33,17 @@ on:
       # must also trigger the parity suite.
       - 'schemas/**'
       - 'examples/declarative-tests/tests.json'
+      # test_contract_parity.py reads the Go and web sources it pins the
+      # scripts' hand-mirrored constants against, plus the shared fixtures.
+      - 'cli/shared/contract/**'
+      - 'cli/shared/testdata/**'
+      - 'cli/gh-teacher/init.go'
+      - 'cli/gh-teacher/internal/download/**'
+      - 'cli/gh-teacher/internal/servicetoken/**'
+      - 'cli/gh-teacher/internal/assignmentcmd/test_cmd.go'
+      - 'web/src/types/classroom.ts'
+      - 'web/src/github-core/queries/releaseRunReads.ts'
+      - 'web/src/pages/OrgSettingsPage.tsx'
       - '.github/workflows/skeleton-scripts-ci.yaml'
   pull_request:
     paths:
@@ -45,6 +56,15 @@ on:
       - 'cli/gh-teacher/autograders_tests/**'
       - 'schemas/**'
       - 'examples/declarative-tests/tests.json'
+      - 'cli/shared/contract/**'
+      - 'cli/shared/testdata/**'
+      - 'cli/gh-teacher/init.go'
+      - 'cli/gh-teacher/internal/download/**'
+      - 'cli/gh-teacher/internal/servicetoken/**'
+      - 'cli/gh-teacher/internal/assignmentcmd/test_cmd.go'
+      - 'web/src/types/classroom.ts'
+      - 'web/src/github-core/queries/releaseRunReads.ts'
+      - 'web/src/pages/OrgSettingsPage.tsx'
       - '.github/workflows/skeleton-scripts-ci.yaml'
 
 permissions:

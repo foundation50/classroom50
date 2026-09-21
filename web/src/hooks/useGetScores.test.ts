@@ -74,6 +74,34 @@ describe("normalizeScores — manual override entries", () => {
     // Preserved autograded value the clear reverts to.
     expect(rows[0].autogradedScore).toBe(30)
     expect(rows[0].autogradedMax).toBe(50)
+    expect(rows[0].autogradedProvenance).toBeUndefined()
+  })
+
+  it("carries the autograded attempt's own provenance beneath an override", () => {
+    const reason = "published by 'alice', not by the autograde workflow"
+    const normalized = normalizeScores(
+      scoresWith([
+        {
+          owner: "alice",
+          override: true,
+          submissions: [
+            overrideRecord,
+            {
+              ...overrideRecord,
+              submission: "submit/2026-01-01T00-00-00Z-abc1234",
+              datetime: "2026-01-01T00:00:00Z",
+              score: 30,
+              "max-score": 50,
+              provenance_warning: reason,
+            },
+          ],
+        },
+      ]) as never,
+    )
+    const rows = normalized?.submissions.hw1 ?? []
+    // The override record itself carries no mark; the attempt beneath does.
+    expect(rows[0].provenance).toBeUndefined()
+    expect(rows[0].autogradedProvenance).toEqual({ kind: "recorded", reason })
   })
 
   it("omits the autograded score when an override has no real history", () => {

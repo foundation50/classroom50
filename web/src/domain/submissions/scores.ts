@@ -41,6 +41,9 @@ export type SubmissionRow = {
   // `score`/`max-score` above.
   autogradedScore?: number
   autogradedMax?: number
+  // The autograded attempt's own provenance mark, so the override editor
+  // doesn't present a forged revert target as clean.
+  autogradedProvenance?: SubmissionProvenance
   // A row with a submission the collector recorded as present but not graded
   // (no score yet) — rendered as "submitted, not yet collected" rather than a
   // 0/0 score. Excluded from graded stats/average and the CSV score column.

@@ -174,6 +174,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
         overridden: entry.override === true,
         autogradedScore: autograded?.score,
         autogradedMax: autograded?.["max-score"],
+        autogradedProvenance: autograded && recordedProvenance(autograded),
         submissions: sorted.map((s) => ({
           datetime: s.datetime,
           commit: s.commit,

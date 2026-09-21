@@ -21,7 +21,12 @@
             { "type": "null" },
             { "$ref": "#/$defs/resultPayload" }
           ],
-          "description": "The raw result/v1 payload published on the release, or null when the release had no result.json asset or the asset was not a classroom50/result/v1 document. The download tool round-trips the bytes verbatim; the shape mirrors result-v1.schema.json (which still carries `assignment`)."
+          "description": "The raw result/v1 payload published on the release, or null when the release had no result.json asset or the asset was not a classroom50/result/v1 document (then `result_problem` says so). The download tool round-trips the bytes verbatim; the shape mirrors result-v1.schema.json (which still carries `assignment`)."
+        },
+        "result_problem": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why `result` is null although the release carried a `result.json` asset: the asset was not a classroom50/result/v1 document (a file attached under another name and renamed, for example). Absent when the payload was read or the release had no such asset."
         },
         "provenance_warning": {
           "type": "string",

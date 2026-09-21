@@ -165,6 +165,22 @@ describe("ScoreOverrideModal", () => {
     expect(screen.getByText("30/50")).toBeTruthy()
   })
 
+  it("marks the preserved autograded score when its release wasn't the workflow's", () => {
+    // The revert target is the newest real attempt, which may itself be a
+    // hand-published release; the editor must not present it as clean.
+    renderModal({
+      overridden: true,
+      score: 42,
+      autogradedScore: 30,
+      autogradedMax: 50,
+      autogradedProvenance: {
+        kind: "recorded",
+        reason: "published by 'alice', not by the autograde workflow",
+      },
+    })
+    expect(screen.getByText("submissions.table.unverified")).toBeTruthy()
+  })
+
   it("surfaces the correct error copy for a failed clear", () => {
     isError = true
     variables = { clear: true }

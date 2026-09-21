@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/spf13/cobra"
@@ -116,14 +115,18 @@ func NewCmd() *cobra.Command {
 			"  - Clones whichever repos exist, and refreshes <repo>/result.json\n" +
 			"    and <repo>/results.json from the repo's submit-tag releases\n" +
 			"    alongside the clone: results.json holds every submission\n" +
-			"    (newest first), result.json the latest. A submit/* release the\n" +
-			"    autograde workflow didn't publish is still collected, marked\n" +
-			"    with a provenance_warning in results.json, and reported on\n" +
-			"    stderr; result.json keeps the latest payload unmarked for\n" +
-			"    back-compat. The scores.csv provenance_warning column comes\n" +
-			"    from the last score collection, not from this download. A\n" +
-			"    result.json that isn't a classroom50/result/v1 document is\n" +
-			"    treated as missing.\n" +
+			"    (newest first), result.json the latest.\n" +
+			"  - A submit/* release the autograde workflow didn't publish is\n" +
+			"    still collected. Its results.json entry carries a\n" +
+			"    provenance_warning naming who published it, and a line is\n" +
+			"    printed on standard error. result.json still holds the newest\n" +
+			"    score without the mark, so tools that read only that file\n" +
+			"    keep working.\n" +
+			"  - A result.json asset that isn't a classroom50/result/v1\n" +
+			"    document is treated as missing; the entry's result_problem\n" +
+			"    says why.\n" +
+			"  - The scores.csv provenance_warning column comes from the last\n" +
+			"    score collection, not from this download.\n" +
 			"  - Team members with no repo on the org are reported as\n" +
 			"    `not yet accepted` and don't fail the run.\n" +
 			"  - A scores.csv summary is written at the destination root with\n" +
@@ -989,6 +992,7 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 			return err
 		}
 		var payload json.RawMessage
+		var resultProblem string
 		if assetURL != "" {
 			body, err := downloadAssetBytes(token, rewriteAssetURL(assetURL, apiBase))
 			if err != nil {
@@ -999,9 +1003,11 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 			} else {
 				// A bot-uploaded release_assets file renamed to result.json by
 				// someone with push access passes provenance; the schema is
-				// what tells it apart from the runner's own upload.
-				_, _ = fmt.Fprintf(errOut, "%s/%s: release %q: %s is not a %s document; treated as missing. Check the repository's Releases tab.\n",
-					org, repo, rel.TagName, resultAssetName, contract.ResultSchemaV1)
+				// what tells it apart from the runner's own upload. Recorded on
+				// the entry so a null result reads as a refusal, not a missing asset.
+				resultProblem = fmt.Sprintf("%s is not a %s document", resultAssetName, contract.ResultSchemaV1)
+				_, _ = fmt.Fprintf(errOut, "%s/%s: release %q: %s; treated as missing. Check the repository's Releases tab.\n",
+					org, repo, rel.TagName, resultProblem)
 			}
 		}
 		problem := releaseProvenanceProblem(rel)
@@ -1022,6 +1028,7 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 		history = append(history, submissionRecord{
 			SubmissionTag:     rel.TagName,
 			Result:            payload,
+			ResultProblem:     resultProblem,
 			ProvenanceWarning: problem,
 		})
 	}
@@ -1084,151 +1091,12 @@ func writeGuarded(root *os.Root, name string, data []byte) error {
 type submissionRecord struct {
 	SubmissionTag string          `json:"submission_tag"`
 	Result        json.RawMessage `json:"result"`
+	// Why Result is null although the release carried a result.json: the asset
+	// was not a result document. Omitted otherwise.
+	ResultProblem string `json:"result_problem,omitempty"`
 	// See releaseProvenanceProblem; omitted when the workflow published it.
 	// Mirrors the scores-v1 submissionRecord field the collector writes.
 	ProvenanceWarning string `json:"provenance_warning,omitempty"`
-}
-
-// release / releaseAsset: only the fields download consumes. Other keys are
-// absent so a malformed release doesn't fail decode for a key we don't use.
-type release struct {
-	TagName string         `json:"tag_name"`
-	Draft   bool           `json:"draft"`
-	Author  releaseUser    `json:"author"`
-	Assets  []releaseAsset `json:"assets"`
-}
-
-type releaseAsset struct {
-	Name     string      `json:"name"`
-	URL      string      `json:"url"`
-	Uploader releaseUser `json:"uploader"`
-}
-
-type releaseUser struct {
-	Login string `json:"login"`
-}
-
-// releaseProvenanceProblem says why a submit/* release did not come from the autograde
-// workflow, or "" when it did. Students can write to their repos, so they can
-// publish a release or replace its result.json as themselves. They can't act as
-// the workflow's GITHUB_TOKEN, so the author and every result.json uploader must
-// be that login; a missing one counts as someone else. The reason is recorded
-// beside the result rather than used to drop it, since a teacher may publish by
-// hand. Mirrors release_provenance_problem in collect_scores.py.
-func releaseProvenanceProblem(rel release) string {
-	describe := func(login string) string {
-		if login == "" {
-			return "an unknown account"
-		}
-		return login
-	}
-	// Single quotes match collect_scores.py's repr() so the same release reads
-	// identically in scores.json and results.json.
-	if rel.Author.Login != contract.AutogradeReleaseAuthor {
-		return fmt.Sprintf("published by '%s', not by the autograde workflow", describe(rel.Author.Login))
-	}
-	for _, a := range rel.Assets {
-		if !isResultAsset(a) {
-			continue
-		}
-		if a.Uploader.Login != contract.AutogradeReleaseAuthor {
-			return fmt.Sprintf("%s uploaded by '%s', not by the autograde workflow",
-				resultAssetName, describe(a.Uploader.Login))
-		}
-	}
-	return ""
-}
-
-// isResultDocument reports whether body is a classroom50/result/v1 document by
-// its schema sentinel alone; full validation is the collector's job. It must
-// accept no more than the runner's _looks_like_result_document refuses, or a
-// student could stage a file the sniff clears and rename it to result.json:
-// encoding/json matches struct keys case-insensitively and tolerates invalid
-// UTF-8 in strings, where json.loads does neither, so both are checked by hand.
-func isResultDocument(body []byte) bool {
-	if !utf8.Valid(body) {
-		return false
-	}
-	var doc map[string]json.RawMessage
-	if json.Unmarshal(body, &doc) != nil {
-		return false
-	}
-	var schema string
-	return json.Unmarshal(doc["schema"], &schema) == nil && schema == contract.ResultSchemaV1
-}
-
-// isResultAsset matches the release asset that carries the score. Case-folded
-// like the collector's `.lower()` compare.
-func isResultAsset(a releaseAsset) bool {
-	return strings.EqualFold(a.Name, resultAssetName)
-}
-
-// listAllSubmitReleases returns every submit-tag release for a repo, newest
-// first, walking the full /releases pagination. Non-submit releases (a
-// student's hand-created tag) and drafts (the runner never publishes one, and a
-// draft's assets aren't downloadable) are filtered out. Mirrors
-// all_submit_releases in collect_scores.py.
-func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
-	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
-		func(page int) string {
-			return fmt.Sprintf("repos/%s/%s/releases?per_page=%d&page=%d",
-				url.PathEscape(owner), url.PathEscape(repo), allReleasesPerPage, page)
-		}, func(path string, err error) error {
-			// A repo with no releases (or not accepted yet) 404s; treat as "no
-			// submissions" rather than a hard failure.
-			if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-				return errNoReleases
-			}
-			return fmt.Errorf("GET %s: %w", path, err)
-		})
-	if errors.Is(err, errNoReleases) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	submits := make([]release, 0, len(all))
-	for _, rel := range all {
-		if strings.HasPrefix(rel.TagName, submitTagPrefix) && !rel.Draft {
-			submits = append(submits, rel)
-		}
-	}
-	return submits, nil
-}
-
-// errNoReleases signals a 404 on the releases walk so listAllSubmitReleases can
-// map it to an empty result instead of a hard error.
-var errNoReleases = errors.New("no releases")
-
-// selectResultAsset returns the result.json asset URL. Empty when absent; error
-// when the release carries more than one (matches collect_scores.py's ambiguity
-// rejection — uploads use --clobber, so normal releases have exactly one).
-func selectResultAsset(rel release) (string, error) {
-	var matches []string
-	for _, a := range rel.Assets {
-		if isResultAsset(a) {
-			matches = append(matches, a.URL)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return "", nil
-	case 1:
-		return matches[0], nil
-	default:
-		return "", fmt.Errorf("release has %d %s assets (expected exactly one)", len(matches), resultAssetName)
-	}
-}
-
-// apiBaseURL returns the REST base URL for `host`, matching go-gh's routing.
-// github.com → https://api.github.com; everything else assumed GHES at
-// https://<host>/api/v3.
-func apiBaseURL(host string) string {
-	host = strings.TrimSpace(host)
-	if host == "" || host == "github.com" {
-		return "https://api.github.com"
-	}
-	return "https://" + host + "/api/v3"
 }
 
 // rewriteAssetURL retargets an asset URL to the configured API host. GitHub's

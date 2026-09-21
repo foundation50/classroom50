@@ -1147,6 +1147,60 @@ describe("SubmissionsTable submission details modal", () => {
     expect(screen.getAllByText("submissions.table.unverified")).toHaveLength(1)
   })
 
+  it("keeps the mark when the forged attempt at the same commit is back-dated", async () => {
+    // Attempts sort by the datetime inside the student's own result.json, so a
+    // forged release can sort itself beneath the honest one. The honest
+    // attempt still wins the release link, but the mark must survive.
+    const user = userEvent.setup()
+    const commit = "https://github.com/acme/cs101-hw1-alice/commit/99a57f2"
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit,
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fhonest",
+                score: 0,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit,
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fforged",
+                score: 10,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+            ],
+            detectedEntries: [
+              { kind: "commit", label: "99a57f2", count: 1, sha: "99a57f2" },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    expect(screen.getAllByText("submissions.table.unverified")).toHaveLength(1)
+    expect(
+      screen
+        .getByRole("link", { name: "submissions.details.viewGrade" })
+        .getAttribute("href"),
+    ).toContain("submit%2Fhonest")
+  })
+
   it("marks a detected push whose collected attempt the workflow didn't publish", async () => {
     // Every-push rows join detected commits to collected attempts by sha, full
     // or 7-char, whichever the collected commit URL ends with.

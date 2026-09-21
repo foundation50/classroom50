@@ -1021,14 +1021,23 @@ def _looks_like_result_document(path: pathlib.Path, size: int | None = None) -> 
                 return False
             # errors="replace": a decode failure must never clear a file, since
             # a reader with a laxer decoder would still accept it.
-            data = json.loads((head + fh.read()).decode("utf-8", errors="replace"))
-    except (OSError, ValueError):
+            text = (head + fh.read()).decode("utf-8", errors="replace")
+    except OSError:
+        return False
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
         return False
     except RecursionError:
         # json.loads raises this, not ValueError, on deep nesting. A file too
         # deep to check can't be cleared, and letting it escape would crash the
         # runner after grading, so refuse it.
         raise ValueError("nested too deeply to check for a result document") from None
+    except ValueError as exc:
+        # A plain ValueError (not JSONDecodeError) is the integer digit limit:
+        # valid JSON Python won't parse but Go's decoder reads, so the sentinel
+        # could hide behind it. Not clearable either.
+        raise ValueError(f"could not check for a result document ({exc})") from None
     if not isinstance(data, dict):
         return False
     schema = data.get("schema")

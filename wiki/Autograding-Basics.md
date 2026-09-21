@@ -595,6 +595,11 @@ doesn't guarantee:
   and collection names each one in its warnings. A Release you publish by hand
   to record a grade is marked the same way; `"override": true` on the entry is
   the path that isn't.
+- **Removed Releases.** The latest score follows the newest Release that
+  exists. A student who deletes the newest honest Release, or converts it to a
+  draft, makes an older honest score the latest, and that score carries no
+  mark. The **Actions** tab still lists every grading run, so more runs than
+  Releases is the sign.
 - **Code that runs during grading.** Grading and publishing share one job, so
   the caller workflow, any other workflow file a student adds, and the
   student's own code that the tests run can all publish a forged score under

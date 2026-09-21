@@ -345,6 +345,15 @@ class TestResultsSchema:
         assert _errs(RESULTS_V, [{**marked, "provenance_warning": ""}]) != []
         assert _errs(RESULTS_V, [{**marked, "provenance_warning": True}]) != []
 
+    def test_result_problem_accepted_and_must_be_non_empty(self):
+        refused = {
+            "submission_tag": "submit/x",
+            "result": None,
+            "result_problem": "result.json is not a classroom50/result/v1 document",
+        }
+        assert _errs(RESULTS_V, [refused]) == []
+        assert _errs(RESULTS_V, [{**refused, "result_problem": ""}]) != []
+
     @pytest.mark.parametrize("doc, why", [
         ({"submission_tag": "submit/x", "result": None}, "top-level must be an array, not an object"),
         ([{"result": None}], "envelope missing submission_tag"),

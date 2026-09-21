@@ -85,7 +85,9 @@ runs as a GitHub Actions workflow inside each student's repository, and the
 score is a Release that workflow publishes there. A Release a student creates
 by hand, or a `result.json` a student replaces, is collected but marked: the
 submissions page shows **Unverified** beside the score, the exports carry the
-reason, and collection warns about each one. But code that runs during grading (the workflow
+reason, and collection warns about each one. But a student can also delete the
+newest honest Release so an older honest score becomes the latest with no mark,
+code that runs during grading (the workflow
 file, another workflow file a student adds, or the student's own code while the
 tests run) can still publish a forged score under that identity, and the
 submission time comes from a commit date the student's Git client sets. Treat

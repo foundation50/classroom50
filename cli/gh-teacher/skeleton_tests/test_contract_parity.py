@@ -104,11 +104,20 @@ class TestResultSniff:
         # The runner refuses a release_assets file shaped like a result only up
         # to RESULT_SNIFF_MAX_BYTES. A reader that accepted a larger result.json
         # would reopen the rename route for files between the two sizes.
-        go = re.search(r"maxResultBytes\s*=\s*([\d\s*]+)", _DOWNLOAD_GO.read_text())
-        assert go, "maxResultBytes not found in download.go"
+        # Anchored to a full product of integer literals ending the line, so a
+        # rewrite such as `10 << 20` or a named constant fails here instead of
+        # matching a prefix and passing on a tiny number.
+        go = re.search(
+            r"^\s*maxResultBytes\s*=\s*(\d+(?:\s*\*\s*\d+)*)\s*$",
+            _DOWNLOAD_GO.read_text(),
+            re.M,
+        )
+        assert go, "maxResultBytes not found in download.go as a product of integer literals"
         go_bytes = math.prod(int(factor) for factor in go.group(1).split("*"))
+        # download.go documents the two reader ceilings as aligned; pin that
+        # rather than the weaker ordering, so a drift in either shows up.
+        assert go_bytes == cs.MAX_RESULT_BYTES
         assert runner.RESULT_SNIFF_MAX_BYTES >= cs.MAX_RESULT_BYTES
-        assert runner.RESULT_SNIFF_MAX_BYTES >= go_bytes
 
     def test_sniff_prefix_matches_the_schema_the_readers_accept(self):
         assert cs.RESULT_SCHEMA_V1.startswith(runner.RESULT_SCHEMA_PREFIX)
@@ -142,7 +151,13 @@ class TestResultDocumentFixtures:
     def test_runner_sniff(self, case, tmp_path):
         path = tmp_path / "asset.json"
         path.write_bytes(base64.b64decode(case["body_base64"]))
-        assert runner._looks_like_result_document(path) is not case["runner_attaches"]
+        try:
+            refused = runner._looks_like_result_document(path)
+        except ValueError:
+            # The sniff raises for a file it can't parse (deep nesting, the
+            # int digit limit); stage_release_assets skips it either way.
+            refused = True
+        assert refused is not case["runner_attaches"]
 
     @pytest.mark.parametrize("case", _SNIFF_CASES)
     def test_collector_read(self, case, monkeypatch):

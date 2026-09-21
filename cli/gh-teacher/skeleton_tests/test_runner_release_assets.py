@@ -181,6 +181,22 @@ def test_looks_like_result_document_ignores_oversized_and_unreadable(tmp_path, m
     assert runner._looks_like_result_document(tmp_path / "absent.json") is False
 
 
+def test_stage_release_assets_refuses_json_python_cannot_parse(tmp_path, capsys):
+    # A 5000-digit integer is valid JSON that json.loads refuses with a plain
+    # ValueError (not JSONDecodeError) on 3.11+, while Go's decoder reads it.
+    # A file the sniff can't parse can't be cleared: refuse, don't attach.
+    workspace = _workspace(tmp_path)
+    _write_file(workspace, "out/big.json", b'{"schema": "classroom50/result/v1", "n": ' + b"9" * 5000 + b"}")
+    _write_file(workspace, "out/report.json", b'{"ok": true}')
+    destination = tmp_path / "staged"
+
+    accepted = runner.stage_release_assets(workspace, destination, ["out/big.json", "out/report.json"])
+
+    assert accepted == ["report.json"]
+    assert not (destination / "big.json").exists()
+    assert "'out/big.json' skipped (" in capsys.readouterr().out
+
+
 def test_stage_release_assets_refuses_deeply_nested_json_without_crashing(tmp_path, capsys, monkeypatch):
     # json.loads raises RecursionError, not ValueError, once nesting exhausts
     # the C stack; the depth that does so varies by platform, so force it. The

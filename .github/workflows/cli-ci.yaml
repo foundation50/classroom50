@@ -80,13 +80,15 @@ jobs:
 
           # A cli/shared change (or a change to this workflow) exercises all
           # dependents; otherwise run only the gh-* modules whose files changed.
+          # schemas/ is read by gh-teacher's parity tests, so a schema change
+          # runs that leg.
           grep_q() { printf '%s\n' "$changed" | grep -qE "$1"; }
           legs=()
           if grep_q '^cli/shared/' || grep_q '^\.github/workflows/cli-ci\.yaml$'; then
             legs=("$shared" "$student" "$teacher")
           else
             grep_q '^cli/gh-student/' && legs+=("$student")
-            grep_q '^cli/gh-teacher/' && legs+=("$teacher")
+            { grep_q '^cli/gh-teacher/' || grep_q '^schemas/'; } && legs+=("$teacher")
           fi
 
           if [ "${#legs[@]}" -eq 0 ]; then
