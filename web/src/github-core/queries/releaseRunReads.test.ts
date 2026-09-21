@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
 import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
@@ -199,6 +202,38 @@ const release = (
 })
 
 describe("releaseProvenanceProblem", () => {
+  // The collector and gh teacher download run the same cases
+  // (test_contract_parity.py, download_test.go), so one reader drifting from
+  // the shared verdict fails here rather than in a gradebook.
+  it("reaches the shared verdict on every schemas/fixtures case", () => {
+    // web/ is process.cwd() in vitest; schemas/ is a sibling.
+    const doc = JSON.parse(
+      readFileSync(
+        path.join(
+          process.cwd(),
+          "..",
+          "schemas",
+          "fixtures",
+          "release-provenance.json",
+        ),
+        "utf-8",
+      ),
+    ) as {
+      cases: {
+        name: string
+        release: GitHubRelease
+        problem: { kind: "author" | "uploader"; login: string | null } | null
+      }[]
+    }
+    expect(doc.cases.length).toBeGreaterThan(0)
+    for (const c of doc.cases) {
+      const want = c.problem
+        ? { kind: c.problem.kind, login: c.problem.login }
+        : null
+      expect(releaseProvenanceProblem(c.release), c.name).toEqual(want)
+    }
+  })
+
   const honest = release("submit/1", "2026-01-01T00:00:00Z")
 
   it("accepts the runner's release, with or without assets", () => {

@@ -22,12 +22,14 @@ on:
       - 'cli/shared/**'
       - 'cli/gh-student/**'
       - 'cli/gh-teacher/**'
+      - 'schemas/**'
       - '.github/workflows/cli-ci.yaml'
   pull_request:
     paths:
       - 'cli/shared/**'
       - 'cli/gh-student/**'
       - 'cli/gh-teacher/**'
+      - 'schemas/**'
       - '.github/workflows/cli-ci.yaml'
 
 permissions:

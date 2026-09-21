@@ -1083,27 +1083,76 @@ func TestRefreshResultJSON(t *testing.T) {
 }
 
 // The Go check must accept nothing the runner's sniff clears, or a staged
-// release_assets file renamed to result.json becomes a score: encoding/json
-// alone would match a case-variant key and swallow invalid UTF-8.
-func TestIsResultDocument(t *testing.T) {
-	cases := []struct {
-		name string
-		body string
-		want bool
-	}{
-		{"exact sentinel", `{"schema":"classroom50/result/v1","score":1}`, true},
-		{"other schema", `{"schema":"other/v1"}`, false},
-		{"case-variant key", `{"SCHEMA":"classroom50/result/v1"}`, false},
-		{"invalid UTF-8 in a string", "{\"schema\":\"classroom50/result/v1\",\"review\":\"\xff\"}", false},
-		{"sentinel nested, not top-level", `[{"schema":"classroom50/result/v1"}]`, false},
-		{"not JSON", `schema: classroom50/result/v1`, false},
+// release_assets file renamed to result.json becomes a score. The cases live in
+// schemas/fixtures so the runner and collector run the same bytes
+// (test_contract_parity.py); here the Go reader must reach the shared verdict.
+func TestIsResultDocument_SharedFixtures(t *testing.T) {
+	var doc struct {
+		Cases []struct {
+			Name             string `json:"name"`
+			BodyBase64       string `json:"body_base64"`
+			IsResultDocument bool   `json:"is_result_document"`
+		} `json:"cases"`
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := isResultDocument([]byte(tc.body)); got != tc.want {
-				t.Errorf("isResultDocument(%q) = %v, want %v", tc.body, got, tc.want)
+	readSharedFixture(t, "result-document-sniff.json", &doc)
+	if len(doc.Cases) == 0 {
+		t.Fatal("no cases in fixture")
+	}
+	for _, tc := range doc.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			body, err := base64.StdEncoding.DecodeString(tc.BodyBase64)
+			if err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if got := isResultDocument(body); got != tc.IsResultDocument {
+				t.Errorf("isResultDocument(%q) = %v, want %v", body, got, tc.IsResultDocument)
 			}
 		})
+	}
+}
+
+// The three provenance readers must reach one verdict per release, and Go and
+// Python must store the same message so scores.json and results.json agree.
+func TestReleaseProvenanceProblem_SharedFixtures(t *testing.T) {
+	var doc struct {
+		Cases []struct {
+			Name    string  `json:"name"`
+			Release release `json:"release"`
+			Problem *struct {
+				Message string `json:"message"`
+			} `json:"problem"`
+		} `json:"cases"`
+	}
+	readSharedFixture(t, "release-provenance.json", &doc)
+	if len(doc.Cases) == 0 {
+		t.Fatal("no cases in fixture")
+	}
+	for _, tc := range doc.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			want := ""
+			if tc.Problem != nil {
+				want = tc.Problem.Message
+			}
+			if got := releaseProvenanceProblem(tc.Release); got != want {
+				t.Errorf("releaseProvenanceProblem = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// readSharedFixture decodes schemas/fixtures/<name> from the repo root.
+func readSharedFixture(t *testing.T, name string, into any) {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "fixtures", name))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	if err := json.Unmarshal(raw, into); err != nil {
+		t.Fatalf("decode fixture %s: %v", name, err)
 	}
 }
 
