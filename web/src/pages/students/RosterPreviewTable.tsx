@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import {
   Badge,
   Select,
@@ -197,6 +198,9 @@ export const RosterPreviewTable = ({
   skeletonRowCount?: number
 }) => {
   const { t } = useTranslation()
+  // Raw file values (no capitalization) so the preview shows what the file
+  // says, in the order the user reads names.
+  const nameOrder = useUserPreference("nameOrder")
   const skeletonRows = Array.from({
     length: skeletonRowCount ?? rows.length,
   })
@@ -254,7 +258,10 @@ export const RosterPreviewTable = ({
                     }
                   />
                   <PreviewCell
-                    value={[row.first_name, row.last_name]
+                    value={(nameOrder === "last-first"
+                      ? [row.last_name, row.first_name]
+                      : [row.first_name, row.last_name]
+                    )
                       .filter(Boolean)
                       .join(" ")}
                     changes={rowChanges}

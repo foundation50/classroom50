@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  defaultStudentSortMode,
+  formatName,
   getDisplayName,
+  getName,
   initialsFromParts,
   nameFromParts,
   nameLastFirst,
@@ -61,28 +64,73 @@ describe("nameLastFirst — 'Last, First' display form", () => {
   })
 })
 
-describe("getDisplayName — sort-mode-aware roster display name", () => {
+describe("getDisplayName — name-order and sort-mode-aware roster display name", () => {
   const roster = [
     mkStudent({ username: "alice", first_name: "Alice", last_name: "Zephyr" }),
     mkStudent({ username: "noname" }),
   ]
 
-  it("shows 'First Last' in first-name mode (and by default)", () => {
-    expect(getDisplayName("alice", roster, "first")).toBe("Alice Zephyr")
-    expect(getDisplayName("alice", roster)).toBe("Alice Zephyr")
+  it("shows 'First Last' for a first-last user in first-name sort (and by default)", () => {
+    expect(getDisplayName("alice", roster, "first-last", "first")).toBe(
+      "Alice Zephyr",
+    )
+    expect(getDisplayName("alice", roster, "first-last")).toBe("Alice Zephyr")
   })
 
-  it("shows 'Last, First' in last-name mode", () => {
-    expect(getDisplayName("alice", roster, "last")).toBe("Zephyr, Alice")
+  it("shows 'Last, First' for a first-last user sorting by last name", () => {
+    expect(getDisplayName("alice", roster, "first-last", "last")).toBe(
+      "Zephyr, Alice",
+    )
+  })
+
+  it("shows 'Last First' for a last-first user in either sort", () => {
+    expect(getDisplayName("alice", roster, "last-first", "first")).toBe(
+      "Zephyr Alice",
+    )
+    expect(getDisplayName("alice", roster, "last-first", "last")).toBe(
+      "Zephyr Alice",
+    )
   })
 
   it("matches case-insensitively on username", () => {
-    expect(getDisplayName("ALICE", roster, "last")).toBe("Zephyr, Alice")
+    expect(getDisplayName("ALICE", roster, "first-last", "last")).toBe(
+      "Zephyr, Alice",
+    )
   })
 
   it("returns '' when the login is off-roster or nameless (caller falls back)", () => {
-    expect(getDisplayName("ghost", roster, "last")).toBe("")
-    expect(getDisplayName("noname", roster, "last")).toBe("")
+    expect(getDisplayName("ghost", roster, "first-last", "last")).toBe("")
+    expect(getDisplayName("noname", roster, "first-last", "last")).toBe("")
+  })
+})
+
+describe("formatName / getName — name order preference", () => {
+  const roster = [
+    mkStudent({ username: "ada", first_name: "ada", last_name: "lovelace" }),
+    mkStudent({ username: "solo", first_name: "cher" }),
+  ]
+
+  it("orders the parts per the preference, capitalizing each", () => {
+    expect(formatName("ada", "lovelace", "first-last")).toBe("Ada Lovelace")
+    expect(formatName("ada", "lovelace", "last-first")).toBe("Lovelace Ada")
+  })
+
+  it("renders a single present part the same in either order", () => {
+    expect(formatName("cher", "", "first-last")).toBe("Cher")
+    expect(formatName("cher", "", "last-first")).toBe("Cher")
+    expect(formatName(undefined, undefined, "last-first")).toBe("")
+  })
+
+  it("getName resolves the roster row then formats in the given order", () => {
+    expect(getName("ADA", roster, "first-last")).toBe("Ada Lovelace")
+    expect(getName("ada", roster, "last-first")).toBe("Lovelace Ada")
+    expect(getName("solo", roster, "last-first")).toBe("Cher")
+    expect(getName("ghost", roster, "last-first")).toBe("")
+  })
+
+  it("defaultStudentSortMode sorts by whichever part leads", () => {
+    expect(defaultStudentSortMode("first-last")).toBe("first")
+    expect(defaultStudentSortMode("last-first")).toBe("last")
   })
 })
 

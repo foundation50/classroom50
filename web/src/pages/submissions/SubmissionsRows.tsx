@@ -5,6 +5,7 @@ import { getName, getDisplayName, getInitials } from "@/util/students"
 import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button, ExternalLink } from "@/components/ui"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { nonSubmitterStatus } from "@/domain/submissions/dashboard"
 import {
   groupTeamUrl,
@@ -268,6 +269,7 @@ export const GroupMembers = ({
   showAvatars?: boolean
 }) => {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   // enabled: false — reads the cache the Members modal populates, never fetches.
   const { data: liveCollaborators } = useGetRepoCollaborators(org, repoName, {
     enabled: false,
@@ -307,7 +309,7 @@ export const GroupMembers = ({
       {showAvatars && (
         <div className="avatar-group -space-x-3">
           {visible.map((username) => {
-            const name = getName(username, students)
+            const name = getName(username, students, nameOrder)
             return (
               <div
                 key={username}
@@ -479,8 +481,8 @@ export const NonSubmitterRow = ({
   // The assignment's pass threshold, so the first saved grade renders with the
   // same tone the submitter row would give it.
   thresholdFraction?: number | null
-  // How to format the display name — "last" ("Last, First") when the table is
-  // ordered by last name, matching the submitter rows.
+  // The active name sort, so a first-last user ordering by last name sees
+  // "Last, First" here too, matching the submitter rows.
   nameMode?: StudentSortMode
   // Whether this student's (accepted) repo is currently public — renders the
   // warning badge beside the status chip.
@@ -489,6 +491,7 @@ export const NonSubmitterRow = ({
   // beside the name. Absent for a plain student.
   staffRoles?: ClassroomRole[]
 }) => {
+  const nameOrder = useUserPreference("nameOrder")
   const canGrade =
     overrideGrade?.mode === "manual" &&
     typeof overrideGrade.maxPoints === "number" &&
@@ -499,11 +502,16 @@ export const NonSubmitterRow = ({
       <td>
         <div className="flex flex-wrap items-center gap-2">
           <Avatar
-            name={getDisplayName(student.username, students, nameMode)}
+            name={getDisplayName(
+              student.username,
+              students,
+              nameOrder,
+              nameMode,
+            )}
             initials={getInitials(student.username, students)}
             github={student.username || student.email}
             subtitle={identitySubtitle(
-              getName(student.username, students),
+              getName(student.username, students, nameOrder),
               student.username,
               student.section,
             )}

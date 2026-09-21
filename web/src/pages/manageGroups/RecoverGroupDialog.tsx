@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { useQuery } from "@tanstack/react-query"
 
 import {
@@ -72,6 +73,7 @@ export function RecoverGroupDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const client = useGitHubClient()
   const { user } = useGithubAuth()
   const creatorLogin = user?.login ?? ""
@@ -94,8 +96,8 @@ export function RecoverGroupDialog({
   const { logins: assignedLogins } = useGroupTeamMembers(org, slugs)
 
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () => toGroupPickerStudents(enrolled, assignedLogins),
-    [enrolled, assignedLogins],
+    () => toGroupPickerStudents(enrolled, assignedLogins, nameOrder),
+    [enrolled, assignedLogins, nameOrder],
   )
 
   // Members suggested from the repo's commit history, once the roster is

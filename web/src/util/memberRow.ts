@@ -1,9 +1,10 @@
 import type { OrgMemberRow } from "@/util/orgMembers"
 import type { TeamRosterRow } from "@/util/teamRoster"
 import {
-  nameFromParts,
+  formatName,
   initialsFromParts,
   firstGrapheme,
+  type NameOrder,
 } from "@/util/students"
 
 // Minimal display shape the shared presentation helpers (initialsFor,
@@ -28,14 +29,25 @@ export const orgRowToMemberRow = (row: OrgMemberRow): MemberListRow => ({
   email: row.email,
 })
 
-// TeamRosterRow has no `name` — derive it from first/last (falling back to
-// username, then email) so the shared header/avatar render a stable label.
-export const rosterRowToMemberRow = (row: TeamRosterRow): MemberListRow => ({
+// A roster row's display label: name in the user's order, else username, else
+// email (a pending email invite has no handle). Shared by the roster table,
+// member modal, edit mode, and unlinked-row messages so they can't drift.
+export const rosterRowLabel = (
+  row: Pick<TeamRosterRow, "first_name" | "last_name" | "username" | "email">,
+  order: NameOrder,
+): string =>
+  formatName(row.first_name, row.last_name, order) || row.username || row.email
+
+// TeamRosterRow has no `name` — derive it via rosterRowLabel so the shared
+// header/avatar render a stable label.
+export const rosterRowToMemberRow = (
+  row: TeamRosterRow,
+  order: NameOrder,
+): MemberListRow => ({
   key: row.key,
   username: row.username,
   github_id: row.github_id,
-  name:
-    nameFromParts(row.first_name, row.last_name) || row.username || row.email,
+  name: rosterRowLabel(row, order),
   email: row.email,
 })
 

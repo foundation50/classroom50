@@ -1,4 +1,5 @@
 import type { Student } from "@/types/classroom"
+import type { NameOrder } from "@/types/preferences"
 import {
   isMalformedGitHubId,
   isSameGitHubUser,
@@ -7,6 +8,12 @@ import {
 } from "@/util/identity"
 
 export { isMalformedGitHubId, isSameGitHubUser, parseGitHubId, resolveGitHubId }
+export type { NameOrder }
+
+// The order names read in when a caller has no user preference to hand (pure
+// domain code, tests). Views read the real preference via
+// useUserPreference("nameOrder") and pass it down.
+export const DEFAULT_NAME_ORDER: NameOrder = "first-last"
 
 export const capitalize = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : ""
@@ -51,30 +58,52 @@ export const placeholderStudent = (username: string): Student => ({
 export const resolveStudent = (key: string, students: Student[]): Student =>
   findByUsername(key, students) ?? placeholderStudent(key)
 
-export const getName = (key: string, students: Student[]) => {
-  const student = findByUsername(key, students)
-  if (!student) return ""
-  return nameFromParts(student.first_name, student.last_name)
-}
-
-// Display name for a username in the given sort mode: "First Last" by default,
-// "Last, First" when the view is ordered by last name so the label reads in the
-// same order it sorts. "" when the login isn't on the roster or has no name
-// (callers fall back to the login). Single source so every by-name surface
-// formats the same way — pass mode from the active sort.
-export const getDisplayName = (
+// A student's display name by username in the user's name order, or "" when
+// the login isn't on the roster or has no name (callers fall back to the login).
+export const getName = (
   key: string,
   students: Student[],
-  mode: StudentSortMode = DEFAULT_STUDENT_SORT,
+  order: NameOrder,
 ): string => {
   const student = findByUsername(key, students)
   if (!student) return ""
-  return mode === "last"
-    ? nameLastFirst(student.first_name, student.last_name)
-    : nameFromParts(student.first_name, student.last_name)
+  return formatName(student.first_name, student.last_name, order)
 }
 
-// Display name from a roster row's first/last parts; "" when neither present.
+// Display name for a username in a sorted view. Follows the user's name order,
+// except that a first-last user sorting by last name sees "Last, First" so the
+// label reads in the order it sorts (the comma marks the inversion). A
+// last-first user already reads surname-first, so their labels never flip.
+// "" when the login isn't on the roster or has no name.
+export const getDisplayName = (
+  key: string,
+  students: Student[],
+  order: NameOrder,
+  sortMode: StudentSortMode = DEFAULT_STUDENT_SORT,
+): string => {
+  const student = findByUsername(key, students)
+  if (!student) return ""
+  if (order === "first-last" && sortMode === "last") {
+    return nameLastFirst(student.first_name, student.last_name)
+  }
+  return formatName(student.first_name, student.last_name, order)
+}
+
+// Display name from a roster row's first/last parts in the given order; ""
+// when neither present. The single formatter every name-showing surface
+// routes through, so the Settings preference applies everywhere at once.
+export const formatName = (
+  firstName: string | undefined,
+  lastName: string | undefined,
+  order: NameOrder,
+): string =>
+  order === "last-first"
+    ? nameFromParts(lastName, firstName)
+    : nameFromParts(firstName, lastName)
+
+// "First Last" from a roster row's parts; "" when neither present. Order-fixed
+// on purpose: sort keys and the roster's own column order use it. Display
+// surfaces call formatName instead.
 export const nameFromParts = (
   firstName?: string,
   lastName?: string,
@@ -103,6 +132,19 @@ export const nameLastFirst = (
   return `${capitalize(last)}, ${capitalize(first)}`
 }
 
+// A name in both orders, for search fields: a query typed the way names show
+// on screen matches whichever order the user prefers, and "Ada Lovelace" still
+// finds a "Lovelace Ada" roster. Empty when the row has no name.
+export const nameSearchFields = (
+  firstName?: string,
+  lastName?: string,
+): string[] => {
+  const forward = nameFromParts(firstName, lastName)
+  if (!forward) return []
+  const reverse = nameFromParts(lastName, firstName)
+  return reverse === forward ? [forward] : [forward, reverse]
+}
+
 export const getInitials = (key: string, students: Student[]) => {
   const student = findByUsername(key, students)
   if (!student) return ""
@@ -129,6 +171,11 @@ export const getSection = (key: string, students: Student[]): string =>
 export type StudentSortMode = "first" | "last"
 
 export const DEFAULT_STUDENT_SORT: StudentSortMode = "first"
+
+// The name sort a view should open in: by whichever part the user's name order
+// puts first, so a "Last First" roster doesn't look shuffled on arrival.
+export const defaultStudentSortMode = (order: NameOrder): StudentSortMode =>
+  order === "last-first" ? "last" : "first"
 
 // One collation regime for every "by name" ordering in the app (roster views,
 // team roster, and the exported gradebook CSV), so the same students never sort

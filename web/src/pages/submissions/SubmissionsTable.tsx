@@ -5,12 +5,15 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
+  DEFAULT_NAME_ORDER,
   getName,
   getDisplayName,
   getInitials,
   getSection,
   resolveStudent,
+  type NameOrder,
 } from "@/util/students"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import {
   studentRepoName,
   studentRepoUrl,
@@ -171,7 +174,8 @@ function buildDetailItems(
   {
     isTeam = false,
     students = [],
-  }: { isTeam?: boolean; students?: Student[] } = {},
+    nameOrder = DEFAULT_NAME_ORDER,
+  }: { isTeam?: boolean; students?: Student[]; nameOrder?: NameOrder } = {},
 ): SubmissionDetailItem[] {
   const detectedCommits = (row.detectedEntries ?? []).filter(
     (e) => e.kind === "commit",
@@ -234,7 +238,7 @@ function buildDetailItems(
       collectedTags,
       provenanceBySha: (sha) => attemptFor(sha)?.provenance,
       showAuthors: isTeam,
-      authorName: (login) => getName(login, students),
+      authorName: (login) => getName(login, students, nameOrder),
     },
     mode,
     org,
@@ -488,10 +492,12 @@ const SubmissionsTable = ({
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
 
-  // Format the row identity as "Last, First" only under a last-name sort, so the
-  // label reads in the order it sorts; "First Last" otherwise (name-first and
-  // time sorts). sortNameMode already maps time sorts to "first".
+  // Row identity follows the user's name order; a first-last user sorting by
+  // last name additionally reads "Last, First" so the label matches the sort
+  // (getDisplayName). sortNameMode already maps time sorts to "first".
+  const nameOrder = useUserPreference("nameOrder")
   const nameDisplayMode = sortNameMode(sort)
+  const nameOf = (login: string) => getName(login, students, nameOrder)
 
   // The submission whose type-aware details modal is open, or null. Captured
   // from the row so the modal renders without re-deriving.
@@ -652,11 +658,11 @@ const SubmissionsTable = ({
         owner: rest.owner,
         title: isGroup
           ? groupLabel(rest.owner, repo)
-          : getName(rest.owner, students) || rest.owner,
+          : nameOf(rest.owner) || rest.owner,
         subtitle: isGroup
           ? undefined
           : identitySubtitle(
-              getName(rest.owner, students),
+              nameOf(rest.owner),
               rest.owner,
               getSection(rest.owner, students),
             ),
@@ -668,7 +674,7 @@ const SubmissionsTable = ({
           org,
           repo,
           t,
-          { isTeam, students },
+          { isTeam, students, nameOrder },
         ),
       })
     // The row's primary action: the manage-submission modal. Shared by the
@@ -690,9 +696,9 @@ const SubmissionsTable = ({
           : {
               owner: rest.owner,
               isGroup: false,
-              title: getName(rest.owner, students) || rest.owner,
+              title: nameOf(rest.owner) || rest.owner,
               subtitle: identitySubtitle(
-                getName(rest.owner, students),
+                nameOf(rest.owner),
                 rest.owner,
                 getSection(rest.owner, students),
               ),
@@ -701,7 +707,7 @@ const SubmissionsTable = ({
               hasRepo: true,
               commit: rest.commit,
               release: rest.release,
-              displayName: getName(rest.owner, students) || undefined,
+              displayName: nameOf(rest.owner) || undefined,
             },
       )
     return (
@@ -739,11 +745,16 @@ const SubmissionsTable = ({
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Avatar
-                name={getDisplayName(usernames[0], students, nameDisplayMode)}
+                name={getDisplayName(
+                  usernames[0],
+                  students,
+                  nameOrder,
+                  nameDisplayMode,
+                )}
                 initials={getInitials(usernames[0], students)}
                 github={usernames[0]}
                 subtitle={identitySubtitle(
-                  getName(usernames[0], students),
+                  nameOf(usernames[0]),
                   usernames[0],
                   getSection(usernames[0], students),
                 )}
@@ -812,7 +823,7 @@ const SubmissionsTable = ({
                       owner: rest.owner,
                       displayName: isGroup
                         ? groupLabel(rest.owner, repo)
-                        : getName(rest.owner, students) || undefined,
+                        : nameOf(rest.owner) || undefined,
                       hasGrade: cell.hasGrade,
                       score,
                       overridden: Boolean(rest.overridden),
@@ -1073,18 +1084,16 @@ const SubmissionsTable = ({
                     setManageSubmission({
                       owner: student.username,
                       isGroup: false,
-                      title:
-                        getName(student.username, students) || student.username,
+                      title: nameOf(student.username) || student.username,
                       subtitle: identitySubtitle(
-                        getName(student.username, students),
+                        nameOf(student.username),
                         student.username,
                         student.section,
                       ),
                       repo: repoName,
                       repoHref,
                       hasRepo: accepted,
-                      displayName:
-                        getName(student.username, students) || undefined,
+                      displayName: nameOf(student.username) || undefined,
                     })
                   actions = (
                     <RepoRowActions
@@ -1121,8 +1130,7 @@ const SubmissionsTable = ({
                       typeof overrideGrade.maxPoints === "number"
                         ? setOverrideRow({
                             owner: username,
-                            displayName:
-                              getName(username, students) || undefined,
+                            displayName: nameOf(username) || undefined,
                             hasGrade: false,
                             score: 0,
                             overridden: false,

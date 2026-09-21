@@ -5,7 +5,6 @@ import { GitHubAPIError } from "@/github-core/errors"
 import {
   failedAndDeferredSections,
   outcomeSection,
-  ownerDisplayName,
   partitionOutcomes,
   runBulkFanOut,
 } from "./fanOut"
@@ -207,20 +206,5 @@ describe("failedAndDeferredSections", () => {
   })
 })
 
-describe("ownerDisplayName", () => {
-  it("uses the roster name when known and falls back to the login", () => {
-    const displayFor = ownerDisplayName([
-      {
-        username: "ann",
-        first_name: "Ann",
-        last_name: "Lee",
-        email: "",
-        section: "",
-        github_id: "",
-        role: "",
-      },
-    ])
-    expect(displayFor("ann")).toBe("Ann Lee")
-    expect(displayFor("zed")).toBe("zed")
-  })
-})
+// useOwnerDisplayName is covered in useOwnerDisplayName.test.tsx (needs a DOM
+// and the preferences provider).

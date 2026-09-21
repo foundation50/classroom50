@@ -9,7 +9,7 @@ import {
 } from "@/components/bulk/resultView"
 import {
   failedAndDeferredSections,
-  ownerDisplayName,
+  useOwnerDisplayName,
   partitionOutcomes,
   runBulkFanOut,
   type FanOutOutcome,
@@ -60,7 +60,7 @@ export function BulkRepoPagesModal({
   const { phase, progress, result, busy } = bulk
 
   const total = owners.length
-  const displayFor = ownerDisplayName(students)
+  const displayFor = useOwnerDisplayName(students)
   // A branch source with no named branch publishes each repo's own default
   // branch, which only a per-repo read knows.
   const needsDefaultBranch = pages.source === "branch" && !pages.branch

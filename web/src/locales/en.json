@@ -1120,6 +1120,16 @@
     "language": {
       "heading": "Language",
       "subheading": "Switch languages or install a translated language pack."
+    },
+    "nameOrder": {
+      "heading": "Student names",
+      "subheading": "Choose the order student names appear in across rosters, submissions, groups, and exported scores.",
+      "firstLast": "First name, then last name",
+      "firstLastHint": "For example, Ada Lovelace.",
+      "lastFirst": "Last name, then first name",
+      "lastFirstHint": "For example, Lovelace Ada.",
+      "groupAria": "Name order preference",
+      "saved": "Name order preference saved."
     }
   },
   "assignments": {

@@ -16,7 +16,7 @@ import {
 } from "@/components/bulk/resultView"
 import {
   failedAndDeferredSections,
-  ownerDisplayName,
+  useOwnerDisplayName,
   partitionOutcomes,
   runBulkFanOut,
 } from "@/components/bulk/fanOut"
@@ -95,7 +95,7 @@ export function BulkRepoFeaturesModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = ownerDisplayName(students)
+  const displayFor = useOwnerDisplayName(students)
   const patch = useMemo(() => choicesToPatch(choices), [choices])
   const nothingSelected = Object.keys(patch).length === 0
 

@@ -15,6 +15,7 @@ import { GitHubAuthProvider } from "./auth/useGithubAuth"
 import { GitHubClientProviderFromAuth } from "./context/github/GitHubClientProviderFromAuth"
 import { NotificationProvider } from "./context/notifications/NotificationProvider"
 import { HiddenOrgsProvider } from "./context/hiddenOrgs/HiddenOrgsProvider"
+import { UserPreferencesProvider } from "./context/userPreferences/UserPreferencesProvider"
 import { ActionActivityProvider } from "./context/actions/ActionActivityProvider"
 import { ActionsBanner } from "./components/status/ActionsBanner"
 import { BackgroundPassTag } from "./components/status/BackgroundPassTag"
@@ -106,13 +107,15 @@ createRoot(document.getElementById("root")!).render(
             <ActionActivityProvider>
               <NotificationProvider>
                 <HiddenOrgsProvider>
-                  <RouteProgressBar />
-                  <LiveAnnouncer />
-                  <BackgroundPassTag />
-                  <KeepTabOpenGuard />
-                  <App />
-                  <ActionsBanner />
-                  <LanguagePackUpdateToaster />
+                  <UserPreferencesProvider>
+                    <RouteProgressBar />
+                    <LiveAnnouncer />
+                    <BackgroundPassTag />
+                    <KeepTabOpenGuard />
+                    <App />
+                    <ActionsBanner />
+                    <LanguagePackUpdateToaster />
+                  </UserPreferencesProvider>
                 </HiddenOrgsProvider>
               </NotificationProvider>
             </ActionActivityProvider>

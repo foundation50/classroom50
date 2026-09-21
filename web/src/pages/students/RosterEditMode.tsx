@@ -23,7 +23,8 @@ import {
   type DirectoryMember,
   type RosterEdit,
 } from "@/domain/students"
-import { nameFromParts } from "@/util/students"
+import { rosterRowLabel } from "@/util/memberRow"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import type { TeamRosterRow } from "@/util/teamRoster"
 
 // One row's staged (not yet saved) values. Metadata fields are undefined until
@@ -66,6 +67,7 @@ export function RosterEditMode({
   onSaved: (result: ApplyRosterEditsResult) => void
 }) {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const client = useGitHubClient()
   // Freeze the rows as of entering edit mode: drafts key on row.key, so a
   // background sync mutating a derived key would silently drop staged edits.
@@ -218,8 +220,7 @@ export function RosterEditMode({
     onCancel()
   }
 
-  const displayLabel = (row: TeamRosterRow) =>
-    nameFromParts(row.first_name, row.last_name) || row.username || row.email
+  const displayLabel = (row: TeamRosterRow) => rosterRowLabel(row, nameOrder)
 
   return (
     <div className="flex w-full flex-col gap-3">

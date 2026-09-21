@@ -9,7 +9,7 @@ import {
 } from "@/components/bulk/resultView"
 import {
   outcomeSection,
-  ownerDisplayName,
+  useOwnerDisplayName,
   runBulkFanOut,
   type FanOutOutcome,
 } from "@/components/bulk/fanOut"
@@ -57,7 +57,7 @@ export function BulkAutogradeStateModal({
   const { phase, progress, result, busy } = bulk
 
   const total = owners.length
-  const displayFor = ownerDisplayName(students)
+  const displayFor = useOwnerDisplayName(students)
   const isPause = action === "pause"
 
   const run = async () => {

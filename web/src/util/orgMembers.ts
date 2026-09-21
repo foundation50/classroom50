@@ -7,7 +7,12 @@ import {
   indexFailedInvitations,
   type FailedInvitationRef,
 } from "./teamRoster"
-import { resolveGitHubId } from "./students"
+import {
+  DEFAULT_NAME_ORDER,
+  formatName,
+  resolveGitHubId,
+  type NameOrder,
+} from "./students"
 import { sortByColumn } from "./sortColumns"
 
 // Per-classroom enrollment state for an aggregated member, mirroring
@@ -91,11 +96,8 @@ export type ClassroomRoster = {
 
 // Pick the better display name for the same student seen across rosters: prefer
 // a row that carries a name over one that doesn't.
-const fullName = (s: Student) =>
-  [s.first_name, s.last_name]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(" ")
+const fullName = (s: Student, order: NameOrder) =>
+  formatName(s.first_name, s.last_name, order)
 
 // Deduplicate students across rosters (by studentKey), match each to a live org
 // member by numeric github_id, fold in members on no roster, and classify every
@@ -110,6 +112,8 @@ export function aggregateOrgMembers(
   // classroom absent from the map has "unknown" team data and is never flagged.
   teamMembersByClassroom?: Map<string, Set<string>>,
   invitations: OrgInvitationLists = {},
+  // The user's name order for the roster-derived `name` column.
+  nameOrder: NameOrder = DEFAULT_NAME_ORDER,
 ): OrgMemberRow[] {
   const memberIds = memberIdSet(members)
 
@@ -192,14 +196,14 @@ export function aggregateOrgMembers(
           existing.github_id = student.github_id
         if (!existing.email && student.email) existing.email = student.email
         addEmail(existing, student.email)
-        const name = fullName(student)
+        const name = fullName(student, nameOrder)
         if (!existing.name && name) existing.name = name
       } else {
         const acc: Acc = {
           key,
           username: student.username ?? "",
           github_id: student.github_id ?? "",
-          name: fullName(student),
+          name: fullName(student, nameOrder),
           email: student.email ?? "",
           emails: [],
           classrooms: [access],

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { useQuery } from "@tanstack/react-query"
 
 import {
@@ -89,6 +90,7 @@ export function ManageGroupDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const client = useGitHubClient()
 
   const teamsQuery = useGroupTeams(org, classroom, assignment)
@@ -113,8 +115,8 @@ export function ManageGroupDialog({
   )
   // Students not on ANY of this assignment's teams — the add picker's options.
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () => toGroupPickerStudents(enrolled, assignedLogins),
-    [enrolled, assignedLogins],
+    () => toGroupPickerStudents(enrolled, assignedLogins, nameOrder),
+    [enrolled, assignedLogins, nameOrder],
   )
 
   const addMember = useAddGroupTeamMember({ org, classroom, assignment })

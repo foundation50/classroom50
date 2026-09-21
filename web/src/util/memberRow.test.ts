@@ -23,17 +23,24 @@ const rosterRow = (over: Partial<TeamRosterRow> = {}): TeamRosterRow => ({
 })
 
 describe("rosterRowToMemberRow", () => {
-  it("derives name from first/last parts", () => {
+  it("derives name from first/last parts in the given order", () => {
     const row = rosterRowToMemberRow(
       rosterRow({ first_name: "ada", last_name: "lovelace" }),
+      "first-last",
     )
     expect(row.name).toBe("Ada Lovelace")
     expect(row.key).toBe("1")
     expect(row.username).toBe("octocat")
+    expect(
+      rosterRowToMemberRow(
+        rosterRow({ first_name: "ada", last_name: "lovelace" }),
+        "last-first",
+      ).name,
+    ).toBe("Lovelace Ada")
   })
 
   it("falls back to username when no name parts", () => {
-    expect(rosterRowToMemberRow(rosterRow()).name).toBe("octocat")
+    expect(rosterRowToMemberRow(rosterRow(), "first-last").name).toBe("octocat")
   })
 
   it("falls back to email when no name and no username", () => {
@@ -44,6 +51,7 @@ describe("rosterRowToMemberRow", () => {
         email: "a@x.edu",
         key: "a@x.edu",
       }),
+      "first-last",
     )
     expect(row.name).toBe("a@x.edu")
   })

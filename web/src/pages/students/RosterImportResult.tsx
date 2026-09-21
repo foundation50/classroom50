@@ -1,4 +1,6 @@
 import { useTranslation } from "react-i18next"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
+import { formatName } from "@/util/students"
 import { Alert, TableShell } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type {
@@ -135,6 +137,7 @@ export const RosterImportResult = ({
   emailAlreadyPending?: string[]
 }) => {
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const emailInvitedCount = emailResult?.invited.length ?? 0
   return (
     <div className="mt-6 space-y-4">
@@ -171,9 +174,11 @@ export const RosterImportResult = ({
           rows={result.addedStudents.map((student) => ({
             key: student.username,
             label: student.username,
-            detail: [student.first_name, student.last_name]
-              .filter(Boolean)
-              .join(" "),
+            detail: formatName(
+              student.first_name,
+              student.last_name,
+              nameOrder,
+            ),
           }))}
         />
       )}

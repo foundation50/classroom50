@@ -26,6 +26,7 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useClassroomRoleContextOptional } from "@/context/classroomRole/ClassroomRoleProvider"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import { useInvalidateInviteQueries } from "@/hooks/useCacheRefresh"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
@@ -58,7 +59,7 @@ import {
   type StatusFilter,
 } from "@/pages/students/rosterFilter"
 import { studentKey, toStudent } from "@/util/roster"
-import { isSameGitHubUser } from "@/util/students"
+import { defaultStudentSortMode, isSameGitHubUser } from "@/util/students"
 import { shouldWarnNoneSelectable } from "@/util/rowSelection"
 import { useRowSelection } from "@/hooks/useRowSelection"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
@@ -147,6 +148,7 @@ const EnrolledStudents = ({
 }) => {
   const client = useGitHubClient()
   const { t } = useTranslation()
+  const nameOrder = useUserPreference("nameOrder")
   const { notify, announce } = useToast()
   const { data: viewer } = useGitHubViewer()
   // Roster invite / unenroll / role-change all hit owner-only org APIs
@@ -314,6 +316,7 @@ const EnrolledStudents = ({
   // Default order is enrollment state then name; an active header sort
   // re-orders by that column instead.
   const filtered = useMemo(() => {
+    const nameMode = defaultStudentSortMode(nameOrder)
     const base = sortTeamRosterRows(
       filterRosterRows(rows, {
         query,
@@ -321,14 +324,23 @@ const EnrolledStudents = ({
         roleFilter: effectiveRole,
         sectionFilter: effectiveSection,
       }),
+      nameMode,
     )
     if (!tableSort) return base
     const [column, direction] = tableSort.split("-") as [
       RosterTableSortColumn,
       "asc" | "desc",
     ]
-    return sortTeamRosterRowsBy(base, column, direction)
-  }, [rows, query, statusFilter, effectiveRole, effectiveSection, tableSort])
+    return sortTeamRosterRowsBy(base, column, direction, nameMode)
+  }, [
+    rows,
+    query,
+    statusFilter,
+    effectiveRole,
+    effectiveSection,
+    tableSort,
+    nameOrder,
+  ])
 
   const hasSectionsInFiltered = useMemo(
     () => filtered.some((r) => r.section.trim()),

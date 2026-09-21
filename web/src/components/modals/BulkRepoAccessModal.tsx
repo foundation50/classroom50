@@ -16,7 +16,7 @@ import {
 } from "@/components/bulk/resultView"
 import {
   failedAndDeferredSections,
-  ownerDisplayName,
+  useOwnerDisplayName,
   partitionOutcomes,
 } from "@/components/bulk/fanOut"
 import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
@@ -61,7 +61,7 @@ export function BulkRepoAccessModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = ownerDisplayName(students)
+  const displayFor = useOwnerDisplayName(students)
 
   const permissionLabel = (level: RepoPermission) =>
     t(`assignments.form.studentPermission.levels.${level}`)

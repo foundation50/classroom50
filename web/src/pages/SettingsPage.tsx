@@ -28,6 +28,8 @@ import {
 import { TokenHealthChip } from "@/components/status/TokenHealthChip"
 import { useReducedMotion, type MotionPref } from "@/hooks/useReducedMotion"
 import { useTheme, type ThemePref } from "@/hooks/useTheme"
+import { useUserPreferences } from "@/context/userPreferences/UserPreferencesProvider"
+import type { NameOrder } from "@/types/preferences"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 import {
   useDeleteRepoScopeState,
@@ -511,6 +513,45 @@ function MotionSection({ highlighted }: { highlighted?: boolean }) {
   )
 }
 
+// Name order (First Last / Last First) for every surface that shows a student's
+// name, persisted per-browser through the preferences registry. The default
+// name sort follows it, so a "Last First" roster opens ordered by last name.
+function NameOrderSection({ highlighted }: { highlighted?: boolean }) {
+  const { t } = useTranslation()
+  const { preferences, setPreference } = useUserPreferences()
+
+  const options: { value: NameOrder; label: string; hint: string }[] = [
+    {
+      value: "first-last",
+      label: t("settings.nameOrder.firstLast"),
+      hint: t("settings.nameOrder.firstLastHint"),
+    },
+    {
+      value: "last-first",
+      label: t("settings.nameOrder.lastFirst"),
+      hint: t("settings.nameOrder.lastFirstHint"),
+    },
+  ]
+
+  return (
+    <SettingsSectionCard
+      id="name-order"
+      heading={t("settings.nameOrder.heading")}
+      subheading={t("settings.nameOrder.subheading")}
+      highlighted={highlighted}
+    >
+      <PreferenceForm
+        name="name-order-pref"
+        legend={t("settings.nameOrder.groupAria")}
+        value={preferences.nameOrder}
+        onSave={(next) => setPreference("nameOrder", next)}
+        options={options}
+        savedMessage={t("settings.nameOrder.saved")}
+      />
+    </SettingsSectionCard>
+  )
+}
+
 // Organizations hidden from the home page, with an Unhide affordance.
 function HiddenOrgsSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
@@ -550,10 +591,11 @@ function HiddenOrgsSection({ highlighted }: { highlighted?: boolean }) {
 }
 
 // User settings scoped to this browser (client-side only), grouped into
-// Organizations (hidden orgs, service tokens) and Preferences (animations,
-// appearance, language). Groups and the cards within them are ordered
-// alphabetically by their displayed heading. Theme and language also have
-// quick-access affordances in the sidebar footer.
+// Organizations (hidden orgs, service tokens) and Preferences. Organization
+// cards are ordered alphabetically by heading; Preferences run from the choices
+// most people make once (language, student names) to the cosmetic ones
+// (appearance, animations). Theme and language also have quick-access
+// affordances in the sidebar footer.
 const SettingsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.settings"))
@@ -584,9 +626,10 @@ const SettingsPage = () => {
           heading={t("settings.groups.preferences")}
           description={t("settings.groups.preferencesDescription")}
         >
-          <MotionSection highlighted={highlightedId === "motion"} />
-          <AppearanceSection highlighted={highlightedId === "appearance"} />
           <LanguageSection highlighted={highlightedId === "language"} />
+          <NameOrderSection highlighted={highlightedId === "name-order"} />
+          <AppearanceSection highlighted={highlightedId === "appearance"} />
+          <MotionSection highlighted={highlightedId === "motion"} />
         </SettingsGroup>
       </div>
     </PageShell>

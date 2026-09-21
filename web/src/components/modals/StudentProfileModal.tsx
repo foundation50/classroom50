@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
 
 import { Badge, Button, ExternalLink, Modal } from "@/components/ui"
+import { useUserPreference } from "@/context/userPreferences/UserPreferencesProvider"
 import type { Student } from "@/types/classroom"
 import { getName, getInitials, firstGrapheme } from "@/util/students"
 
@@ -33,7 +34,9 @@ export const StudentProfileModal = ({
     dialogRef.current?.showModal()
   }, [])
 
-  const name = getName(student.username, students) || student.username || "—"
+  const nameOrder = useUserPreference("nameOrder")
+  const name =
+    getName(student.username, students, nameOrder) || student.username || "—"
   const initials =
     getInitials(student.username, students) ||
     firstGrapheme(student.username ?? "").toUpperCase() ||
