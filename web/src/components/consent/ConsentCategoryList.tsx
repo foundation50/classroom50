@@ -3,10 +3,11 @@ import { useTranslation } from "react-i18next"
 
 import { Checkbox, Collapse, HelpTooltip, Toggle, cx } from "@/components/ui"
 import { ChevronRightIcon, LockIcon } from "@/components/ui/icons"
-import type {
-  ConsentCategory,
-  ConsentChoices,
-  OptionalConsentCategory,
+import {
+  OPTIONAL_CONSENT_CATEGORIES,
+  type ConsentCategory,
+  type ConsentChoices,
+  type OptionalConsentCategory,
 } from "@/types/consent"
 
 // What each category covers, as i18n keys under consent.categories.<id>.items.
@@ -19,8 +20,7 @@ const CATEGORY_ITEMS: Record<ConsentCategory, readonly string[]> = {
 
 const CATEGORIES: readonly ConsentCategory[] = [
   "functional",
-  "cloudflare",
-  "google",
+  ...OPTIONAL_CONSENT_CATEGORIES,
 ]
 
 // The categories a visitor decides on, one control each, with the functional
@@ -42,11 +42,11 @@ export function ConsentCategoryList({
   const Row = variant === "compact" ? CompactRow : FullRow
   return (
     <ul
-      className={cx(
+      className={
         variant === "compact"
           ? "flex flex-wrap gap-x-8 gap-y-3"
-          : "flex flex-col gap-3",
-      )}
+          : "flex flex-col gap-3"
+      }
     >
       {CATEGORIES.map((category) => (
         <Row

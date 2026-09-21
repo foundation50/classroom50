@@ -8,21 +8,49 @@ import {
   DEFAULT_CHOICES,
   OPTIONAL_CONSENT_CATEGORIES,
   type ConsentChoices,
+  type ConsentRecord,
 } from "@/types/consent"
 
 import { ConsentCategoryList } from "./ConsentCategoryList"
 
-// The same choices as the consent prompt, for Settings and /privacy: one row
-// per category, then start-aligned actions in the Settings form pattern
-// (primary Save first). Edits a draft and commits on Save. Starts from the
-// saved record, or from the prompt's defaults for an undecided visitor, so the
-// two surfaces always show the same state. Reset appears once a decision
-// exists and makes the prompt ask again.
+// The same choices as the consent prompt, for Settings and /privacy. When the
+// browser sends Global Privacy Control / Do Not Track the form would be
+// inert, so it says so instead. The draft is keyed on the saved record, so a
+// decision or a Reset (record -> null) starts it afresh.
 export function ConsentPreferencesForm({ idPrefix }: { idPrefix: string }) {
   const { t } = useTranslation()
-  const { record, decide, declineAll, reset } = useConsent()
+  const { browserDeclines, record } = useConsent()
+  if (browserDeclines) {
+    return (
+      <p className="text-sm text-base-content/70">
+        {t("consent.browserDeclines")}
+      </p>
+    )
+  }
+  return (
+    <Draft
+      key={record?.at ?? "undecided"}
+      idPrefix={idPrefix}
+      record={record}
+    />
+  )
+}
+
+// One row per category, then start-aligned actions in the Settings form
+// pattern (primary Save first). Starts from the saved record, or from the
+// prompt's defaults for an undecided visitor, so the two surfaces always show
+// the same state. Reset appears once a decision exists.
+function Draft({
+  idPrefix,
+  record,
+}: {
+  idPrefix: string
+  record: ConsentRecord | null
+}) {
+  const { t } = useTranslation()
+  const { decide, reset } = useConsent()
   const [draft, setDraft] = useState<ConsentChoices>(() =>
-    record ? pick(record) : DEFAULT_CHOICES,
+    record ? choicesOf(record) : DEFAULT_CHOICES,
   )
 
   return (
@@ -49,10 +77,7 @@ export function ConsentPreferencesForm({ idPrefix }: { idPrefix: string }) {
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            setDraft(ALL_DENIED)
-            declineAll()
-          }}
+          onClick={() => decide(ALL_DENIED)}
         >
           {t("consent.declineAll")}
         </Button>
@@ -72,7 +97,9 @@ export function ConsentPreferencesForm({ idPrefix }: { idPrefix: string }) {
   )
 }
 
-function pick(record: ConsentChoices): ConsentChoices {
+// Only the categories: a record also carries `v` and `at`, which must not
+// leak into a new decision.
+function choicesOf(record: ConsentRecord): ConsentChoices {
   return Object.fromEntries(
     OPTIONAL_CONSENT_CATEGORIES.map((category) => [category, record[category]]),
   ) as ConsentChoices

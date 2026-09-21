@@ -24,8 +24,9 @@ export function clearAnalyticsCookies(
     .split(";")
     .map((pair) => pair.split("=")[0].trim())
     .filter((name) => GOOGLE_ANALYTICS_COOKIE.test(name))
+  const domains = candidateDomains(hostname)
   for (const name of names) {
-    for (const domain of candidateDomains(hostname)) {
+    for (const domain of domains) {
       doc.cookie =
         `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/` +
         (domain ? `; domain=${domain}` : "")

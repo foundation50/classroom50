@@ -103,7 +103,9 @@ export type ModalProps = {
   // Extra classes for the modal-box.
   boxClassName?: string
   // Where the box sits over the dimmed page. "bottom" anchors it to the bottom
-  // edge, for prompts that should not cover the page they are about.
+  // edge, for prompts that should not cover the page they are about. Not
+  // daisyUI's `modal-bottom`, which also forces a full-width sheet with a
+  // capped height and a slide, and would fight a box that grows to h-dvh.
   placement?: "middle" | "bottom"
   // "focus" dims the page to about half and blurs it slightly, for a prompt the
   // visitor has to answer before going on.

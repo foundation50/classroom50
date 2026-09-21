@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  ANALYTICS_RUNTIME_GLOBAL,
   CONSENT_STORAGE_KEY,
   CONSENT_VERSION,
   LEGACY_ANALYTICS_STORAGE_KEY,
 } from "../src/types/consent.ts"
-import {
-  ANALYTICS_PROVIDERS,
-  ANALYTICS_RUNTIME_GLOBAL,
-  analyticsPlugin,
-} from "./analytics.ts"
+import { ANALYTICS_PROVIDERS, analyticsPlugin } from "./analytics.ts"
 
 const PAGE = `<!doctype html>
 <html>
@@ -98,30 +95,25 @@ function boot(
   return { inserted, win, runtime: win[ANALYTICS_RUNTIME_GLOBAL] as Runtime }
 }
 
-const granted = {
-  [CONSENT_STORAGE_KEY]: JSON.stringify({
-    v: CONSENT_VERSION,
-    at: "t",
-    cloudflare: true,
-    google: true,
-  }),
-}
-const denied = {
-  [CONSENT_STORAGE_KEY]: JSON.stringify({
-    v: CONSENT_VERSION,
-    at: "t",
-    cloudflare: false,
-    google: false,
-  }),
-}
+// A stored consent record, as the app writes it.
+const stored = (
+  choices: Record<string, boolean>,
+  v: number = CONSENT_VERSION,
+) => ({
+  [CONSENT_STORAGE_KEY]: JSON.stringify({ v, at: "t", ...choices }),
+})
+const granted = stored({ cloudflare: true, google: true })
+const denied = stored({ cloudflare: false, google: false })
 
 describe("analyticsPlugin", () => {
+  const page = transform(BOTH)
+
   it("leaves the page untouched when no provider variable is set", () => {
     expect(transform({})).toBe(PAGE)
   })
 
   it("injects the runtime first in <head>, GTM after it, and Cloudflare at the end of <body>", () => {
-    const html = transform(BOTH)
+    const html = page
     const head = html.slice(0, html.indexOf("</head>"))
     const body = html.slice(html.indexOf("<body>"))
     expect(head.indexOf("/* anti-flash */")).toBeLessThan(
@@ -157,7 +149,7 @@ describe("analyticsPlugin", () => {
   })
 
   describe("consent gate at boot", () => {
-    const html = transform(BOTH)
+    const html = page
     const kinds = (inserted: Record<string, unknown>[]) =>
       inserted.map((i) => (i.type === "module" ? "cloudflare" : "google"))
 
@@ -168,14 +160,7 @@ describe("analyticsPlugin", () => {
 
     it("starts nothing when everything was declined or the record is from an older version", () => {
       expect(boot(html, { storage: denied }).inserted).toHaveLength(0)
-      const old = {
-        [CONSENT_STORAGE_KEY]: JSON.stringify({
-          v: 0,
-          at: "t",
-          cloudflare: true,
-          google: true,
-        }),
-      }
+      const old = stored({ cloudflare: true, google: true }, 0)
       expect(boot(html, { storage: old }).inserted).toHaveLength(0)
     })
 
@@ -189,17 +174,12 @@ describe("analyticsPlugin", () => {
         "cloudflare",
         "google",
       ])
-      const onlyCloudflare = {
-        [CONSENT_STORAGE_KEY]: JSON.stringify({
-          v: CONSENT_VERSION,
-          at: "t",
-          cloudflare: true,
-          google: false,
-        }),
-      }
-      expect(kinds(boot(html, { storage: onlyCloudflare }).inserted)).toEqual([
-        "cloudflare",
-      ])
+      expect(
+        kinds(
+          boot(html, { storage: stored({ cloudflare: true, google: false }) })
+            .inserted,
+        ),
+      ).toEqual(["cloudflare"])
     })
 
     it("starts nothing while the browser sends GPC or DNT, even with consent", () => {
@@ -213,7 +193,7 @@ describe("analyticsPlugin", () => {
   })
 
   describe("runtime bridge for the app", () => {
-    const html = transform(BOTH)
+    const html = page
 
     it("enable() starts granted categories once, and reports them as started", () => {
       const { inserted, runtime } = boot(html)

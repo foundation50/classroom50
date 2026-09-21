@@ -34,7 +34,6 @@ import {
   type PreferenceOption,
 } from "@/components/settings/PreferenceForm"
 import { ConsentPreferencesForm } from "@/components/consent/ConsentPreferencesForm"
-import { useConsent } from "@/context/consent/ConsentProvider"
 import {
   useDeleteRepoScopeState,
   useCanElevateInApp,
@@ -423,13 +422,9 @@ function NameOrderSection({ highlighted }: { highlighted?: boolean }) {
   )
 }
 
-// Cookie and analytics consent, the same form as the consent dialog and the
-// public /privacy page. A browser-level signal (Global Privacy Control / Do Not
-// Track) overrides the form, so say so instead of offering a toggle that
-// couldn't take effect.
+// Cookie and analytics consent, the same form as the public /privacy page.
 function ConsentSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
-  const { browserDeclines, record } = useConsent()
   return (
     <SettingsSectionCard
       id="analytics"
@@ -437,17 +432,7 @@ function ConsentSection({ highlighted }: { highlighted?: boolean }) {
       subheading={t("settings.analytics.subheading")}
       highlighted={highlighted}
     >
-      {browserDeclines ? (
-        <p className="text-sm text-base-content/70">
-          {t("consent.browserDeclines")}
-        </p>
-      ) : (
-        <ConsentPreferencesForm
-          // Re-keyed on the record so Reset (record -> null) starts a fresh draft.
-          key={record?.at ?? "undecided"}
-          idPrefix="settings-consent"
-        />
-      )}
+      <ConsentPreferencesForm idPrefix="settings-consent" />
       <p className="mt-4 text-sm">
         <Link className="link link-info link-hover" to="/privacy">
           {t("settings.analytics.privacyLink")}

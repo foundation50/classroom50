@@ -14,6 +14,14 @@ import { ClassroomLogo, ExpandSidebarButton } from "./primitives"
 import { SidebarFooter } from "./SidebarFooter"
 import { AccessibilitySidebarNav } from "./AccessibilitySidebarNav"
 import { PrivacySidebarNav } from "./PrivacySidebarNav"
+
+// Public pages get their own rail (a way back, plus the accessibility page's
+// section deep links) instead of the org/class menus, which need a GitHub
+// client; signed-in users still get "Back to app" and the full account footer.
+const PUBLIC_RAILS: Record<string, () => ReactNode> = {
+  "/accessibility": AccessibilitySidebarNav,
+  "/privacy": PrivacySidebarNav,
+}
 import { useSidebarNav } from "./useSidebarNav"
 import { sidebarLevelVariants, pageContentVariants } from "@/lib/motion"
 
@@ -132,12 +140,7 @@ export const DrawerSidebar = () => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  // Public pages get their own rail (a way back, plus the accessibility page's
-  // section deep links) instead of the org/class menus, which need a GitHub
-  // client; signed-in users still get "Back to app" and the full account footer.
-  const publicPage = pathname.replace(/\/$/, "")
-  const onAccessibility = publicPage === "/accessibility"
-  const onPrivacy = publicPage === "/privacy"
+  const PublicRail = PUBLIC_RAILS[pathname.replace(/\/$/, "")]
   const { page, selected, settings, levelKey } = useSidebarNav()
   return (
     <div className="drawer-side z-40">
@@ -160,10 +163,8 @@ export const DrawerSidebar = () => {
       >
         <ClassroomLogo />
         <ExpandSidebarButton />
-        {onAccessibility ? (
-          <AccessibilitySidebarNav />
-        ) : onPrivacy ? (
-          <PrivacySidebarNav />
+        {PublicRail ? (
+          <PublicRail />
         ) : (
           <AnimatePresence mode="wait" initial={false}>
             <motion.div

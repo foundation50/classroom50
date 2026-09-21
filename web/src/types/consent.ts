@@ -11,6 +11,10 @@ export const CONSENT_STORAGE_KEY = "classroom50:consent"
 // is honored as a denial so those visitors are never asked to decide again.
 export const LEGACY_ANALYTICS_STORAGE_KEY = "classroom50:analytics"
 
+// The runtime the build injects into index.html (web/vite/analytics.ts) and the
+// app calls to start vendors after consent (lib/analyticsRuntime.ts).
+export const ANALYTICS_RUNTIME_GLOBAL = "__classroom50Analytics"
+
 // What a visitor decides on. "functional" is what the app needs to work; it is
 // always on and has no toggle, but is listed so the prompt explains it. The
 // optional categories are the analytics vendors, one each, so a visitor can
@@ -30,6 +34,8 @@ export type ConsentRecord = {
 } & ConsentChoices
 
 export const ALL_DENIED: ConsentChoices = { cloudflare: false, google: false }
-export const ALL_GRANTED: ConsentChoices = { cloudflare: true, google: true }
 // What the prompt pre-selects before the visitor touches anything.
-export const DEFAULT_CHOICES: ConsentChoices = ALL_GRANTED
+export const DEFAULT_CHOICES: ConsentChoices = {
+  cloudflare: true,
+  google: true,
+}

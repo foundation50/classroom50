@@ -12,11 +12,6 @@ vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()
   return { ...actual, useTranslation: () => ({ t: (k: string) => k }) }
 })
-// The prompt lives outside RouterProvider and navigates through the router
-// instance; the test only needs the link to exist.
-vi.mock("@/router", () => ({
-  router: { navigate: vi.fn(() => Promise.resolve()) },
-}))
 
 function installLocalStorage() {
   const store = new Map<string, string>()
@@ -32,7 +27,7 @@ function installLocalStorage() {
 }
 
 // The consent runtime the built page injects (web/vite/analytics.ts); dev and
-// test builds have none, so install a recording fake.
+// test builds have none, so install a recording fake. Returns the `enable` spy.
 function installRuntime(started: string[] = []) {
   const enable = vi.fn()
   window.__classroom50Analytics = {
@@ -42,9 +37,44 @@ function installRuntime(started: string[] = []) {
   return enable
 }
 
-// happy-dom doesn't implement <dialog> showModal/close; the prompt is a Modal,
-// so stub them and read `open` to tell asked from not asked.
+const renderBanner = () =>
+  render(
+    <ConsentProvider>
+      <ConsentBanner />
+    </ConsentProvider>,
+  )
+const renderForm = () =>
+  render(
+    <ConsentProvider>
+      <ConsentPreferencesForm idPrefix="t" />
+    </ConsentProvider>,
+  )
+const promptOpen = () =>
+  screen.getByText("consent.banner.title").closest("dialog")!.open
+const stored = () =>
+  JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY) ?? "null")
+const checkbox = (category: string) =>
+  screen.getByLabelText(
+    `consent.categories.${category}.label`,
+  ) as HTMLInputElement
+const decide = (choices: Record<string, boolean>) =>
+  window.localStorage.setItem(
+    CONSENT_STORAGE_KEY,
+    JSON.stringify({ v: CONSENT_VERSION, at: "t", ...choices }),
+  )
+const lastConsentUpdate = () =>
+  Array.from(window.dataLayer![window.dataLayer!.length - 1] as IArguments)
+
 beforeEach(() => {
+  installLocalStorage()
+  installRuntime()
+  window.dataLayer = []
+  Object.defineProperty(window.navigator, "globalPrivacyControl", {
+    value: undefined,
+    configurable: true,
+  })
+  // happy-dom doesn't implement <dialog> showModal/close; the prompt is a
+  // Modal, so stub them and read `open` to tell asked from not asked.
   HTMLDialogElement.prototype.showModal = function () {
     this.open = true
   }
@@ -53,25 +83,6 @@ beforeEach(() => {
     this.dispatchEvent(new Event("close"))
   }
 })
-const promptOpen = () =>
-  screen.getByText("consent.banner.title").closest("dialog")!.open
-
-const stored = () =>
-  JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY) ?? "null")
-const checkbox = (category: string) =>
-  screen.getByLabelText(
-    `consent.categories.${category}.label`,
-  ) as HTMLInputElement
-const decided = (choices: Record<string, boolean>) =>
-  JSON.stringify({ v: CONSENT_VERSION, at: "t", ...choices })
-
-beforeEach(() => {
-  installLocalStorage()
-  Object.defineProperty(window.navigator, "globalPrivacyControl", {
-    value: undefined,
-    configurable: true,
-  })
-})
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
@@ -79,13 +90,8 @@ afterEach(() => {
 })
 
 describe("ConsentBanner", () => {
-  it("asks on a first visit with every optional category pre-selected", () => {
-    installRuntime()
-    render(
-      <ConsentProvider>
-        <ConsentBanner />
-      </ConsentProvider>,
-    )
+  it("asks on a first visit with every optional category pre-selected and Functional locked", () => {
+    renderBanner()
     expect(promptOpen()).toBe(true)
     expect(checkbox("cloudflare").checked).toBe(true)
     expect(checkbox("google").checked).toBe(true)
@@ -93,15 +99,14 @@ describe("ConsentBanner", () => {
       screen.queryByLabelText("consent.categories.functional.label"),
     ).toBeNull()
     expect(screen.getByText("consent.alwaysOn", { exact: false })).toBeTruthy()
+    expect(
+      screen.getByLabelText("consent.categories.functional.tooltip"),
+    ).toBeTruthy()
   })
 
   it("Accept saves what is selected and starts only those vendors", async () => {
     const enable = installRuntime()
-    render(
-      <ConsentProvider>
-        <ConsentBanner />
-      </ConsentProvider>,
-    )
+    renderBanner()
     await userEvent.click(checkbox("google"))
     expect(stored()).toBeNull()
     expect(enable).not.toHaveBeenCalled()
@@ -114,29 +119,17 @@ describe("ConsentBanner", () => {
 
   it("Decline turns every optional category off and starts nothing", async () => {
     const enable = installRuntime()
-    render(
-      <ConsentProvider>
-        <ConsentBanner />
-      </ConsentProvider>,
-    )
+    renderBanner()
     await userEvent.click(screen.getByText("consent.banner.decline"))
     expect(stored()).toMatchObject({ cloudflare: false, google: false })
     expect(enable).not.toHaveBeenCalled()
     expect(promptOpen()).toBe(false)
   })
 
-  it("stays closed once a decision exists or when the browser sends Global Privacy Control", () => {
-    installRuntime()
-    window.localStorage.setItem(
-      CONSENT_STORAGE_KEY,
-      decided({ cloudflare: false, google: false }),
-    )
-    const { unmount } = render(
-      <ConsentProvider>
-        <ConsentBanner />
-      </ConsentProvider>,
-    )
-    expect(promptOpen()).toBe(false)
+  it("does not mount once a decision exists, or when the browser sends Global Privacy Control", () => {
+    decide({ cloudflare: false, google: false })
+    const { unmount } = renderBanner()
+    expect(screen.queryByText("consent.banner.title")).toBeNull()
     unmount()
     window.localStorage.clear()
 
@@ -144,54 +137,34 @@ describe("ConsentBanner", () => {
       value: true,
       configurable: true,
     })
-    render(
-      <ConsentProvider>
-        <ConsentBanner />
-      </ConsentProvider>,
-    )
-    expect(promptOpen()).toBe(false)
+    renderBanner()
+    expect(screen.queryByText("consent.banner.title")).toBeNull()
   })
-})
 
-describe("ConsentBanner after Reset", () => {
-  it("shows the defaults again, not the last unchecked state", async () => {
-    installRuntime()
+  it("shows the defaults again after Reset, not the last unchecked state", async () => {
     render(
       <ConsentProvider>
         <ConsentBanner />
         <ConsentPreferencesForm idPrefix="t" />
       </ConsentProvider>,
     )
-    // In the bar: uncheck Google, then decide.
-    const barGoogle = document.getElementById(
-      "consent-prompt-google",
-    ) as HTMLInputElement
-    await userEvent.click(barGoogle)
-    expect(barGoogle.checked).toBe(false)
+    const barGoogle = () =>
+      document.getElementById("consent-prompt-google") as HTMLInputElement
+    await userEvent.click(barGoogle())
+    expect(barGoogle().checked).toBe(false)
     await userEvent.click(screen.getByText("consent.banner.accept"))
-    expect(promptOpen()).toBe(false)
 
     await userEvent.click(screen.getByText("consent.reset"))
     expect(promptOpen()).toBe(true)
-    expect(
-      (document.getElementById("consent-prompt-google") as HTMLInputElement)
-        .checked,
-    ).toBe(true)
+    expect(barGoogle().checked).toBe(true)
     expect(
       (document.getElementById("consent-prompt-cloudflare") as HTMLInputElement)
         .checked,
     ).toBe(true)
   })
-})
 
-describe("ConsentBanner privacy notice", () => {
-  it("expands the notice inside the prompt and collapses it again, without dismissing the prompt", async () => {
-    installRuntime()
-    render(
-      <ConsentProvider>
-        <ConsentBanner />
-      </ConsentProvider>,
-    )
+  it("expands the privacy notice in place and collapses it again without dismissing the prompt", async () => {
+    renderBanner()
     expect(screen.queryByText("privacy.data.heading")).toBeNull()
 
     await userEvent.click(screen.getByText("consent.banner.readNotice"))
@@ -204,28 +177,12 @@ describe("ConsentBanner privacy notice", () => {
     expect(screen.queryByText("privacy.data.heading")).toBeNull()
     expect(promptOpen()).toBe(true)
   })
-
-  it("explains the functional category with a tooltip", () => {
-    installRuntime()
-    render(
-      <ConsentProvider>
-        <ConsentBanner />
-      </ConsentProvider>,
-    )
-    expect(
-      screen.getByLabelText("consent.categories.functional.tooltip"),
-    ).toBeTruthy()
-  })
 })
 
 describe("ConsentPreferencesForm", () => {
   it("shows the same defaults as the prompt for an undecided visitor and saves the draft", async () => {
     const enable = installRuntime()
-    render(
-      <ConsentProvider>
-        <ConsentPreferencesForm idPrefix="t" />
-      </ConsentProvider>,
-    )
+    renderForm()
     expect(checkbox("cloudflare").checked).toBe(true)
     expect(checkbox("google").checked).toBe(true)
 
@@ -238,36 +195,20 @@ describe("ConsentPreferencesForm", () => {
   })
 
   it("reflects a saved decision, so Settings and the prompt agree", () => {
-    installRuntime()
-    window.localStorage.setItem(
-      CONSENT_STORAGE_KEY,
-      decided({ cloudflare: true, google: false }),
-    )
-    render(
-      <ConsentProvider>
-        <ConsentPreferencesForm idPrefix="t" />
-      </ConsentProvider>,
-    )
+    decide({ cloudflare: true, google: false })
+    renderForm()
     expect(checkbox("cloudflare").checked).toBe(true)
     expect(checkbox("google").checked).toBe(false)
   })
 
   it("turning Google off tells it to stop storing and clears its cookies", async () => {
     installRuntime(["google"])
-    window.dataLayer = []
     document.cookie = "_ga=GA1.1.x; path=/"
-    window.localStorage.setItem(
-      CONSENT_STORAGE_KEY,
-      decided({ cloudflare: true, google: true }),
-    )
-    render(
-      <ConsentProvider>
-        <ConsentPreferencesForm idPrefix="t" />
-      </ConsentProvider>,
-    )
+    decide({ cloudflare: true, google: true })
+    renderForm()
     await userEvent.click(screen.getByText("consent.declineAll"))
     expect(stored()).toMatchObject({ cloudflare: false, google: false })
-    expect(Array.from(window.dataLayer[0] as IArguments)).toEqual([
+    expect(lastConsentUpdate()).toEqual([
       "consent",
       "update",
       { analytics_storage: "denied" },
@@ -275,13 +216,18 @@ describe("ConsentPreferencesForm", () => {
     expect(document.cookie).not.toContain("_ga=")
   })
 
+  it("says so instead of offering controls when the browser declines tracking", () => {
+    Object.defineProperty(window.navigator, "globalPrivacyControl", {
+      value: true,
+      configurable: true,
+    })
+    renderForm()
+    expect(screen.getByText("consent.browserDeclines")).toBeTruthy()
+    expect(screen.queryByText("consent.savePreferences")).toBeNull()
+  })
+
   it("explains each category on demand", async () => {
-    installRuntime()
-    render(
-      <ConsentProvider>
-        <ConsentPreferencesForm idPrefix="t" />
-      </ConsentProvider>,
-    )
+    renderForm()
     expect(screen.getByText("consent.alwaysOn")).toBeTruthy()
     const [functional] = screen.getAllByText("consent.whatThisIncludes")
     expect(functional.getAttribute("aria-expanded")).toBe("false")
@@ -292,31 +238,23 @@ describe("ConsentPreferencesForm", () => {
     ).toBeTruthy()
   })
 
-  it("offers Reset only once a decision exists, and Reset forgets it and re-asks", async () => {
+  it("offers Reset only once a decision exists, and Reset forgets it and withdraws", async () => {
     installRuntime(["google"])
-    window.dataLayer = []
-    const { unmount } = render(
-      <ConsentProvider>
-        <ConsentPreferencesForm idPrefix="t" />
-      </ConsentProvider>,
-    )
+    const { unmount } = renderForm()
     expect(screen.queryByText("consent.reset")).toBeNull()
     unmount()
 
-    window.localStorage.setItem(
-      CONSENT_STORAGE_KEY,
-      decided({ cloudflare: true, google: true }),
-    )
+    decide({ cloudflare: true, google: true })
     render(
       <ConsentProvider>
         <ConsentPreferencesForm idPrefix="t" />
         <ConsentBanner />
       </ConsentProvider>,
     )
-    expect(promptOpen()).toBe(false)
+    expect(screen.queryByText("consent.banner.title")).toBeNull()
     await userEvent.click(screen.getByText("consent.reset"))
     expect(stored()).toBeNull()
-    expect(Array.from(window.dataLayer[0] as IArguments)).toEqual([
+    expect(lastConsentUpdate()).toEqual([
       "consent",
       "update",
       { analytics_storage: "denied" },

@@ -1,34 +1,36 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal, cx } from "@/components/ui"
+import { Button, Heading, Modal, cx } from "@/components/ui"
 import { ChevronDownIcon } from "@/components/ui/icons"
 import { useConsent } from "@/context/consent/ConsentProvider"
-import { DEFAULT_CHOICES, type ConsentChoices } from "@/types/consent"
+import { useLingeringOpen } from "@/hooks/useLingeringOpen"
+import {
+  ALL_DENIED,
+  DEFAULT_CHOICES,
+  type ConsentChoices,
+} from "@/types/consent"
 
 import { ConsentCategoryList } from "./ConsentCategoryList"
 import { PrivacyNotice } from "./PrivacyNotice"
 
-// The first-visit consent prompt: a full-width bar along the bottom of the
-// page, with the page dimmed and slightly blurred behind it so the choice
-// gets attention while staying in context. The options sit in the bar with
-// the defaults pre-selected; Accept saves whatever is selected, Decline turns
-// every optional category off. "Read the privacy notice" grows the bar to the
-// full viewport with the notice scrolling above the pinned choices, so a
-// visitor can read everything before deciding (a page navigation would land
-// behind the dimmed backdrop). It can't be dismissed without choosing: Esc,
-// the backdrop, and the close X are all vetoed until a decision exists; Esc
-// does collapse the notice.
+// The first-visit consent prompt: a full-width bar over the dimmed page. It
+// can't be dismissed without choosing (Esc, backdrop, and close X are vetoed),
+// and "Read the privacy notice" expands the notice in place, because a page
+// navigation would land behind the backdrop.
 export function ConsentBanner() {
   const { t } = useTranslation()
-  const { needsDecision, decide, declineAll } = useConsent()
+  const { needsDecision, decide } = useConsent()
+  // Unmounted entirely once the decision exists and the close fade has ended:
+  // returning visitors never pay for the dialog subtree.
+  const mounted = useLingeringOpen(needsDecision)
   const [draft, setDraft] = useState<ConsentChoices>(DEFAULT_CHOICES)
   const [noticeOpen, setNoticeOpen] = useState(false)
-  // The bar stays mounted while closed, so each showing starts from the
-  // defaults again (a Reset after unchecking something must not remember it).
-  const [wasOpen, setWasOpen] = useState(needsDecision)
-  if (needsDecision !== wasOpen) {
-    setWasOpen(needsDecision)
+  // Each showing starts from the defaults again (a Reset after unchecking
+  // something must not remember it).
+  const [wasAsking, setWasAsking] = useState(needsDecision)
+  if (needsDecision !== wasAsking) {
+    setWasAsking(needsDecision)
     if (needsDecision) {
       setDraft(DEFAULT_CHOICES)
       setNoticeOpen(false)
@@ -36,6 +38,8 @@ export function ConsentBanner() {
   }
   const titleId = useId()
   const noticeId = useId()
+
+  if (!mounted) return null
 
   return (
     <Modal
@@ -88,9 +92,9 @@ export function ConsentBanner() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <h2 id={titleId} className="text-base font-semibold">
+              <Heading as="h2" variant="title-small" id={titleId}>
                 {t("consent.banner.title")}
-              </h2>
+              </Heading>
               <p className="text-sm text-base-content/70">
                 {t("consent.banner.body")}{" "}
                 <button
@@ -118,7 +122,11 @@ export function ConsentBanner() {
             />
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
-            <Button variant="neutral" size="sm" onClick={declineAll}>
+            <Button
+              variant="neutral"
+              size="sm"
+              onClick={() => decide(ALL_DENIED)}
+            >
               {t("consent.banner.decline")}
             </Button>
             <Button variant="primary" size="sm" onClick={() => decide(draft)}>

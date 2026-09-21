@@ -1,6 +1,7 @@
 import type { Plugin } from "vite"
 
 import {
+  ANALYTICS_RUNTIME_GLOBAL,
   CONSENT_STORAGE_KEY,
   CONSENT_VERSION,
   LEGACY_ANALYTICS_STORAGE_KEY,
@@ -11,15 +12,9 @@ import {
 // provider is enabled by one VITE_* variable (mapped from repository variables
 // by .github/actions/web-analytics-env) and injected only when that variable is
 // set, so local, test, and self-hosted builds carry no tracking by default.
-//
-// Nothing loads without consent. The injected runtime
-// (window.__classroom50Analytics) registers each vendor under its consent
-// category and starts it only when the stored consent record grants that
-// category or the visitor accepts in the consent prompt (the app calls
-// `enable`). Nothing starts while the browser sends Global Privacy Control or
-// Do Not Track. Injecting at build time rather than editing index.html keeps
-// the source page free of third-party script and its anti-flash drift tests
-// valid.
+// Nothing loads without consent (see runtimeScript). Injecting at build time
+// rather than editing index.html keeps the source page free of third-party
+// script and its anti-flash drift tests valid.
 
 export type AnalyticsEnv = Record<string, string | undefined>
 
@@ -34,8 +29,6 @@ type Provider = {
   // JavaScript that starts the vendor. `id` is the validated value.
   script: (id: string) => string
 }
-
-export const ANALYTICS_RUNTIME_GLOBAL = "__classroom50Analytics"
 
 const GTM_SRC = "https://www.googletagmanager.com/gtm.js"
 const CF_BEACON_SRC = "https://static.cloudflareinsights.com/beacon.min.js"
@@ -99,10 +92,7 @@ function runtimeScript(): string {
     `function run(fn){try{fn()}catch(e){}}` +
     `function enable(categories){if(blocked())return;for(var i=0;i<categories.length;i++){var c=categories[i];` +
     `if(started[c])continue;started[c]=true;var fns=loaders[c]||[];for(var j=0;j<fns.length;j++){run(fns[j])}}}` +
-    // A vendor registering into an already started category (the runtime sits in
-    // <head>; vendors may register from the end of <body>) starts right away.
     `return {register:function(category,fn){(loaders[category]=loaders[category]||[]).push(fn);` +
-    `if(started[category]){if(!blocked())run(fn);return}` +
     `var c=granted();if(c&&c[category]===true)enable([category])},` +
     `enable:enable,started:function(category){return started[category]===true}}})();`
   )
