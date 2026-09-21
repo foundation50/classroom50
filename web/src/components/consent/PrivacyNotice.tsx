@@ -6,7 +6,7 @@ import { DISCUSSIONS_URL, WIKI_URL } from "@/version"
 
 const PRIVACY_WIKI_URL = `${WIKI_URL}/GitHub-Integration#privacy-and-ferpa`
 const CLOUDFLARE_DPA_URL = "https://www.cloudflare.com/cloudflare-customer-dpa/"
-const GOOGLE_DPT_URL = "https://business.safety.google/adsprocessorterms/"
+const GOOGLE_PRIVACY_URL = "https://policies.google.com/privacy"
 // Google's Analytics terms require a prominent link to this page.
 const GOOGLE_PARTNER_SITES_URL =
   "https://policies.google.com/technologies/partner-sites"
@@ -36,7 +36,7 @@ export function PrivacyNotice({
   const notCollected = [
     t("privacy.analytics.notCollected.queryStrings"),
     t("privacy.analytics.notCollected.identity"),
-    t("privacy.analytics.notCollected.ads"),
+    t("privacy.analytics.notCollected.crossSite"),
   ]
 
   return (
@@ -75,7 +75,7 @@ export function PrivacyNotice({
         </p>
         <ul className="list-disc space-y-1 ps-5 text-base-content/80">
           <li>
-            <ExternalLink className="link-primary" href={GOOGLE_DPT_URL}>
+            <ExternalLink className="link-primary" href={GOOGLE_PRIVACY_URL}>
               {t("privacy.analytics.googleTerms")}
             </ExternalLink>
           </li>

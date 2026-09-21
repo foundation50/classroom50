@@ -14,7 +14,7 @@ import type {
 const CATEGORY_ITEMS: Record<ConsentCategory, readonly string[]> = {
   functional: ["session", "preferences", "consent"],
   cloudflare: ["collected", "noCookies", "notCollected"],
-  google: ["collected", "cookie", "notCollected", "ads"],
+  google: ["collected", "cookie", "notCollected"],
 }
 
 const CATEGORIES: readonly ConsentCategory[] = [

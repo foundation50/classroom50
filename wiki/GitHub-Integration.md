@@ -434,8 +434,8 @@ much student data reaches GitHub in the first place:
 
 Analytics show how many people use classroom50.org, which features they use,
 and where they get stuck, so the app can improve. With your permission, two
-services do this, and you can turn either one off. Neither is used for
-advertising or knows who you are:
+services do this, and you can turn either one off. Neither knows who you
+are:
 
 - **Cloudflare Web Analytics** sets no cookies and stores no identifiers, so it
   counts visits, not people.
@@ -446,14 +446,14 @@ advertising or knows who you are:
 |---|---|
 | The pages you view, for example `/cs1-fall-2026/assignments`, and how long you stay | Query strings. Cloudflare removes them in your browser and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded. |
 | The site that linked to the page | Your GitHub username, email, or roster data |
-| Your country, worked out from your connection | Advertising identifiers or cross-site tracking. Advertising storage is turned off. |
+| Your country, worked out from your connection | Anything that follows you to other sites |
 | Browser, operating system, device type, and language | |
 | Page load time | |
 | Google Analytics only: a cookie holding a random ID. It expires after 2 years, and turning Google Analytics off removes it. | |
 
-Google and Cloudflare process this data for the Fifty Foundation under their
-data processing terms: the
-[Google Ads Data Processing Terms](https://business.safety.google/adsprocessorterms/),
+Google and Cloudflare process this data for the Fifty Foundation. How each
+handles it: the
+[Google Privacy Policy](https://policies.google.com/privacy),
 [How Google uses information from sites that use its services](https://policies.google.com/technologies/partner-sites),
 and the
 [Cloudflare data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).

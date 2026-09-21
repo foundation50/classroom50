@@ -123,7 +123,7 @@ own category in `OPTIONAL_CONSENT_CATEGORIES`, plus copy under
 #### Google Tag Manager container setup
 
 The repository controls when the container loads and sets Consent Mode
-defaults (advertising storage denied, analytics storage granted). What the
+defaults (analytics storage granted, every other storage type denied). What the
 container does is configured in Google Tag Manager, and the privacy notice's
 claims depend on this configuration. When you set up a container:
 
@@ -137,8 +137,9 @@ claims depend on this configuration. When you set up a container:
    page uses for a username or email search.
 4. In the property, turn off Google Signals, set data retention to 14 months,
    and turn on **Redact email** under data collection settings.
-5. Don't add advertising or remarketing tags. The privacy notice says
-   advertising is switched off, and Consent Mode denies advertising storage.
+5. Don't add tags beyond Google Analytics. The privacy notice describes
+   analytics only, and Consent Mode denies every non-analytics storage type,
+   so other tag types would not work anyway.
 
 The privacy notice tells visitors Google Analytics collects the pages they
 view and how long they stay, the referring site, country, browser, device, and
@@ -150,3 +151,11 @@ wiki's Privacy and FERPA section) in the same change.
 Google's noscript `<iframe>` from the install instructions is intentionally not
 injected: the app needs JavaScript anyway, and a noscript beacon could not
 honor consent.
+
+The processor agreement that governs Google Analytics is Google's data
+processing terms for its measurement products
+(business.safety.google/adsprocessorterms). The privacy notice deliberately
+links Google's Privacy Policy and the required "How Google uses information"
+page instead, because the notice describes analytics only and that document's
+title would suggest otherwise. Keep a copy of the accepted terms with the
+project's records.

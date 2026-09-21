@@ -4220,7 +4220,7 @@
     },
     "analytics": {
       "heading": "Usage analytics",
-      "intro": "Analytics show how many people use classroom50.org, which features they use, and where they get stuck, so the app can improve. With your permission, two services do this: Cloudflare Web Analytics, which sets no cookies, and Google Analytics, loaded through Google Tag Manager, which recognizes a returning browser with a cookie. You can turn either one off. Neither is used for advertising, and neither knows who you are.",
+      "intro": "Analytics show how many people use classroom50.org, which features they use, and where they get stuck, so the app can improve. With your permission, two services do this: Cloudflare Web Analytics, which sets no cookies, and Google Analytics, loaded through Google Tag Manager, which recognizes a returning browser with a cookie. You can turn either one off. Neither knows who you are.",
       "collectedHeading": "Collected",
       "collected": {
         "path": "The pages you view, for example /cs1-fall-2026/assignments, and how long you stay",
@@ -4234,10 +4234,10 @@
       "notCollected": {
         "queryStrings": "Query strings. Cloudflare removes them in your browser, and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded.",
         "identity": "Your GitHub username, email, or roster data",
-        "ads": "Advertising identifiers or cross-site tracking. Advertising storage is turned off."
+        "crossSite": "Anything that follows you to other sites"
       },
-      "processing": "Google and Cloudflare process this data for the Fifty Foundation under their data processing terms:",
-      "googleTerms": "Google Ads Data Processing Terms",
+      "processing": "Google and Cloudflare process this data for the Fifty Foundation. How each handles it:",
+      "googleTerms": "Google Privacy Policy",
       "googleUsage": "How Google uses information from sites that use its services",
       "cloudflareTerms": "Cloudflare data processing addendum",
       "retention": "Google keeps event data for up to 14 months. Cloudflare keeps full data for 7 days and a sample for 6 months. Neither service runs until you accept, and you can change your answer at any time below."
@@ -4249,7 +4249,7 @@
     },
     "contact": {
       "heading": "Questions",
-      "body": "Classroom 50 is an open source project of the Fifty Foundation. To ask about this notice, start a thread in",
+      "body": "Classroom 50 is an open source project supported by the Fifty Foundation. To ask about this notice, start a thread in",
       "link": "GitHub Discussions"
     }
   },
@@ -4294,8 +4294,7 @@
         "items": {
           "collected": "Pages you view and how long you stay, the site that linked to the page, your country, and your browser, device, and language, sent through Google Tag Manager",
           "cookie": "A cookie holding a random ID, so a returning browser is counted once. It expires after 2 years.",
-          "notCollected": "Never your GitHub username, email, roster data, or the query string of a URL",
-          "ads": "No advertising. Advertising storage is turned off."
+          "notCollected": "Never your GitHub username, email, roster data, or the query string of a URL"
         }
       }
     }
