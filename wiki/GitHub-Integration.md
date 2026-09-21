@@ -431,34 +431,31 @@ much student data reaches GitHub in the first place:
 
 ### Usage analytics
 
-classroom50.org counts visits with [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
-so the project can see how many people use it and which countries and sites
-they arrive from. The analytics script collects no personal data and sets no
-cookies.
+classroom50.org uses [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
+to count visits and see which countries and sites they come from. It sets no
+cookies and doesn't track you across sites.
 
 | Collected | Not collected |
 |---|---|
-| The page path, such as `/cs50-fall-2026/assignments` | Query strings. The script removes them in your browser before sending anything, so sign-in codes, invite link keys, and roster searches stay on your device. |
-| The site that linked to the page | Cookies, local storage, or browser fingerprints |
-| Your country, derived from the connection. Cloudflare does not store your IP address. | Anything that follows you to other sites |
-| Browser, operating system, and device type | Your GitHub username or any roster data |
-| Page load timings | |
+| The page path, for example `/cs50-fall-2026/assignments` | Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device. |
+| The site that linked to the page | Cookies, local storage, or fingerprints |
+| Your country, worked out from your connection | Your GitHub username or roster data |
+| Browser, operating system, and device type | |
+| Page load time | |
 
-You can opt out in two ways, and either one stops the script from loading:
+Cloudflare processes this data for the Fifty Foundation under its data
+processing addendum. It keeps full data for 7 days and a sample for 6 months.
+The legal basis is legitimate interest, so you can object at any time:
 
 - In the app, open **Settings**, then **Usage analytics**, and select **Don't
   count my visits**. The same choice is on the public
-  [privacy page](https://classroom50.org/privacy), so you don't need to sign
-  in. It applies to that browser from the next page load.
+  [privacy page](https://classroom50.org/privacy). It applies to that browser
+  from the next page load.
 - In your browser, turn on the Global Privacy Control or Do Not Track signal.
 
-Content blockers that block the script don't affect the app.
-
-The production site at classroom50.org and the preview site at
-preview.classroom50.org each report to their own Cloudflare site, so their
-numbers stay separate. Local development builds and self-hosted copies include
-the script only when whoever runs them adds their own Cloudflare token.
-`gh teacher` and `gh student` send no analytics.
+Only classroom50.org and preview.classroom50.org include the script, each
+reporting to its own Cloudflare site. `gh teacher` and `gh student` send no
+analytics.
 
 This section describes how Classroom 50 handles data; it isn't legal advice.
 Confirm your obligations with your institution's privacy office.

@@ -29,7 +29,6 @@ export default function PrivacyPage() {
   const notCollected = [
     t("privacy.analytics.notCollected.queryStrings"),
     t("privacy.analytics.notCollected.storage"),
-    t("privacy.analytics.notCollected.crossSite"),
     t("privacy.analytics.notCollected.identity"),
   ]
 
