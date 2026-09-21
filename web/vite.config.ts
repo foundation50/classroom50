@@ -90,6 +90,54 @@ function versionJsonPlugin(): Plugin {
   }
 }
 
+// Cloudflare Web Analytics, injected only when VITE_CF_BEACON_TOKEN is set.
+// Cloudflare attributes traffic by token and accepts beacons only from the
+// hostname registered for that token, so each environment gets its own
+// Cloudflare site: the production and preview deploy workflows export their
+// own tokens, and a developer can put a personal site's token in .env.local
+// (served by `vite dev` too). Unset means no beacon, which is the default for
+// local, test, and self-hosted builds. Lives here rather than in index.html so
+// the source page stays free of third-party script and its anti-flash drift
+// tests stay valid. The emitted HTML mirrors the dashboard's snippet (same
+// comment markers, tag, and attributes) except that the tag is created by a
+// tiny loader purely so it can honor the browser's Global Privacy Control / Do
+// Not Track signal. The beacon locates its config via `script[data-cf-beacon]`,
+// so a dynamically added module script is fine. It sends no cookies or storage,
+// and strips query strings client-side, so OAuth codes, invite link keys, and
+// roster searches never leave the browser.
+const CF_BEACON_SRC = "https://static.cloudflareinsights.com/beacon.min.js"
+
+function webAnalyticsPlugin(token: string | undefined): Plugin {
+  // Only the token value belongs in the variable. Quotes, whitespace, or angle
+  // brackets mean the whole dashboard snippet was pasted instead.
+  if (token && !/^[A-Za-z0-9_-]+$/.test(token)) {
+    throw new Error(
+      "VITE_CF_BEACON_TOKEN must be only the token value from the Cloudflare Web Analytics snippet, not the whole <script> tag",
+    )
+  }
+  const loader = [
+    `if(navigator.globalPrivacyControl!==true&&navigator.doNotTrack!=="1"){`,
+    `var s=document.createElement("script");`,
+    `s.type="module";`,
+    `s.src=${JSON.stringify(CF_BEACON_SRC)};`,
+    `s.setAttribute("data-cf-beacon",${JSON.stringify(`{"token": "${token}"}`)});`,
+    `document.body.appendChild(s)}`,
+  ].join("")
+  const snippet =
+    `<!-- Cloudflare Web Analytics --><script>${loader}</script>` +
+    `<!-- End Cloudflare Web Analytics -->`
+  return {
+    name: "classroom50:web-analytics",
+    transformIndexHtml(html) {
+      if (!token) return html
+      return html.replace(
+        /^([ \t]*)<\/body>/m,
+        (close, indent: string) => `${indent}  ${snippet}\n${close}`,
+      )
+    },
+  }
+}
+
 // Publishes the WCAG contrast audit in the built site: contrast-audit.json (the
 // source of truth the /accessibility page fetches) and CONTRAST-AUDIT.md (the
 // human-readable download, derived from the same data). Both are served in dev
@@ -397,6 +445,12 @@ export default defineConfig(({ mode }) => ({
     tailwindcss(),
     babel({ presets: [reactCompilerPreset()] }),
     versionJsonPlugin(),
+    // loadEnv merges process.env (CI) with .env files, so a developer can opt
+    // in through .env.local for both `vite dev` and a local build.
+    webAnalyticsPlugin(
+      loadEnv(mode, path.resolve(import.meta.dirname), "")
+        .VITE_CF_BEACON_TOKEN || undefined,
+    ),
     contrastAuditPlugin(),
     vpatReportPlugin(),
     assessmentApiPlugin(),

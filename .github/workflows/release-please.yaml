@@ -261,6 +261,15 @@ jobs:
       - id: sha
         run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      # Cloudflare Web Analytics (production only). Exports the site token so
+      # `vite build` injects the beacon; see webAnalyticsPlugin in
+      # web/vite.config.ts. The token is a public site identifier that ships in
+      # the HTML, so a repo variable is right, not a secret. Skipped (visibly)
+      # when the variable is unset. Delete this step to ship without analytics.
+      - name: Enable Cloudflare Web Analytics
+        if: vars.VITE_CF_BEACON_TOKEN != ''
+        run: echo "VITE_CF_BEACON_TOKEN=${{ vars.VITE_CF_BEACON_TOKEN }}" >> "$GITHUB_ENV"
+
       - run: npm run build
         env:
           VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}

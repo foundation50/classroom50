@@ -429,6 +429,31 @@ much student data reaches GitHub in the first place:
 - **End-of-term cleanup.** Archive or delete student repositories when the
   course ends. See [End of term](Course-Lifecycle-and-End-of-Term#end-of-term).
 
+### Usage analytics
+
+classroom50.org counts visits with [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
+so the project can see how many people use it and which countries and sites
+they arrive from. The analytics script collects no personal data and sets no
+cookies.
+
+| Collected | Not collected |
+|---|---|
+| The page path, such as `/cs50-fall-2026/assignments` | Query strings. The script removes them in your browser before sending anything, so sign-in codes, invite link keys, and roster searches stay on your device. |
+| The site that linked to the page | Cookies, local storage, or browser fingerprints |
+| Your country, derived from the connection. Cloudflare does not store your IP address. | Anything that follows you to other sites |
+| Browser, operating system, and device type | Your GitHub username or any roster data |
+| Page load timings | |
+
+You can opt out in your browser. When it sends the Global Privacy Control or Do
+Not Track signal, the page does not load the analytics script at all. Content
+blockers that block the script don't affect the app.
+
+The production site at classroom50.org and the preview site at
+preview.classroom50.org each report to their own Cloudflare site, so their
+numbers stay separate. Local development builds and self-hosted copies include
+the script only when whoever runs them adds their own Cloudflare token.
+`gh teacher` and `gh student` send no analytics.
+
 This section describes how Classroom 50 handles data; it isn't legal advice.
 Confirm your obligations with your institution's privacy office.
 

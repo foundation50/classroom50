@@ -56,6 +56,17 @@ jobs:
       # preview; the browser a11y guards gate every PR via web-ci separately.
       - uses: ./.github/actions/web-build-gate
 
+      # Cloudflare Web Analytics for the preview site. Uses its own variable,
+      # holding the token of a separate Cloudflare site registered as
+      # preview.classroom50.org, so preview traffic never lands in the
+      # production dashboard (Cloudflare attributes by token and only accepts
+      # beacons from the site's registered hostname). See webAnalyticsPlugin
+      # in web/vite.config.ts. Skipped (visibly) when the variable is unset.
+      # Delete this step to ship preview without analytics.
+      - name: Enable Cloudflare Web Analytics (preview site)
+        if: vars.VITE_CF_BEACON_TOKEN_PREVIEW != ''
+        run: echo "VITE_CF_BEACON_TOKEN=${{ vars.VITE_CF_BEACON_TOKEN_PREVIEW }}" >> "$GITHUB_ENV"
+
       # `npm run build` runs `tsc -b && vite build`; the type-check is
       # blocking. Served from the root of preview.classroom50.org, so the
       # default base of "/" is correct.

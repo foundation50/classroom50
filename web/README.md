@@ -61,3 +61,34 @@ The GitHub OAuth client ID comes from the `VITE_GITHUB_CLIENT_ID` repository
 variable (Settings → Secrets and variables → Actions → Variables) — it is a
 public identifier, not a secret. If preview reuses the same OAuth app, include
 `https://preview.classroom50.org/login` in its allowed callback URLs.
+
+### Usage analytics
+
+Builds load [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
+when `VITE_CF_BEACON_TOKEN` holds a site token. Cloudflare attributes traffic
+by token and accepts beacons only from the hostname registered for that token,
+so each environment gets its own Cloudflare site (Web Analytics, **Add a
+site**) and its own token. Tokens are public site identifiers, not secrets.
+
+| Environment                      | Cloudflare site hostname      | Where the token lives                                                                                                                             |
+| -------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production, classroom50.org      | `classroom50.org`             | Repository variable `VITE_CF_BEACON_TOKEN`, exported by the "Enable Cloudflare Web Analytics" step in `release-please.yaml` and `web-deploy.yaml` |
+| Preview, preview.classroom50.org | `preview.classroom50.org`     | Repository variable `VITE_CF_BEACON_TOKEN_PREVIEW`, exported by the same-named step in `web-deploy-preview.yaml`                                  |
+| Local development                | A hostname you own, see below | `VITE_CF_BEACON_TOKEN` in `.env.local`, picked up by both `npm run dev` and `npm run build`                                                       |
+
+Each workflow step is self-contained and skips visibly when its variable is
+unset, so deleting the step or the variable ships that environment without
+analytics. Tests never inject the script.
+
+Cloudflare rejects beacons from `localhost:5173` because it compares the page
+origin, including the port, against the registered hostname. To track local
+traffic, register a hostname such as `dev.classroom50.org` as its own site,
+point it at `127.0.0.1` in `/etc/hosts`, and open the dev server through that
+name. Use a dedicated site for it: the production token would also accept that
+hostname (Cloudflare matches by suffix) and count your local traffic as
+production.
+
+The plugin that injects the script is `webAnalyticsPlugin` in
+`vite.config.ts`. The script is cookie-free, strips query strings before
+sending, and is skipped when the browser sends Global Privacy Control or Do Not
+Track. To verify a build, look for `beacon.min.js` in `dist/index.html`.
