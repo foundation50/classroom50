@@ -94,6 +94,23 @@ so local Cloudflare tracking needs a hostname you own pointed at `127.0.0.1`,
 registered as its own Cloudflare site (Cloudflare matches hostnames by suffix,
 so never reuse the production token for it).
 
+#### Consent
+
+Nothing optional runs until the visitor says yes. The consent record lives in
+localStorage as `classroom50:consent` (`{ v, at, analytics }`, see
+`src/types/consent.ts`); absent means undecided, and `CONSENT_VERSION` lets a
+future policy change re-ask everyone. `ConsentProvider`
+(`src/context/consent/`) owns the state, `components/consent/` holds the
+first-visit banner, the Customize dialog, and the category form that Settings
+and `/privacy` embed, and `lib/analyticsRuntime.ts` bridges to the injected
+runtime so accepting starts vendors without a reload and withdrawing pushes a
+Consent Mode `denied` update and clears Google's cookies. Categories are
+`necessary` (always on, explained but not toggleable) and `analytics`; adding
+one means a new entry in `OPTIONAL_CONSENT_CATEGORIES`, copy under
+`consent.categories.<id>`, and a `category` on each provider that belongs to
+it. The pre-consent opt-out key (`classroom50:analytics` = `off`) is honored as
+a denial so earlier visitors aren't asked again.
+
 #### Google Tag Manager container setup
 
 The repository controls when the container loads and sets Consent Mode
@@ -114,4 +131,4 @@ assumes this configuration. When you set up a container:
 
 Google's noscript `<iframe>` from the install instructions is intentionally not
 injected: the app needs JavaScript anyway, and a noscript beacon could not
-honor the opt-out.
+honor consent.

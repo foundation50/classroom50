@@ -1,40 +1,49 @@
 import type { Plugin } from "vite"
 
-import { ANALYTICS_STORAGE_KEY } from "../src/types/preferences.ts"
+import {
+  CONSENT_STORAGE_KEY,
+  CONSENT_VERSION,
+  LEGACY_ANALYTICS_STORAGE_KEY,
+  type OptionalConsentCategory,
+} from "../src/types/consent.ts"
 
 // The single place analytics vendors are wired into the built page. Each
 // provider is enabled by one VITE_* variable (mapped from repository variables
 // by .github/actions/web-analytics-env) and injected only when that variable is
 // set, so local, test, and self-hosted builds carry no tracking by default.
 //
-// Every provider's snippet runs inside one shared gate that skips it when the
-// browser sends Global Privacy Control or Do Not Track, or when the visitor
-// opted out in the app (the preferences registry stores the literal "off" under
-// ANALYTICS_STORAGE_KEY). Injecting at build time rather than editing
-// index.html keeps the source page free of third-party script and keeps its
-// anti-flash drift tests valid.
+// Nothing loads without consent. The injected runtime (window.__classroom50Analytics)
+// registers each vendor under its consent category and starts a vendor only
+// when the stored consent record grants that category, when the visitor
+// accepts in the consent prompt (the app calls `enable`), and never while the
+// browser sends Global Privacy Control or Do Not Track. Injecting at build time
+// rather than editing index.html keeps the source page free of third-party
+// script and its anti-flash drift tests valid.
 
 export type AnalyticsEnv = Record<string, string | undefined>
 
 type Provider = {
   name: string
   envVar: string
+  category: OptionalConsentCategory
   // Shape of a valid value; a mismatch fails the build with `hint`.
   pattern: RegExp
   hint: string
   injectTo: "head" | "body-end"
-  // JavaScript executed inside the shared gate. `id` is the validated value.
+  // JavaScript that starts the vendor. `id` is the validated value.
   script: (id: string) => string
 }
+
+export const ANALYTICS_RUNTIME_GLOBAL = "__classroom50Analytics"
 
 const GTM_SRC = "https://www.googletagmanager.com/gtm.js"
 const CF_BEACON_SRC = "https://static.cloudflareinsights.com/beacon.min.js"
 
-// Google's snippet verbatim, preceded by Consent Mode defaults: the gate has
-// already established the visitor allows analytics, and advertising storage is
-// denied outright because nothing here is an ad product. Google's noscript
-// <iframe> is deliberately omitted: the app needs JavaScript anyway, and a
-// noscript beacon could not honor the opt-out.
+// Google's snippet verbatim, preceded by Consent Mode defaults: this runs only
+// once the visitor granted analytics, and advertising storage is denied
+// outright because nothing here is an ad product. Google's noscript <iframe>
+// is deliberately omitted: the app needs JavaScript anyway, and a noscript
+// beacon could not honor consent.
 const gtmScript = (id: string) =>
   `window.dataLayer=window.dataLayer||[];` +
   `function gtag(){window.dataLayer.push(arguments)}` +
@@ -44,7 +53,7 @@ const gtmScript = (id: string) =>
   `j.async=true;j.src=${JSON.stringify(GTM_SRC)}+'?id='+i+dl;f.parentNode.insertBefore(j,f);` +
   `})(window,document,'script','dataLayer',${JSON.stringify(id)});`
 
-// Cloudflare's dashboard tag, created dynamically so it sits inside the gate.
+// Cloudflare's dashboard tag, created dynamically so it can wait for consent.
 // The beacon finds its config via `script[data-cf-beacon]`, so a dynamically
 // added module script works.
 const cloudflareScript = (token: string) =>
@@ -57,6 +66,7 @@ export const ANALYTICS_PROVIDERS: readonly Provider[] = [
   {
     name: "Google Tag Manager",
     envVar: "VITE_GTM_CONTAINER_ID",
+    category: "analytics",
     pattern: /^GTM-[A-Z0-9]+$/,
     hint: "the container ID from the Google Tag Manager snippet, such as GTM-ABC123",
     injectTo: "head",
@@ -65,6 +75,7 @@ export const ANALYTICS_PROVIDERS: readonly Provider[] = [
   {
     name: "Cloudflare Web Analytics",
     envVar: "VITE_CF_BEACON_TOKEN",
+    category: "analytics",
     pattern: /^[A-Za-z0-9_-]+$/,
     hint: "only the token value from the Cloudflare Web Analytics snippet, not the whole <script> tag",
     injectTo: "body-end",
@@ -72,22 +83,39 @@ export const ANALYTICS_PROVIDERS: readonly Provider[] = [
   },
 ]
 
-// Wrapped in an IIFE like the anti-flash scripts so nothing leaks onto window.
-// localStorage access throws in some hardened/private modes; treat that as no
-// opt-out rather than crashing before the app boots.
-function gated(body: string): string {
+// The consent runtime, injected once ahead of any vendor. `granted()` mirrors
+// readConsent() in src/lib/consent.ts (current version, or the legacy opt-out
+// as a denial); keep the two in step. Storage access throws in some hardened
+// modes; that reads as "no decision", so nothing loads.
+function runtimeScript(): string {
+  const g = `window.${ANALYTICS_RUNTIME_GLOBAL}`
   return (
-    `(function(){var off=false;` +
-    `try{off=localStorage.getItem(${JSON.stringify(ANALYTICS_STORAGE_KEY)})==="off"}catch(e){}` +
-    `if(navigator.globalPrivacyControl!==true&&navigator.doNotTrack!=="1"&&!off){${body}}})()`
+    `${g}=${g}||(function(){var loaders={},started={};` +
+    `function blocked(){return navigator.globalPrivacyControl===true||navigator.doNotTrack==="1"}` +
+    `function granted(){try{var raw=localStorage.getItem(${JSON.stringify(CONSENT_STORAGE_KEY)});` +
+    `if(raw){var c=JSON.parse(raw);if(c&&c.v===${CONSENT_VERSION}){return c}}` +
+    `if(localStorage.getItem(${JSON.stringify(LEGACY_ANALYTICS_STORAGE_KEY)})==="off"){return {}}}catch(e){}return null}` +
+    `function run(fn){try{fn()}catch(e){}}` +
+    `function enable(categories){if(blocked())return;for(var i=0;i<categories.length;i++){var c=categories[i];` +
+    `if(started[c])continue;started[c]=true;var fns=loaders[c]||[];for(var j=0;j<fns.length;j++){run(fns[j])}}}` +
+    // A vendor registering into an already started category (the runtime sits in
+    // <head>; vendors may register from the end of <body>) starts right away.
+    `return {register:function(category,fn){(loaders[category]=loaders[category]||[]).push(fn);` +
+    `if(started[category]){if(!blocked())run(fn);return}` +
+    `var c=granted();if(c&&c[category]===true)enable([category])},` +
+    `enable:enable,started:function(category){return started[category]===true}}})();`
   )
 }
 
-function snippet(provider: Provider, id: string): string {
+function vendorScript(provider: Provider, id: string): string {
   return (
-    `<!-- ${provider.name} --><script>${gated(provider.script(id))}</script>` +
-    `<!-- End ${provider.name} -->`
+    `window.${ANALYTICS_RUNTIME_GLOBAL}.register(${JSON.stringify(provider.category)},` +
+    `function(){${provider.script(id)}});`
   )
+}
+
+function snippet(name: string, body: string): string {
+  return `<!-- ${name} --><script>${body}</script><!-- End ${name} -->`
 }
 
 // Inserts `markup` on its own line before the closing tag, matching its indent.
@@ -114,10 +142,23 @@ export function analyticsPlugin(env: AnalyticsEnv): Plugin {
   return {
     name: "classroom50:analytics",
     transformIndexHtml(html) {
+      if (enabled.length === 0) return html
+      // The runtime goes first in <head> so a vendor injected anywhere after it
+      // can register, and so the app can call `enable` even before any vendor
+      // registered.
+      const withRuntime = insertBefore(
+        html,
+        "</head>",
+        snippet("Analytics consent runtime", runtimeScript()),
+      )
       return enabled.reduce((page, { provider, id }) => {
         const closing = provider.injectTo === "head" ? "</head>" : "</body>"
-        return insertBefore(page, closing, snippet(provider, id))
-      }, html)
+        return insertBefore(
+          page,
+          closing,
+          snippet(provider.name, vendorScript(provider, id)),
+        )
+      }, withRuntime)
     },
   }
 }

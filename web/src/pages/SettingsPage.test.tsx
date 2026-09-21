@@ -6,6 +6,7 @@ import { HIDDEN_ORGS_STORAGE_KEY } from "@/lib/hiddenOrgsStore"
 import { USER_PREFERENCE_SPECS } from "@/lib/userPreferences"
 import { HiddenOrgsProvider } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import { UserPreferencesProvider } from "@/context/userPreferences/UserPreferencesProvider"
+import { ConsentProvider } from "@/context/consent/ConsentProvider"
 import type { DeleteRepoScopeState } from "@/context/github/GitHubProvider"
 
 vi.mock("@/components/PageShell", () => ({
@@ -145,7 +146,9 @@ const renderPage = () =>
   render(
     <HiddenOrgsProvider>
       <UserPreferencesProvider>
-        <SettingsPage />
+        <ConsentProvider>
+          <SettingsPage />
+        </ConsentProvider>
       </UserPreferencesProvider>
     </HiddenOrgsProvider>,
   )
@@ -400,13 +403,16 @@ describe("SettingsPage student names", () => {
   })
 })
 
-// The save flow itself is covered by AnalyticsPreferenceForm.test.tsx; here
-// only the page wiring matters.
-describe("SettingsPage usage analytics", () => {
-  it("renders the analytics form defaulting to on, with a link to the notice", () => {
+// The decision flow itself is covered by components/consent/consent.test.tsx;
+// here only the page wiring matters.
+describe("SettingsPage cookies and analytics", () => {
+  it("renders the consent form with analytics off by default, and links to the notice", () => {
     renderPage()
-    expect(radio("settings.analytics.on").checked).toBe(true)
-    expect(saveButtonFor("analytics-pref")).toBeTruthy()
+    const toggle = screen.getByLabelText(
+      "consent.categories.analytics.label",
+    ) as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+    expect(screen.getByText("consent.savePreferences")).toBeTruthy()
     expect(screen.getByText("settings.analytics.privacyLink")).toBeTruthy()
   })
 })

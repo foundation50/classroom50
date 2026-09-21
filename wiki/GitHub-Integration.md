@@ -453,14 +453,20 @@ data processing terms: the
 and the
 [Cloudflare data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
 Google keeps event data for up to 14 months. Cloudflare keeps full data for 7
-days and a sample for 6 months. The legal basis is legitimate interest, so you
-can object at any time:
+days and a sample for 6 months.
 
-- In the app, open **Settings**, then **Usage analytics**, and select **Don't
-  count my visits**. The same choice is on the public
-  [privacy page](https://classroom50.org/privacy). It removes the analytics
-  cookies now and stops both services from the next page load in that browser.
+Analytics runs only with your consent. On your first visit, a small card in the
+corner asks you to **Accept**, **Reject**, or **Customize**. Nothing loads until
+you accept, and either answer takes one click. What the app needs to work (your
+sign-in for the session, your settings, and your answer here) stays on
+regardless, in your browser only. To change your answer later:
+
+- In the app, open **Settings**, then **Cookies and analytics**. The same
+  controls are on the public [privacy page](https://classroom50.org/privacy).
+  Withdrawing removes the analytics cookies now and stops both services from
+  the next page load in that browser.
 - In your browser, turn on the Global Privacy Control or Do Not Track signal.
+  Analytics then stays off and you aren't asked.
 
 Content blockers and network filters that block the analytics hosts don't
 affect the app. See [Network and allowed domains](#network-and-allowed-domains).

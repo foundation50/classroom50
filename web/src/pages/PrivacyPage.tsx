@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { DrawerShell } from "@/components/drawer"
-import { AnalyticsPreferenceForm } from "@/components/settings/AnalyticsPreferenceForm"
+import { ConsentPreferencesForm } from "@/components/consent/ConsentPreferencesForm"
+import { useConsent } from "@/context/consent/ConsentProvider"
 import { Card, ExternalLink, Heading } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { DISCUSSIONS_URL, WIKI_URL } from "@/version"
@@ -19,6 +20,7 @@ const GOOGLE_PARTNER_SITES_URL =
 // before sign-in so a visitor can object without an account.
 export default function PrivacyPage() {
   const { t } = useTranslation()
+  const { browserDeclines } = useConsent()
   useDocumentTitle(t("privacy.pageTitle"))
 
   const collected = [
@@ -111,7 +113,13 @@ export default function PrivacyPage() {
             heading={t("privacy.choice.heading")}
           >
             <p className="text-base-content/80">{t("privacy.choice.body")}</p>
-            <AnalyticsPreferenceForm />
+            {browserDeclines ? (
+              <p className="text-sm text-base-content/70">
+                {t("consent.browserDeclines")}
+              </p>
+            ) : (
+              <ConsentPreferencesForm idPrefix="privacy-consent" />
+            )}
             <p className="text-sm text-base-content/60">
               {t("privacy.choice.signals")}
             </p>

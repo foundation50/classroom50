@@ -33,7 +33,8 @@ import {
   PreferenceForm,
   type PreferenceOption,
 } from "@/components/settings/PreferenceForm"
-import { AnalyticsPreferenceForm } from "@/components/settings/AnalyticsPreferenceForm"
+import { ConsentPreferencesForm } from "@/components/consent/ConsentPreferencesForm"
+import { useConsent } from "@/context/consent/ConsentProvider"
 import {
   useDeleteRepoScopeState,
   useCanElevateInApp,
@@ -422,10 +423,13 @@ function NameOrderSection({ highlighted }: { highlighted?: boolean }) {
   )
 }
 
-// Anonymous usage analytics opt-out. The form is shared with the public
-// /privacy page; this card adds the settings chrome and a link to the notice.
-function AnalyticsSection({ highlighted }: { highlighted?: boolean }) {
+// Cookie and analytics consent, the same form as the consent dialog and the
+// public /privacy page. A browser-level signal (Global Privacy Control / Do Not
+// Track) overrides the form, so say so instead of offering a toggle that
+// couldn't take effect.
+function ConsentSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
+  const { browserDeclines } = useConsent()
   return (
     <SettingsSectionCard
       id="analytics"
@@ -433,7 +437,13 @@ function AnalyticsSection({ highlighted }: { highlighted?: boolean }) {
       subheading={t("settings.analytics.subheading")}
       highlighted={highlighted}
     >
-      <AnalyticsPreferenceForm />
+      {browserDeclines ? (
+        <p className="text-sm text-base-content/70">
+          {t("consent.browserDeclines")}
+        </p>
+      ) : (
+        <ConsentPreferencesForm idPrefix="settings-consent" />
+      )}
       <p className="mt-4 text-sm">
         <Link className="link link-info link-hover" to="/privacy">
           {t("settings.analytics.privacyLink")}
@@ -485,7 +495,7 @@ function HiddenOrgsSection({ highlighted }: { highlighted?: boolean }) {
 // Organizations (hidden orgs, service tokens) and Preferences. Organization
 // cards are ordered alphabetically by heading; Preferences run from the choices
 // most people make once (language, student names) to the cosmetic ones
-// (appearance, animations), ending with the analytics opt-out. Theme and
+// (appearance, animations), ending with cookie and analytics consent. Theme and
 // language also have quick-access affordances in the sidebar footer.
 const SettingsPage = () => {
   const { t } = useTranslation()
@@ -521,7 +531,7 @@ const SettingsPage = () => {
           <NameOrderSection highlighted={highlightedId === "name-order"} />
           <AppearanceSection highlighted={highlightedId === "appearance"} />
           <MotionSection highlighted={highlightedId === "motion"} />
-          <AnalyticsSection highlighted={highlightedId === "analytics"} />
+          <ConsentSection highlighted={highlightedId === "analytics"} />
         </SettingsGroup>
       </div>
     </PageShell>

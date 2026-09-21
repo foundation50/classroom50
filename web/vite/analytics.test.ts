@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest"
 
-import { ANALYTICS_STORAGE_KEY } from "../src/types/preferences.ts"
-import { ANALYTICS_PROVIDERS, analyticsPlugin } from "./analytics.ts"
+import {
+  CONSENT_STORAGE_KEY,
+  CONSENT_VERSION,
+  LEGACY_ANALYTICS_STORAGE_KEY,
+} from "../src/types/consent.ts"
+import {
+  ANALYTICS_PROVIDERS,
+  ANALYTICS_RUNTIME_GLOBAL,
+  analyticsPlugin,
+} from "./analytics.ts"
 
 const PAGE = `<!doctype html>
 <html>
@@ -15,30 +23,42 @@ const PAGE = `<!doctype html>
 </html>
 `
 
+const BOTH = {
+  VITE_GTM_CONTAINER_ID: "GTM-ABC123",
+  VITE_CF_BEACON_TOKEN: "abc",
+}
+
 function transform(env: Record<string, string | undefined>): string {
   const plugin = analyticsPlugin(env)
   const hook = plugin.transformIndexHtml as (html: string) => string
   return hook(PAGE)
 }
 
-function scriptOf(html: string, providerName: string): string {
-  const match = html.match(
-    new RegExp(
-      `<!-- ${providerName} --><script>([\\s\\S]*?)</script><!-- End ${providerName} -->`,
-    ),
-  )
-  if (!match) throw new Error(`${providerName} snippet not found`)
-  return match[1]
+// Every injected inline script, in document order.
+function scriptsOf(html: string): string[] {
+  return [
+    ...html.matchAll(/<!-- (?!End )[^>]+ --><script>([\s\S]*?)<\/script>/g),
+  ].map((m) => m[1])
 }
 
-// Runs a generated snippet against minimal fakes and reports what it did.
-function execute(
-  code: string,
+type Runtime = {
+  enable: (categories: string[]) => void
+  started: (category: string) => boolean
+}
+
+// Boots a fake page: runs the injected scripts in order against minimal DOM,
+// storage, and navigator fakes, and reports what was inserted.
+function boot(
+  html: string,
   {
-    stored = null,
+    storage = {},
     gpc,
     dnt = "0",
-  }: { stored?: string | null | "THROW"; gpc?: boolean; dnt?: string } = {},
+  }: {
+    storage?: Record<string, string> | "THROW"
+    gpc?: boolean
+    dnt?: string
+  } = {},
 ) {
   const inserted: Record<string, unknown>[] = []
   const win: Record<string, unknown> = {}
@@ -62,18 +82,35 @@ function execute(
     body: { appendChild: (j: Record<string, unknown>) => inserted.push(j) },
   }
   const localStorage = {
-    getItem() {
-      if (stored === "THROW") throw new Error("blocked")
-      return stored
+    getItem(key: string) {
+      if (storage === "THROW") throw new Error("blocked")
+      return storage[key] ?? null
     },
   }
-  new Function("window", "document", "navigator", "localStorage", code)(
-    win,
-    document,
-    { globalPrivacyControl: gpc, doNotTrack: dnt },
-    localStorage,
-  )
-  return { inserted, win }
+  for (const code of scriptsOf(html)) {
+    new Function("window", "document", "navigator", "localStorage", code)(
+      win,
+      document,
+      { globalPrivacyControl: gpc, doNotTrack: dnt },
+      localStorage,
+    )
+  }
+  return { inserted, win, runtime: win[ANALYTICS_RUNTIME_GLOBAL] as Runtime }
+}
+
+const granted = {
+  [CONSENT_STORAGE_KEY]: JSON.stringify({
+    v: CONSENT_VERSION,
+    at: "t",
+    analytics: true,
+  }),
+}
+const denied = {
+  [CONSENT_STORAGE_KEY]: JSON.stringify({
+    v: CONSENT_VERSION,
+    at: "t",
+    analytics: false,
+  }),
 }
 
 describe("analyticsPlugin", () => {
@@ -81,18 +118,16 @@ describe("analyticsPlugin", () => {
     expect(transform({})).toBe(PAGE)
   })
 
-  it("injects GTM at the end of <head> and Cloudflare at the end of <body>", () => {
-    const html = transform({
-      VITE_GTM_CONTAINER_ID: "GTM-ABC123",
-      VITE_CF_BEACON_TOKEN: "abc",
-    })
+  it("injects the runtime first in <head>, GTM after it, and Cloudflare at the end of <body>", () => {
+    const html = transform(BOTH)
     const head = html.slice(0, html.indexOf("</head>"))
     const body = html.slice(html.indexOf("<body>"))
-    expect(head).toContain("<!-- Google Tag Manager -->")
     expect(head.indexOf("/* anti-flash */")).toBeLessThan(
+      head.indexOf("<!-- Analytics consent runtime -->"),
+    )
+    expect(head.indexOf("<!-- Analytics consent runtime -->")).toBeLessThan(
       head.indexOf("<!-- Google Tag Manager -->"),
     )
-    expect(body).toContain("<!-- Cloudflare Web Analytics -->")
     expect(body.indexOf("/src/main.tsx")).toBeLessThan(
       body.indexOf("<!-- Cloudflare Web Analytics -->"),
     )
@@ -109,53 +144,88 @@ describe("analyticsPlugin", () => {
     ).toThrow(/VITE_CF_BEACON_TOKEN must be/)
   })
 
-  describe.each(
-    ANALYTICS_PROVIDERS.map((p) => ({
-      name: p.name,
-      env: { [p.envVar]: p.envVar.includes("GTM") ? "GTM-ABC123" : "abc" },
-    })),
-  )("$name gate", ({ name, env }) => {
-    const code = scriptOf(transform(env), name)
+  it("every provider declares a consent category", () => {
+    expect(ANALYTICS_PROVIDERS.every((p) => p.category === "analytics")).toBe(
+      true,
+    )
+  })
 
-    it("loads by default and when the preference is on", () => {
-      expect(execute(code).inserted).toHaveLength(1)
-      expect(execute(code, { stored: "on" }).inserted).toHaveLength(1)
+  describe("consent gate at boot", () => {
+    const html = transform(BOTH)
+
+    it("loads nothing without a decision", () => {
+      expect(boot(html).inserted).toHaveLength(0)
+      expect(boot(html, { storage: "THROW" }).inserted).toHaveLength(0)
     })
 
-    it("does not load for the in-app opt-out, GPC, or DNT", () => {
-      expect(execute(code, { stored: "off" }).inserted).toHaveLength(0)
-      expect(execute(code, { gpc: true }).inserted).toHaveLength(0)
-      expect(execute(code, { dnt: "1" }).inserted).toHaveLength(0)
+    it("loads nothing when analytics was denied or the record is from an older version", () => {
+      expect(boot(html, { storage: denied }).inserted).toHaveLength(0)
+      const old = {
+        [CONSENT_STORAGE_KEY]: JSON.stringify({
+          v: 0,
+          at: "t",
+          analytics: true,
+        }),
+      }
+      expect(boot(html, { storage: old }).inserted).toHaveLength(0)
     })
 
-    it("treats a throwing localStorage as no opt-out", () => {
-      expect(execute(code, { stored: "THROW" }).inserted).toHaveLength(1)
+    it("honors the pre-consent opt-out as a denial", () => {
+      const legacy = { [LEGACY_ANALYTICS_STORAGE_KEY]: "off" }
+      expect(boot(html, { storage: legacy }).inserted).toHaveLength(0)
     })
 
-    it("leaks nothing onto window except what the vendor needs", () => {
-      const { win } = execute(code)
-      const allowed = new Set(["dataLayer"])
+    it("loads every analytics vendor when analytics was granted", () => {
+      expect(boot(html, { storage: granted }).inserted).toHaveLength(2)
+    })
+
+    it("never loads while the browser sends GPC or DNT, even with consent", () => {
+      expect(boot(html, { storage: granted, gpc: true }).inserted).toHaveLength(
+        0,
+      )
+      expect(boot(html, { storage: granted, dnt: "1" }).inserted).toHaveLength(
+        0,
+      )
+    })
+  })
+
+  describe("runtime bridge for the app", () => {
+    const html = transform(BOTH)
+
+    it("enable() starts granted categories once, and reports them as started", () => {
+      const { inserted, runtime } = boot(html)
+      expect(runtime.started("analytics")).toBe(false)
+      runtime.enable(["analytics"])
+      runtime.enable(["analytics"])
+      expect(inserted).toHaveLength(2)
+      expect(runtime.started("analytics")).toBe(true)
+    })
+
+    it("enable() is a no-op under GPC", () => {
+      const { inserted, runtime } = boot(html, { gpc: true })
+      runtime.enable(["analytics"])
+      expect(inserted).toHaveLength(0)
+    })
+
+    it("ignores unknown categories", () => {
+      const { inserted, runtime } = boot(html)
+      runtime.enable(["marketing"])
+      expect(inserted).toHaveLength(0)
+    })
+
+    it("leaks nothing onto window except the runtime and what vendors need", () => {
+      const { win } = boot(html, { storage: granted })
+      const allowed = new Set([ANALYTICS_RUNTIME_GLOBAL, "dataLayer"])
       expect(Object.keys(win).filter((k) => !allowed.has(k))).toEqual([])
     })
   })
 
-  it("reads the opt-out from the registry's storage key", () => {
-    const code = scriptOf(
-      transform({ VITE_CF_BEACON_TOKEN: "abc" }),
-      "Cloudflare Web Analytics",
-    )
-    expect(code).toContain(JSON.stringify(ANALYTICS_STORAGE_KEY))
-  })
-
   it("sets Google Consent Mode defaults before loading the container", () => {
-    const { inserted, win } = execute(
-      scriptOf(
-        transform({ VITE_GTM_CONTAINER_ID: "GTM-ABC123" }),
-        "Google Tag Manager",
-      ),
+    const { inserted, win } = boot(
+      transform({ VITE_GTM_CONTAINER_ID: "GTM-ABC123" }),
+      { storage: granted },
     )
-    const dataLayer = win.dataLayer as unknown[]
-    const consent = dataLayer[0] as IArguments
+    const consent = (win.dataLayer as unknown[])[0] as IArguments
     expect(Array.from(consent)).toEqual([
       "consent",
       "default",
@@ -173,12 +243,9 @@ describe("analyticsPlugin", () => {
   })
 
   it("loads the Cloudflare beacon as a module with the dashboard config shape", () => {
-    const { inserted } = execute(
-      scriptOf(
-        transform({ VITE_CF_BEACON_TOKEN: "abc" }),
-        "Cloudflare Web Analytics",
-      ),
-    )
+    const { inserted } = boot(transform({ VITE_CF_BEACON_TOKEN: "abc" }), {
+      storage: granted,
+    })
     expect(inserted[0]).toMatchObject({
       type: "module",
       src: "https://static.cloudflareinsights.com/beacon.min.js",
