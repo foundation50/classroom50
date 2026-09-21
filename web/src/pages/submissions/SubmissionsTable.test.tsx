@@ -1034,6 +1034,129 @@ describe("SubmissionsTable submission details modal", () => {
     )
   })
 
+  it("marks a detected tag whose collected attempt the workflow didn't publish", async () => {
+    // The owner's tag-mode view goes through the detection overlay, not the
+    // collected fallback; the mark must follow the attempt via its sha. A glob
+    // group bundles several attempts, so it is never marked from one of them.
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="tag"
+        scores={[
+          scoreRow({
+            submissionCount: 3,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/bbb2222",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/phase2",
+                score: 9,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/aaa1111",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/phase1",
+                score: 8,
+                "max-score": 10,
+              },
+            ],
+            detectedEntries: [
+              {
+                kind: "tag",
+                label: "phase2",
+                count: 1,
+                sha: "bbb2222bbb2222bbb2222bbb2222bbb2222bbb22",
+              },
+              { kind: "tag", label: "phase1", count: 1, sha: "aaa1111" },
+              {
+                kind: "tag-group",
+                label: "submit/*",
+                count: 1,
+                sha: "bbb2222",
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countTag" }),
+    )
+    const badges = screen.getAllByText("submissions.table.unverified")
+    expect(badges).toHaveLength(1)
+    expect(badges[0].closest("li")?.textContent).toContain("phase2")
+  })
+
+  it("marks a detected push whose collected attempt the workflow didn't publish", async () => {
+    // Every-push rows join detected commits to collected attempts by sha, full
+    // or 7-char, whichever the collected commit URL ends with.
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [
+              {
+                datetime: "2026-06-21T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/bbb2222",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fz",
+                score: 9,
+                "max-score": 10,
+              },
+              {
+                datetime: "2026-06-20T10:00:00Z",
+                commit:
+                  "https://github.com/acme/cs101-hw1-alice/commit/aaa1111",
+                release:
+                  "https://github.com/acme/cs101-hw1-alice/releases/tag/submit%2Fy",
+                score: 8,
+                "max-score": 10,
+                provenance: {
+                  kind: "recorded",
+                  reason: "published by 'alice', not by the autograde workflow",
+                },
+              },
+            ],
+            detectedEntries: [
+              { kind: "commit", label: "bbb2222", count: 1, sha: "bbb2222" },
+              {
+                kind: "commit",
+                label: "aaa1111",
+                count: 1,
+                sha: "aaa1111aaa1111aaa1111aaa1111aaa1111aaa11",
+              },
+            ],
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    const badges = screen.getAllByText("submissions.table.unverified")
+    expect(badges).toHaveLength(1)
+    expect(badges[0].getAttribute("title")).toContain(
+      "submissions.table.unverifiedRecordedTitle",
+    )
+  })
+
   it("keeps the tag glob-group modal header consistent with the count chip", async () => {
     const user = userEvent.setup()
     // A submit/* glob group collapses 3 tags into one jumpable row. The chip

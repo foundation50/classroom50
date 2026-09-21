@@ -1188,10 +1188,10 @@ reports `Missing: <username>`), and refreshes `result.json` (latest) and
 `results.json` (all submissions) from its releases. A `submit/*` release the
 autograde workflow didn't publish is still recorded, with a
 `provenance_warning` on its `results.json` entry and a line on stderr;
-`result.json` keeps the latest payload unmarked for back-compat, so
-`results.json` and `scores.csv` are the marked views. A `result.json` that
-isn't a `classroom50/result/v1` document is treated as missing. Then writes a
-`scores.csv`
+`result.json` keeps the latest payload unmarked for back-compat. The
+`scores.csv` `provenance_warning` column comes from the last score collection,
+not from the download. A `result.json` that isn't a `classroom50/result/v1`
+document is treated as missing. Then writes a `scores.csv`
 at the destination root, one line per submission (a student with several pushes
 contributes several lines), plus a blank-score line for each non-submitter.
 

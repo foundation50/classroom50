@@ -149,6 +149,9 @@ def test_stage_release_assets_refuses_a_result_document(tmp_path, capsys):
     forged = {"schema": "classroom50/result/v1", "score": 100, "max-score": 100}
     _write_file(workspace, "out/forged.json", json.dumps(forged).encode())
     _write_file(workspace, "out/future.json", b'{"schema": "classroom50/result/v2"}')
+    # Undecodable bytes must not clear a file: a reader with a laxer decoder
+    # would still accept it once renamed.
+    _write_file(workspace, "out/binary.json", b'{"schema": "classroom50/result/v1", "review": "\xff"}')
     _write_file(workspace, "out/report.json", b'{"schema": "other/v1", "score": 1}')
     _write_file(workspace, "out/data.json", b"[1, 2, 3]")
     _write_file(workspace, "out/notes.txt", b"schema: classroom50/result/v1")
@@ -157,15 +160,17 @@ def test_stage_release_assets_refuses_a_result_document(tmp_path, capsys):
     accepted = runner.stage_release_assets(
         workspace,
         destination,
-        ["out/forged.json", "out/future.json", "out/report.json", "out/data.json", "out/notes.txt"],
+        ["out/forged.json", "out/future.json", "out/binary.json", "out/report.json", "out/data.json", "out/notes.txt"],
     )
 
     assert accepted == ["report.json", "data.json", "notes.txt"]
     assert not (destination / "forged.json").exists()
     assert not (destination / "future.json").exists()
+    assert not (destination / "binary.json").exists()
     out = capsys.readouterr().out
     assert "'out/forged.json' is a classroom50/result/* document" in out
     assert "'out/future.json' is a classroom50/result/* document" in out
+    assert "'out/binary.json' is a classroom50/result/* document" in out
 
 
 def test_looks_like_result_document_ignores_oversized_and_unreadable(tmp_path, monkeypatch):

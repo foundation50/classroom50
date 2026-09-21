@@ -62,8 +62,8 @@ export function releaseTime(release: GitHubRelease): number {
 // The `submit/*` releases from a repo's release list, newest first: the shared
 // filter and sort the full-list query and the latest-only read derive from.
 // Drafts are dropped as the collector does (the runner never publishes one, and
-// a draft's assets aren't downloadable). Who published each one is not a filter
-// here; callers mark it via releaseProvenanceProblem.
+// a draft's assets aren't downloadable); publisher identity is not a filter
+// (see releaseProvenanceProblem).
 function submitReleasesNewestFirst(releases: GitHubRelease[]): GitHubRelease[] {
   return releases
     .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX) && !r.draft)

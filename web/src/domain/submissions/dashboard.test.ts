@@ -1802,6 +1802,24 @@ describe("mergeLiveRows", () => {
   it("keeps the collected row's own mark when a live read overlays it", () => {
     // The live mark describes a release the collector hasn't ingested; the row
     // still shows the collected score, so it keeps the collected judgment.
+    const recorded = {
+      kind: "recorded" as const,
+      reason: "published by 'alice', not by the autograde workflow",
+    }
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", submissionCount: 1, provenance: recorded })],
+      [
+        {
+          ...live("alice", "2026-06-22T10:00:00Z", 2),
+          provenance: { kind: "author", login: "alice" },
+        },
+      ],
+    )
+    expect(merged[0].staleCount).toBe(true)
+    expect(merged[0].provenance).toEqual(recorded)
+  })
+
+  it("does not copy the live mark onto an overlaid collected row", () => {
     const merged = mergeLiveRows(
       [row({ owner: "alice", submissionCount: 1 })],
       [
@@ -1811,7 +1829,6 @@ describe("mergeLiveRows", () => {
         },
       ],
     )
-    expect(merged[0].staleCount).toBe(true)
     expect(merged[0].provenance).toBeUndefined()
   })
 

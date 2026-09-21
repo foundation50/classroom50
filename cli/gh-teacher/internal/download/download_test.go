@@ -26,8 +26,8 @@ import (
 	scoresschema "github.com/foundation50/gh-teacher/internal/scores"
 )
 
-// botUser is the workflow token's identity on a release and its assets; the
-// reader rejects releases without it.
+// botUser is the workflow token's identity on a release and its assets; any
+// other login marks the release.
 var botUser = map[string]any{"login": contract.AutogradeReleaseAuthor}
 
 // botAsset is an asset the workflow token uploaded.
@@ -1080,6 +1080,31 @@ func TestRefreshResultJSON(t *testing.T) {
 			t.Errorf("errOut lacks the schema warning:\n%s", errOut.String())
 		}
 	})
+}
+
+// The Go check must accept nothing the runner's sniff clears, or a staged
+// release_assets file renamed to result.json becomes a score: encoding/json
+// alone would match a case-variant key and swallow invalid UTF-8.
+func TestIsResultDocument(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"exact sentinel", `{"schema":"classroom50/result/v1","score":1}`, true},
+		{"other schema", `{"schema":"other/v1"}`, false},
+		{"case-variant key", `{"SCHEMA":"classroom50/result/v1"}`, false},
+		{"invalid UTF-8 in a string", "{\"schema\":\"classroom50/result/v1\",\"review\":\"\xff\"}", false},
+		{"sentinel nested, not top-level", `[{"schema":"classroom50/result/v1"}]`, false},
+		{"not JSON", `schema: classroom50/result/v1`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isResultDocument([]byte(tc.body)); got != tc.want {
+				t.Errorf("isResultDocument(%q) = %v, want %v", tc.body, got, tc.want)
+			}
+		})
+	}
 }
 
 // mustWrite writes contents to path, failing the test on error.

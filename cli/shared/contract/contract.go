@@ -221,10 +221,10 @@ const (
 	SubmitTagPrefix = "submit/"
 
 	// AutogradeReleaseAuthor is the login GitHub gives a workflow's GITHUB_TOKEN.
-	// A submit/* Release counts as a submission only when this login authored it
-	// and uploaded its result.json, since students can't act as it. Hand-mirrored
-	// with NO compile-time link in collect_scores.py and the web
-	// (AUTOGRADE_RELEASE_AUTHOR); parity-tested.
+	// A submit/* Release whose author or result.json uploader is any other login
+	// is still collected but marked with provenance_warning, since students
+	// can't act as this login. Hand-mirrored with NO compile-time link in
+	// collect_scores.py and the web (AUTOGRADE_RELEASE_AUTHOR); parity-tested.
 	AutogradeReleaseAuthor = "github-actions[bot]"
 
 	// Repo collaborator permission levels, GitHub's low-to-high ladder. Used

@@ -65,7 +65,6 @@ import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal
 import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import { ProvenanceBadge } from "@/components/submissions/ProvenanceBadge"
-import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import {
   ScoreOverrideModal,
   type ScoreOverrideCapability,
@@ -90,7 +89,7 @@ import {
   LastSubmittedCell,
   SubmissionCountCell,
 } from "@/components/submissions/SubmissionRowCells"
-import type { SubmissionRow } from "@/hooks/useGetScores"
+import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupDisplayName } from "@/util/groupTeam"
@@ -183,32 +182,29 @@ function buildDetailItems(
     (e) => e.kind === "commit",
   )
   // sha (short or full, whichever the collected commit URL ends with) -> the
-  // graded release URL for that attempt, so a detected push can link its grade.
-  // Same keying for provenance so a detected push carries the collector's mark.
-  const releaseByCommit = new Map<string, string>()
-  const provenanceByCommit = new Map<string, SubmissionProvenance>()
+  // collected attempt graded at that commit, so a detected push or tag can link
+  // its grade and carry the collector's mark.
+  const attemptByCommit = new Map<string, SubmissionAttempt>()
   for (const s of row.submissions) {
     const sha = s.commit?.split("/").pop()
-    if (sha && s.release) releaseByCommit.set(sha, s.release)
-    if (sha && s.provenance) provenanceByCommit.set(sha, s.provenance)
+    if (sha) attemptByCommit.set(sha, s)
   }
+  const attemptFor = (sha: string) =>
+    attemptByCommit.get(sha) ?? attemptByCommit.get(sha.slice(0, 7))
 
   const commits: PushSubmission[] =
     detectedCommits.length > 0
-      ? detectedCommits.map((e) => ({
-          key: `commit-${e.sha ?? e.label}`,
-          commitHref: e.sha ? repoCommitUrl(org, repo, e.sha) : undefined,
-          datetime: e.datetime,
-          releaseHref: e.sha
-            ? (releaseByCommit.get(e.sha) ??
-              releaseByCommit.get(e.sha.slice(0, 7)))
-            : undefined,
-          author: e.author,
-          provenance: e.sha
-            ? (provenanceByCommit.get(e.sha) ??
-              provenanceByCommit.get(e.sha.slice(0, 7)))
-            : undefined,
-        }))
+      ? detectedCommits.map((e) => {
+          const attempt = e.sha ? attemptFor(e.sha) : undefined
+          return {
+            key: `commit-${e.sha ?? e.label}`,
+            commitHref: e.sha ? repoCommitUrl(org, repo, e.sha) : undefined,
+            datetime: e.datetime,
+            releaseHref: attempt?.release,
+            author: e.author,
+            provenance: attempt?.provenance,
+          }
+        })
       : row.submissions.map((s, i) => ({
           key: `${s.datetime}-${s.commit}-${i}`,
           commitHref: s.commit,
@@ -234,6 +230,7 @@ function buildDetailItems(
       tags: row.detectedEntries ?? [],
       commits,
       collectedTags,
+      provenanceBySha: (sha) => attemptFor(sha)?.provenance,
       showAuthors: isTeam,
       authorName: (login) => getName(login, students),
     },

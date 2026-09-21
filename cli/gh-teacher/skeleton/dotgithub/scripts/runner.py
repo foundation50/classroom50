@@ -1012,7 +1012,9 @@ def _looks_like_result_document(path: pathlib.Path) -> bool:
     try:
         if path.stat().st_size > RESULT_SNIFF_MAX_BYTES:
             return False
-        data = json.loads(path.read_bytes().decode("utf-8"))
+        # errors="replace": a decode failure must never clear a file, since a
+        # reader with a laxer decoder would still accept it.
+        data = json.loads(path.read_bytes().decode("utf-8", errors="replace"))
     except (OSError, ValueError):
         return False
     except RecursionError:

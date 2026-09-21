@@ -56,12 +56,16 @@ export type CollectedTagSubmission = {
 // exact tag shows its stripped label and jumps to its tree; a glob group shows
 // its pattern + match count and jumps to its representative commit. A group's
 // `count` is its match count so the modal header (sum of item counts) matches
-// the count chip even though the group renders as one row.
+// the count chip even though the group renders as one row. `provenanceBySha`
+// (teacher view only) marks an exact tag whose graded attempt the collector
+// flagged; a group bundles several attempts under one representative sha, so it
+// is never marked from one of them.
 export function tagDetailItems(
   entries: DetectedSubmission[],
   org: string,
   repo: string,
   t: Translate,
+  provenanceBySha?: ProvenanceBySha,
 ): SubmissionDetailItem[] {
   return jumpableTagEntries(entries).map((entry) => ({
     key: `${entry.kind}-${entry.label}`,
@@ -78,8 +82,16 @@ export function tagDetailItems(
       : undefined,
     href: detectedTagHref(entry, org, repo),
     count: entry.count,
+    provenance:
+      entry.kind === "tag" && entry.sha
+        ? provenanceBySha?.(entry.sha)
+        : undefined,
   }))
 }
+
+// Resolves a detected entry's commit sha (short or full) to the collector's
+// mark on the attempt graded at that commit, if any.
+export type ProvenanceBySha = (sha: string) => SubmissionProvenance | undefined
 
 // Fallback tag items from the collected scores.json history when no detection
 // overlay is available. One row per collected submission, newest first (the
@@ -171,12 +183,14 @@ export function buildSubmissionDetailItems(
     tags,
     commits,
     collectedTags = [],
+    provenanceBySha,
     showAuthors = false,
     authorName,
   }: {
     tags: DetectedSubmission[]
     commits: PushSubmission[]
     collectedTags?: CollectedTagSubmission[]
+    provenanceBySha?: ProvenanceBySha
   } & AuthorLabelOptions,
   mode: SubmissionMode | undefined,
   org: string,
@@ -186,7 +200,7 @@ export function buildSubmissionDetailItems(
   if (resolveSubmissionMode(mode) !== "tag") {
     return commitDetailItems(commits, t, { showAuthors, authorName })
   }
-  const detected = tagDetailItems(tags, org, repo, t)
+  const detected = tagDetailItems(tags, org, repo, t, provenanceBySha)
   return detected.length > 0
     ? detected
     : collectedTagDetailItems(collectedTags, t)

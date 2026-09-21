@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/spf13/cobra"
@@ -121,11 +122,12 @@ func NewCmd() *cobra.Command {
 			"    alongside the clone: results.json holds every submission\n" +
 			"    (newest first), result.json the latest. A submit/* release the\n" +
 			"    autograde workflow didn't publish is still collected, marked\n" +
-			"    with a provenance_warning in results.json and scores.csv, and\n" +
-			"    reported on stderr. result.json keeps the latest payload\n" +
-			"    unmarked for back-compat; results.json and scores.csv are the\n" +
-			"    marked views. A result.json that isn't a\n" +
-			"    classroom50/result/v1 document is treated as missing.\n" +
+			"    with a provenance_warning in results.json, and reported on\n" +
+			"    stderr; result.json keeps the latest payload unmarked for\n" +
+			"    back-compat. The scores.csv provenance_warning column comes\n" +
+			"    from the last score collection, not from this download. A\n" +
+			"    result.json that isn't a classroom50/result/v1 document is\n" +
+			"    treated as missing.\n" +
 			"  - Team members with no repo on the org are reported as\n" +
 			"    `not yet accepted` and don't fail the run.\n" +
 			"  - A scores.csv summary is written at the destination root with\n" +
@@ -967,10 +969,9 @@ func stringifyOverride(v any) string {
 //
 // Silent no-op for no releases / no submit-tag release. Network/5xx/decode
 // failures propagate so the caller can warn. Reported on errOut and otherwise
-// tolerated: a release the autograde workflow didn't publish (still recorded,
-// with its results.json entry carrying provenance_warning; result.json keeps
-// that payload unmarked for back-compat) and a result.json that isn't a
-// classroom50/result/v1 document (stored as a null payload).
+// tolerated: a release the workflow didn't publish (see releaseProvenanceProblem;
+// result.json keeps that payload unmarked for back-compat) and a result.json
+// that isn't a classroom50/result/v1 document (stored as a null payload).
 // Token and apiBase are resolved once in downloadByRoster; apiBase lets
 // rewriteAssetURL retarget the asset host on GHES / test setups.
 func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase, org, repo, target string) error {
@@ -1092,9 +1093,8 @@ func writeGuarded(root *os.Root, name string, data []byte) error {
 type submissionRecord struct {
 	SubmissionTag string          `json:"submission_tag"`
 	Result        json.RawMessage `json:"result"`
-	// Why the autograde workflow didn't publish this release; empty (omitted)
-	// when it did. Mirrors the scores-v1 submissionRecord field the collector
-	// writes, so a hand-published score is marked in both exports.
+	// See releaseProvenanceProblem; omitted when the workflow published it.
+	// Mirrors the scores-v1 submissionRecord field the collector writes.
 	ProvenanceWarning string `json:"provenance_warning,omitempty"`
 }
 
@@ -1149,20 +1149,29 @@ func releaseProvenanceProblem(rel release) string {
 }
 
 // isResultDocument reports whether body is a classroom50/result/v1 document by
-// its schema sentinel alone; full validation is the collector's job.
+// its schema sentinel alone; full validation is the collector's job. It must
+// accept no more than the runner's _looks_like_result_document refuses, or a
+// student could stage a file the sniff clears and rename it to result.json:
+// encoding/json matches struct keys case-insensitively and tolerates invalid
+// UTF-8 in strings, where json.loads does neither, so both are checked by hand.
 func isResultDocument(body []byte) bool {
-	var doc struct {
-		Schema string `json:"schema"`
+	if !utf8.Valid(body) {
+		return false
 	}
-	return json.Unmarshal(body, &doc) == nil && doc.Schema == resultSchemaV1
+	var doc map[string]json.RawMessage
+	if json.Unmarshal(body, &doc) != nil {
+		return false
+	}
+	var schema string
+	return json.Unmarshal(doc["schema"], &schema) == nil && schema == resultSchemaV1
 }
 
 // listAllSubmitReleases returns every submit-tag release for a repo, newest
 // first, walking the full /releases pagination. Non-submit releases (a
 // student's hand-created tag) and drafts (the runner never publishes one, and a
-// draft's assets aren't downloadable) are filtered out; who published each one
-// is judged by releaseProvenanceProblem at ingest and recorded, not filtered. Mirrors
-// all_submit_releases in collect_scores.py.
+// draft's assets aren't downloadable) are filtered out; publisher identity is
+// not (see releaseProvenanceProblem). Mirrors all_submit_releases in
+// collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
 		func(page int) string {

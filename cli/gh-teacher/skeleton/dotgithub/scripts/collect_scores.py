@@ -1397,10 +1397,8 @@ def collect_release_history(
                 f"{candidate.get('datetime')!r} is not an RFC 3339 timestamp; "
                 f"cannot mark lateness"
             )
-        # Who published the release is judged from the release metadata, never
-        # from the payload: strip any copy a hand-written result.json carries,
-        # since validate_result tolerates extra keys. Marked, not dropped: a
-        # teacher may publish by hand.
+        # Judged from the release metadata, never the payload: strip any copy a
+        # hand-written result.json carries. See release_provenance_problem.
         candidate.pop("provenance_warning", None)
         problem = release_provenance_problem(release)
         if problem is not None:
@@ -2897,9 +2895,8 @@ def validate_result(
     """Raise ValueError if the payload fails the v1 contract. The
     classroom/assignment/owner checks defend against a hostile result.json
     trying to land in someone else's scores.json: the triple must match the
-    source repo's expected identity. Provenance (did the workflow publish it at
-    all) is judged separately by release_provenance_problem and recorded on the
-    stored record as `provenance_warning`, never used to reject.
+    source repo's expected identity. Provenance is judged separately by
+    release_provenance_problem and never used to reject.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
     (the roster/repo-name-derived owner; for a team assignment the repo-name
@@ -3413,10 +3410,9 @@ def all_submit_releases(
     """Every submit-tag release for a repo, newest first, walking the full
     /releases pagination: the complete submission history (a student who pushed
     N times has N submit/* releases, all returned). Non-submit releases (a
-    hand-created tag) are filtered out. Who published each one is judged later,
-    by release_provenance_problem in collect_release_history, and recorded on
-    the stored submission rather than used to drop it. A 404 (no releases, or
-    repo not accepted) yields an empty list.
+    hand-created tag) are filtered out; publisher identity is not (see
+    release_provenance_problem). A 404 (no releases, or repo not accepted)
+    yields an empty list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
     chain or the page cap) raises IncompleteListing rather than returning a
