@@ -16,6 +16,9 @@ import {
   DISCUSSIONS_URL,
 } from "@/version"
 
+const closeHostDialog = (event: React.MouseEvent<HTMLElement>) =>
+  event.currentTarget.closest("dialog")?.close()
+
 // A single feedback/support link card. The two support links differ only in
 // href + labels, so they share one definition.
 function SupportLink({
@@ -121,14 +124,14 @@ export const AboutDialog = forwardRef<
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
         <Link
           to="/accessibility"
-          onClick={(event) => event.currentTarget.closest("dialog")?.close()}
+          onClick={closeHostDialog}
           className="link link-info link-hover"
         >
           {t("nav.aboutViewAccessibility")}
         </Link>
         <Link
           to="/privacy"
-          onClick={(event) => event.currentTarget.closest("dialog")?.close()}
+          onClick={closeHostDialog}
           className="link link-info link-hover"
         >
           {t("nav.aboutViewPrivacy")}

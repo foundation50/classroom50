@@ -356,16 +356,19 @@ describe("SettingsPage service tokens", () => {
   })
 })
 
+// Preference forms share one Save label, so pick the form by its radio name.
+const radio = (label: string) =>
+  screen.getByLabelText(label) as HTMLInputElement
+const saveButtonFor = (formName: string) =>
+  screen
+    .getAllByText("common.save")
+    .map((el) => el.closest("form"))
+    .find((form) => form?.querySelector(`input[name="${formName}"]`))!
+    .querySelector('button[type="submit"]') as HTMLButtonElement
+
 describe("SettingsPage student names", () => {
   const NAME_ORDER_KEY = USER_PREFERENCE_SPECS.nameOrder.storageKey
-  const radio = (label: string) =>
-    screen.getByLabelText(label) as HTMLInputElement
-  const saveButton = () =>
-    screen
-      .getAllByText("common.save")
-      .map((el) => el.closest("form"))
-      .find((form) => form?.querySelector('input[name="name-order-pref"]'))!
-      .querySelector('button[type="submit"]') as HTMLButtonElement
+  const saveButton = () => saveButtonFor("name-order-pref")
 
   it("defaults to first-last and only persists on Save", async () => {
     renderPage()
@@ -397,41 +400,13 @@ describe("SettingsPage student names", () => {
   })
 })
 
+// The save flow itself is covered by AnalyticsPreferenceForm.test.tsx; here
+// only the page wiring matters.
 describe("SettingsPage usage analytics", () => {
-  const ANALYTICS_KEY = USER_PREFERENCE_SPECS.analytics.storageKey
-  const radio = (label: string) =>
-    screen.getByLabelText(label) as HTMLInputElement
-  const saveButton = () =>
-    screen
-      .getAllByText("common.save")
-      .map((el) => el.closest("form"))
-      .find((form) => form?.querySelector('input[name="analytics-pref"]'))!
-      .querySelector('button[type="submit"]') as HTMLButtonElement
-
-  it("defaults to on and stores the opt-out only on Save", async () => {
+  it("renders the analytics form defaulting to on, with a link to the notice", () => {
     renderPage()
     expect(radio("settings.analytics.on").checked).toBe(true)
-
-    await userEvent.click(radio("settings.analytics.off"))
-    expect(window.localStorage.getItem(ANALYTICS_KEY)).toBeNull()
-
-    await userEvent.click(saveButton())
-    expect(window.localStorage.getItem(ANALYTICS_KEY)).toBe("off")
-    expect(screen.getByText("settings.analytics.saved")).toBeTruthy()
-  })
-
-  it("reflects a stored opt-out and clears the key when opting back in", async () => {
-    window.localStorage.setItem(ANALYTICS_KEY, "off")
-    renderPage()
-    expect(radio("settings.analytics.off").checked).toBe(true)
-
-    await userEvent.click(radio("settings.analytics.on"))
-    await userEvent.click(saveButton())
-    expect(window.localStorage.getItem(ANALYTICS_KEY)).toBeNull()
-  })
-
-  it("links to the privacy notice", () => {
-    renderPage()
+    expect(saveButtonFor("analytics-pref")).toBeTruthy()
     expect(screen.getByText("settings.analytics.privacyLink")).toBeTruthy()
   })
 })

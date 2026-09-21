@@ -9,11 +9,10 @@ export const NAME_ORDERS = ["first-last", "last-first"] as const
 export type NameOrder = (typeof NAME_ORDERS)[number]
 export const DEFAULT_NAME_ORDER: NameOrder = "first-last"
 
-// Anonymous usage analytics (Cloudflare Web Analytics). "on" is the default
-// under legitimate interest; "off" is the visitor's objection and is the only
-// value ever stored. The storage key lives here, not in the registry, because
-// the analytics loader that vite.config.ts injects into index.html reads it
-// before React boots, the same way the anti-flash scripts read theme/motion.
+// Anonymous usage analytics (Cloudflare Web Analytics). "off" is the only value
+// ever stored. The storage key lives here, not in the registry, because the
+// analytics loader that vite.config.ts injects into index.html reads it before
+// React boots, the same way the anti-flash scripts read theme/motion.
 export const ANALYTICS_PREFS = ["on", "off"] as const
 export type AnalyticsPref = (typeof ANALYTICS_PREFS)[number]
 export const DEFAULT_ANALYTICS_PREF: AnalyticsPref = "on"

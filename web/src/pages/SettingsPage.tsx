@@ -13,6 +13,7 @@ import {
 } from "@/components/ui"
 import { useTranslation } from "react-i18next"
 import { useMemo, useState } from "react"
+import { Link } from "@tanstack/react-router"
 import useGetOrgs from "@/hooks/useGetOrgs"
 import {
   isOwnedReadyOrg,
@@ -28,9 +29,11 @@ import { useTheme, type ThemePref } from "@/hooks/useTheme"
 import { useUserPreferences } from "@/context/userPreferences/UserPreferencesProvider"
 import type { NameOrder } from "@/types/preferences"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
-import { PreferenceForm } from "@/components/settings/PreferenceForm"
+import {
+  PreferenceForm,
+  type PreferenceOption,
+} from "@/components/settings/PreferenceForm"
 import { AnalyticsPreferenceForm } from "@/components/settings/AnalyticsPreferenceForm"
-import { Link } from "@tanstack/react-router"
 import {
   useDeleteRepoScopeState,
   useCanElevateInApp,
@@ -283,7 +286,7 @@ function AppearanceSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
   const { pref, setThemePref } = useTheme()
 
-  const options: { value: ThemePref; label: string; hint: string }[] = [
+  const options: PreferenceOption<ThemePref>[] = [
     {
       value: "system",
       label: t("settings.appearance.system"),
@@ -343,7 +346,7 @@ function MotionSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
   const { pref, setPref } = useReducedMotion()
 
-  const options: { value: MotionPref; label: string; hint: string }[] = [
+  const options: PreferenceOption<MotionPref>[] = [
     {
       value: "system",
       label: t("settings.motion.system"),
@@ -387,7 +390,7 @@ function NameOrderSection({ highlighted }: { highlighted?: boolean }) {
   const { t } = useTranslation()
   const { preferences, setPreference } = useUserPreferences()
 
-  const options: { value: NameOrder; label: string; hint: string }[] = [
+  const options: PreferenceOption<NameOrder>[] = [
     {
       value: "first-last",
       label: t("settings.nameOrder.firstLast"),
@@ -431,7 +434,7 @@ function AnalyticsSection({ highlighted }: { highlighted?: boolean }) {
       highlighted={highlighted}
     >
       <AnalyticsPreferenceForm />
-      <p className="mt-4 text-sm text-base-content/70">
+      <p className="mt-4 text-sm">
         <Link className="link link-info link-hover" to="/privacy">
           {t("settings.analytics.privacyLink")}
         </Link>

@@ -12,7 +12,7 @@ export type PreferenceOption<T extends string> = {
 
 // Radio list for a preference: each option is a bordered row (label + hint).
 // `name` scopes the radios so several groups on one page don't collide.
-export function PreferenceRadioGroup<T extends string>({
+function PreferenceRadioGroup<T extends string>({
   name,
   legend,
   value,

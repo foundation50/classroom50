@@ -11,11 +11,8 @@ import { DISCUSSIONS_URL, WIKI_URL } from "@/version"
 const PRIVACY_WIKI_URL = `${WIKI_URL}/GitHub-Integration#privacy-and-ferpa`
 const CLOUDFLARE_DPA_URL = "https://www.cloudflare.com/cloudflare-customer-dpa/"
 
-// Public /privacy page: the plain-language privacy notice plus the analytics
-// opt-out, reachable before sign-in so a visitor can object (GDPR Art. 21)
-// without an account. Classroom data is covered in one card because there is
-// nothing to disclose beyond "it never leaves GitHub"; the detail lives in the
-// wiki so this page stays short enough to read.
+// Public /privacy page: the privacy notice plus the analytics opt-out, reachable
+// before sign-in so a visitor can object without an account.
 export default function PrivacyPage() {
   const { t } = useTranslation()
   useDocumentTitle(t("privacy.pageTitle"))

@@ -48,11 +48,8 @@ jobs:
       # sees the same tree.
       - uses: ./.github/actions/web-build-gate
 
-      # Cloudflare Web Analytics (production only). Exports the site token so
-      # `vite build` injects the beacon; see webAnalyticsPlugin in
-      # web/vite.config.ts. The token is a public site identifier that ships in
-      # the HTML, so a repo variable is right, not a secret. Skipped (visibly)
-      # when the variable is unset. Delete this step to ship without analytics.
+      # Cloudflare Web Analytics site token (public, ships in the HTML; see
+      # web/README.md "Usage analytics"). Delete this step to ship without it.
       - name: Enable Cloudflare Web Analytics
         if: vars.VITE_CF_BEACON_TOKEN != ''
         run: echo "VITE_CF_BEACON_TOKEN=${{ vars.VITE_CF_BEACON_TOKEN }}" >> "$GITHUB_ENV"

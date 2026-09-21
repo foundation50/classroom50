@@ -91,26 +91,16 @@ function versionJsonPlugin(): Plugin {
   }
 }
 
-// Cloudflare Web Analytics, injected only when VITE_CF_BEACON_TOKEN is set.
-// Cloudflare attributes traffic by token and accepts beacons only from the
-// hostname registered for that token, so each environment gets its own
-// Cloudflare site: the production and preview deploy workflows export their
-// own tokens, and a developer can put a personal site's token in .env.local
-// (served by `vite dev` too). Unset means no beacon, which is the default for
-// local, test, and self-hosted builds. Lives here rather than in index.html so
-// the source page stays free of third-party script and its anti-flash drift
-// tests stay valid. The emitted HTML mirrors the dashboard's snippet (same
-// comment markers, tag, and attributes) except that the tag is created by a
-// tiny loader purely so it can honor an opt-out: the browser's Global Privacy
-// Control / Do Not Track signal, or the in-app preference (Settings and the
-// public /privacy page), which the registry stores as "off" under
-// ANALYTICS_STORAGE_KEY and clears when the visitor opts back in. The beacon
-// locates its config via `script[data-cf-beacon]`, so a dynamically added
-// module script is fine. It sends no cookies or storage, and strips query
-// strings client-side, so OAuth codes, invite link keys, and roster searches
-// never leave the browser.
 const CF_BEACON_SRC = "https://static.cloudflareinsights.com/beacon.min.js"
 
+// Injects Cloudflare Web Analytics when VITE_CF_BEACON_TOKEN is set (setup per
+// environment is in web/README.md). Lives here rather than in index.html so the
+// source page stays free of third-party script and its anti-flash drift tests
+// stay valid. The output mirrors the dashboard snippet, except a small loader
+// creates the tag so it can honor GPC / Do Not Track and the in-app opt-out,
+// which the preferences registry stores as the literal "off" under
+// ANALYTICS_STORAGE_KEY. The beacon finds its config via
+// `script[data-cf-beacon]`, so a dynamically added module script works.
 function webAnalyticsPlugin(token: string | undefined): Plugin {
   // Only the token value belongs in the variable. Quotes, whitespace, or angle
   // brackets mean the whole dashboard snippet was pasted instead.
@@ -119,19 +109,17 @@ function webAnalyticsPlugin(token: string | undefined): Plugin {
       "VITE_CF_BEACON_TOKEN must be only the token value from the Cloudflare Web Analytics snippet, not the whole <script> tag",
     )
   }
+  // Wrapped in an IIFE like the anti-flash scripts so `s` and `off` stay local.
   // localStorage access throws in some hardened/private modes; treat that as
   // no opt-out rather than crashing before the app boots.
-  const optedOut =
-    `(function(){try{return localStorage.getItem(${JSON.stringify(ANALYTICS_STORAGE_KEY)})==="off"}` +
-    `catch(e){return false}})()`
-  const loader = [
-    `if(navigator.globalPrivacyControl!==true&&navigator.doNotTrack!=="1"&&!${optedOut}){`,
-    `var s=document.createElement("script");`,
-    `s.type="module";`,
-    `s.src=${JSON.stringify(CF_BEACON_SRC)};`,
-    `s.setAttribute("data-cf-beacon",${JSON.stringify(`{"token": "${token}"}`)});`,
-    `document.body.appendChild(s)}`,
-  ].join("")
+  const loader =
+    `(function(){var off=false;` +
+    `try{off=localStorage.getItem(${JSON.stringify(ANALYTICS_STORAGE_KEY)})==="off"}catch(e){}` +
+    `if(navigator.globalPrivacyControl!==true&&navigator.doNotTrack!=="1"&&!off){` +
+    `var s=document.createElement("script");s.type="module";` +
+    `s.src=${JSON.stringify(CF_BEACON_SRC)};` +
+    `s.setAttribute("data-cf-beacon",${JSON.stringify(`{"token": "${token}"}`)});` +
+    `document.body.appendChild(s)}})()`
   const snippet =
     `<!-- Cloudflare Web Analytics --><script>${loader}</script>` +
     `<!-- End Cloudflare Web Analytics -->`
@@ -426,85 +414,82 @@ function assessmentApiPlugin(): Plugin {
     },
   }
 }
-export default defineConfig(({ mode }) => ({
-  define: {
-    __APP_VERSION__: JSON.stringify(release.version),
-    __APP_COMMIT__: JSON.stringify(release.commit),
-    __APP_BUILD_DATE__: JSON.stringify(release.buildDate),
-    // VITE_GITHUB_PAT is a dev-only auto-login convenience (see
-    // resolveDevAutoLoginPat). Vite inlines every VITE_* value into the bundle,
-    // so a token left in .env.local during `vite build` would ship to every
-    // visitor — the runtime DEV guard stops *use*, not *embedding*. Hard-blank
-    // the literal for any non-development build so it can never leak.
-    "import.meta.env.VITE_GITHUB_PAT":
-      mode === "development"
-        ? JSON.stringify(
-            loadEnv(mode, path.resolve(import.meta.dirname), "")
-              .VITE_GITHUB_PAT ?? "",
-          )
-        : JSON.stringify(""),
-  },
-  plugins: [
-    tanstackRouter({
-      target: "react",
-      autoCodeSplitting: true,
-    }),
-    react(),
-    svgr(),
-    tailwindcss(),
-    babel({ presets: [reactCompilerPreset()] }),
-    versionJsonPlugin(),
-    // loadEnv merges process.env (CI) with .env files, so a developer can opt
-    // in through .env.local for both `vite dev` and a local build.
-    webAnalyticsPlugin(
-      loadEnv(mode, path.resolve(import.meta.dirname), "")
-        .VITE_CF_BEACON_TOKEN || undefined,
-    ),
-    contrastAuditPlugin(),
-    vpatReportPlugin(),
-    assessmentApiPlugin(),
-  ],
-  resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "./src"),
+export default defineConfig(({ mode }) => {
+  // One read of .env* merged with process.env for every VITE_* the config
+  // itself consumes (the app reads its own through import.meta.env).
+  const env = loadEnv(mode, path.resolve(import.meta.dirname), "")
+  return {
+    define: {
+      __APP_VERSION__: JSON.stringify(release.version),
+      __APP_COMMIT__: JSON.stringify(release.commit),
+      __APP_BUILD_DATE__: JSON.stringify(release.buildDate),
+      // VITE_GITHUB_PAT is a dev-only auto-login convenience (see
+      // resolveDevAutoLoginPat). Vite inlines every VITE_* value into the bundle,
+      // so a token left in .env.local during `vite build` would ship to every
+      // visitor — the runtime DEV guard stops *use*, not *embedding*. Hard-blank
+      // the literal for any non-development build so it can never leak.
+      "import.meta.env.VITE_GITHUB_PAT":
+        mode === "development"
+          ? JSON.stringify(env.VITE_GITHUB_PAT ?? "")
+          : JSON.stringify(""),
     },
-  },
-  server: {
-    fs: {
-      // src/skeleton/skeleton.ts imports the skeleton from
-      // cli/gh-teacher/skeleton (outside web/), so the dev server must read the
-      // monorepo root. `vite build` inlines the files regardless.
-      allow: [path.resolve(import.meta.dirname, "..")],
-    },
-  },
-  test: {
-    // Two projects: the fast node/happy-dom suite (the bulk of the tests) and a
-    // Playwright/Chromium browser suite for the handful of checks that need a real
-    // layout engine (target-size + reflow, *.browser.test.tsx). `vitest run` runs
-    // both; browser tests need `npx playwright install chromium` once locally.
-    projects: [
-      {
-        extends: true,
-        test: {
-          name: "node",
-          environment: "node",
-          include: ["src/**/*.{test,spec}.{ts,tsx}"],
-          exclude: ["src/**/*.browser.test.tsx"],
-        },
+    plugins: [
+      tanstackRouter({
+        target: "react",
+        autoCodeSplitting: true,
+      }),
+      react(),
+      svgr(),
+      tailwindcss(),
+      babel({ presets: [reactCompilerPreset()] }),
+      versionJsonPlugin(),
+      webAnalyticsPlugin(env.VITE_CF_BEACON_TOKEN),
+      contrastAuditPlugin(),
+      vpatReportPlugin(),
+      assessmentApiPlugin(),
+    ],
+    resolve: {
+      alias: {
+        "@": path.resolve(import.meta.dirname, "./src"),
       },
-      {
-        extends: true,
-        test: {
-          name: "browser",
-          include: ["src/**/*.browser.test.tsx"],
-          browser: {
-            enabled: true,
-            provider: playwright(),
-            headless: true,
-            instances: [{ browser: "chromium" }],
+    },
+    server: {
+      fs: {
+        // src/skeleton/skeleton.ts imports the skeleton from
+        // cli/gh-teacher/skeleton (outside web/), so the dev server must read the
+        // monorepo root. `vite build` inlines the files regardless.
+        allow: [path.resolve(import.meta.dirname, "..")],
+      },
+    },
+    test: {
+      // Two projects: the fast node/happy-dom suite (the bulk of the tests) and a
+      // Playwright/Chromium browser suite for the handful of checks that need a real
+      // layout engine (target-size + reflow, *.browser.test.tsx). `vitest run` runs
+      // both; browser tests need `npx playwright install chromium` once locally.
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: "node",
+            environment: "node",
+            include: ["src/**/*.{test,spec}.{ts,tsx}"],
+            exclude: ["src/**/*.browser.test.tsx"],
           },
         },
-      },
-    ],
-  },
-}))
+        {
+          extends: true,
+          test: {
+            name: "browser",
+            include: ["src/**/*.browser.test.tsx"],
+            browser: {
+              enabled: true,
+              provider: playwright(),
+              headless: true,
+              instances: [{ browser: "chromium" }],
+            },
+          },
+        },
+      ],
+    },
+  }
+})
