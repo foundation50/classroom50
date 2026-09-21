@@ -326,6 +326,7 @@ browser itself must reach these hosts.
 | `*.github.io` | Web app, Actions | The organization's Pages site (`YOUR-ORGANIZATION.github.io/classroom50/…`): the assignment manifest, autograders, and the runner. If the organization's Pages site uses a custom domain, allow that domain too. See [Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain). |
 | `codeload.github.com` | Web app | Repository archive (zip) downloads, reached through the proxy. |
 | `www.githubstatus.com` | Web app | GitHub status check for the outage banner (best-effort). |
+| `static.cloudflareinsights.com`, `cloudflareinsights.com` | Web app | Optional. Anonymous usage analytics on classroom50.org. Blocking them has no effect on the app. See [Usage analytics](#usage-analytics). |
 
 ### The GitHub proxy
 
@@ -453,6 +454,9 @@ The legal basis is legitimate interest, so you can object at any time:
   [privacy page](https://classroom50.org/privacy). It applies to that browser
   from the next page load.
 - In your browser, turn on the Global Privacy Control or Do Not Track signal.
+
+Content blockers and network filters that block the analytics hosts don't
+affect the app. See [Network and allowed domains](#network-and-allowed-domains).
 
 Only classroom50.org and preview.classroom50.org include the script, each
 reporting to its own Cloudflare site. `gh teacher` and `gh student` send no
