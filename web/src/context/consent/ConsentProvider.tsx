@@ -19,6 +19,7 @@ import {
   ALL_DENIED,
   ANALYTICS_RUNTIME_GLOBAL,
   CONSENT_STORAGE_KEY,
+  LEGACY_ANALYTICS_STORAGE_KEY,
   type ConsentChoices,
   type ConsentRecord,
 } from "@/types/consent"
@@ -56,12 +57,12 @@ export const ConsentProvider = ({ children }: { children: ReactNode }) => {
     () => typeof navigator !== "undefined" && browserDeclinesTracking(),
   )
   // A build with no analytics vendor injects no runtime, so there is nothing
-  // to ask about. Dev builds rarely carry a vendor but still need the prompt
-  // visible to work on it.
+  // to ask about (the dev server injects it even without a vendor, so the
+  // prompt can be worked on).
   const [vendorsPresent] = useState(
     () =>
       typeof window !== "undefined" &&
-      (window[ANALYTICS_RUNTIME_GLOBAL] !== undefined || import.meta.env.DEV),
+      window[ANALYTICS_RUNTIME_GLOBAL] !== undefined,
   )
 
   const decide = useCallback((choices: ConsentChoices) => {
@@ -77,7 +78,13 @@ export const ConsentProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (typeof window === "undefined") return
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== CONSENT_STORAGE_KEY && event.key !== null) return
+      if (
+        event.key !== CONSENT_STORAGE_KEY &&
+        event.key !== LEGACY_ANALYTICS_STORAGE_KEY &&
+        event.key !== null
+      ) {
+        return
+      }
       // Re-read rather than trust newValue so version and shape checks apply.
       // A record cleared elsewhere (Reset in another tab) is a withdrawal here.
       const next = readConsent()

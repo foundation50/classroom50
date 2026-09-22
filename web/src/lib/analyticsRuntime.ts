@@ -30,16 +30,22 @@ function gtag(..._args: unknown[]): void {
 // Starts vendors for newly granted categories without a page load. Withdrawn
 // consent can't unload a script that already ran, so it tells Google Analytics
 // to stop storing and removes its cookies; the next page load honors the
-// record fully.
+// record fully. A script that already ran is also why a re-grant must push
+// `granted` itself: the runtime starts each vendor once and won't run it again.
 export function applyConsent(choices: ConsentChoices): void {
   const runtime = window[ANALYTICS_RUNTIME_GLOBAL]
   const granted = OPTIONAL_CONSENT_CATEGORIES.filter(
     (category) => choices[category],
   )
+  const googleWasRunning = runtime?.started("google") === true
   if (granted.length > 0) runtime?.enable(granted)
 
-  if (!choices.google) {
-    if (runtime?.started("google")) {
+  if (choices.google) {
+    if (googleWasRunning) {
+      gtag("consent", "update", { analytics_storage: "granted" })
+    }
+  } else {
+    if (googleWasRunning) {
       gtag("consent", "update", { analytics_storage: "denied" })
     }
     clearAnalyticsCookies()

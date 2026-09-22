@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button, Heading, Modal, cx } from "@/components/ui"
@@ -38,6 +38,13 @@ export function ConsentBanner() {
   }
   const titleId = useId()
   const noticeId = useId()
+  // Both ways of hiding the notice remove the element that holds focus, so
+  // focus returns to the toggle that opened it instead of falling to <body>.
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const hideNotice = () => {
+    setNoticeOpen(false)
+    toggleRef.current?.focus()
+  }
 
   if (!mounted) return null
 
@@ -54,7 +61,7 @@ export function ConsentBanner() {
       closeDisabled={needsDecision}
       hideCloseButton
       onKeyDown={(event) => {
-        if (event.key === "Escape" && noticeOpen) setNoticeOpen(false)
+        if (event.key === "Escape" && noticeOpen) hideNotice()
       }}
       boxClassName={cx(
         "rounded-b-none border-t border-base-300 p-0",
@@ -71,14 +78,10 @@ export function ConsentBanner() {
         >
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-lg font-semibold">
+              <Heading as="h3" variant="title-medium">
                 {t("privacy.pageTitle")}
-              </h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setNoticeOpen(false)}
-              >
+              </Heading>
+              <Button variant="ghost" size="sm" onClick={hideNotice}>
                 <ChevronDownIcon aria-hidden="true" className="size-4" />
                 {t("consent.banner.hideNotice")}
               </Button>
@@ -98,11 +101,14 @@ export function ConsentBanner() {
               <p className="text-sm text-base-content/70">
                 {t("consent.banner.body")}{" "}
                 <button
+                  ref={toggleRef}
                   type="button"
                   className="link link-info link-hover"
                   aria-expanded={noticeOpen}
                   aria-controls={noticeOpen ? noticeId : undefined}
-                  onClick={() => setNoticeOpen((open) => !open)}
+                  onClick={() =>
+                    noticeOpen ? hideNotice() : setNoticeOpen(true)
+                  }
                 >
                   {t(
                     noticeOpen

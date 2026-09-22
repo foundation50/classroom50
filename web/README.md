@@ -68,12 +68,12 @@ Analytics vendors are wired in two places, and only those two:
 
 - **Build:** `web/vite/analytics.ts` lists each vendor (Google Tag Manager,
   Cloudflare Web Analytics), the `VITE_*` variable that enables it, and the
-  snippet to inject into `index.html`. Every snippet runs inside one shared
-  gate that skips it when the browser sends Global Privacy Control or Do Not
-  Track, or when the visitor opted out (the `analytics` preference,
-  `classroom50:analytics` in localStorage, stored only as `off`). No variable,
-  no script. Tests in `web/vite/analytics.test.ts` execute the generated
-  snippets against fakes.
+  snippet to inject into `index.html`, behind one shared consent runtime that
+  starts a vendor only once its category is granted (see Consent below) and
+  never while the browser sends Global Privacy Control or Do Not Track. No
+  variable, no script; `npm run dev` injects the runtime alone so the prompt
+  can be worked on without a vendor. Tests in `web/vite/analytics.test.ts`
+  execute the generated snippets against fakes.
 - **Deploy:** `.github/actions/web-analytics-env` maps repository variables to
   those `VITE_*` variables for the `production` or `preview` environment, and
   prints which vendors ran in the job summary. Each deploy workflow calls it
@@ -140,6 +140,22 @@ claims depend on this configuration. When you set up a container:
 5. Don't add tags beyond Google Analytics. The privacy notice describes
    analytics only, and Consent Mode denies every non-analytics storage type,
    so other tag types would not work anyway.
+
+Container publishing is a security control, not only a configuration step.
+Anything published in the container runs as script on classroom50.org, on the
+same origin where the visitor's GitHub token lives in local storage, and the
+app ships no Content Security Policy (it must fetch from any organization's
+custom GitHub Pages domain, which a policy cannot allowlist in advance). So:
+
+- Keep the container's Publish permission to the smallest group of Google
+  accounts, all with 2-step verification, and use a separate Edit role for
+  everyone else.
+- Turn on container approval (workspace changes need a second person to
+  publish) if the account plan offers it, and review the container's version
+  history when you review a release.
+- Treat step 2 above as part of the privacy notice: the notice says query
+  strings are not recorded because this override exists. Check it after any
+  container change.
 
 The privacy notice tells visitors Google Analytics collects the pages they
 view and how long they stay, the referring site, country, browser, device, and

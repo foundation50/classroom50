@@ -370,7 +370,7 @@ function assessmentApiPlugin(): Plugin {
     },
   }
 }
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   // One read of .env* merged with process.env for every VITE_* the config
   // itself consumes (the app reads its own through import.meta.env).
   const env = loadEnv(mode, path.resolve(import.meta.dirname), "")
@@ -399,7 +399,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       babel({ presets: [reactCompilerPreset()] }),
       versionJsonPlugin(),
-      analyticsPlugin(env),
+      analyticsPlugin(env, command === "serve"),
       contrastAuditPlugin(),
       vpatReportPlugin(),
       assessmentApiPlugin(),

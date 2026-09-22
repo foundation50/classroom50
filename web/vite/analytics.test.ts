@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
 import {
@@ -110,6 +112,35 @@ describe("analyticsPlugin", () => {
 
   it("leaves the page untouched when no provider variable is set", () => {
     expect(transform({})).toBe(PAGE)
+  })
+
+  it("injects only the consent runtime for the dev server with no vendor", () => {
+    const html = (
+      analyticsPlugin({}, true).transformIndexHtml as (html: string) => string
+    )(PAGE)
+    expect(html).toContain("<!-- Analytics consent runtime -->")
+    expect(html).not.toContain("<!-- Google Tag Manager -->")
+    expect(html).not.toContain("<!-- Cloudflare Web Analytics -->")
+    expect(boot(html).runtime.started("google")).toBe(false)
+  })
+
+  // .github/actions/web-analytics-env/action.yaml lists one row per vendor by
+  // hand; a vendor added on one side only would ship silently off.
+  it("the deploy action maps exactly the variables the providers read", () => {
+    const action = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../.github/actions/web-analytics-env/action.yaml",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    )
+    const rows = [...action.matchAll(/^\s*"([^"|]+)\|([^"|]+)\|([^"|]+)"$/gm)]
+    expect(rows.map((r) => r[2]).sort()).toEqual(
+      ANALYTICS_PROVIDERS.map((p) => p.envVar).sort(),
+    )
+    for (const [, , buildVar, repoVar] of rows) expect(repoVar).toBe(buildVar)
   })
 
   it("injects the runtime first in <head>, GTM after it, and Cloudflare at the end of <body>", () => {

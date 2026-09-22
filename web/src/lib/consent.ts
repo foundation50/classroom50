@@ -10,22 +10,33 @@ import {
 } from "@/types/consent"
 
 // Reads the stored decision, or null when the visitor has not decided (nothing
-// stored, an older policy version, or an unreadable value). Mirrors the parse
-// in web/vite/analytics.ts; keep the two in step.
+// stored, an older policy version, or an unreadable value). The injected
+// runtime in web/vite/analytics.ts parses the same record before React boots;
+// its parity test keeps the two in step.
 export function readConsent(): ConsentRecord | null {
   const store = localStorageOrNull()
-  const raw = store?.getItem(CONSENT_STORAGE_KEY)
-  if (raw) {
-    try {
-      const parsed: unknown = JSON.parse(raw)
-      if (isCurrentRecord(parsed)) return parsed
-    } catch {
-      // Treated as undecided below.
+  // getItem itself throws in some hardened modes; that reads as undecided, the
+  // same as the injected runtime.
+  try {
+    const raw = store?.getItem(CONSENT_STORAGE_KEY)
+    if (raw) {
+      try {
+        const parsed: unknown = JSON.parse(raw)
+        if (isCurrentRecord(parsed)) return parsed
+      } catch {
+        // Unreadable record: fall through to the legacy key.
+      }
     }
-  }
-  // A pre-consent opt-out is a denial the visitor already expressed.
-  if (store?.getItem(LEGACY_ANALYTICS_STORAGE_KEY) === "off") {
-    return { v: CONSENT_VERSION, at: new Date(0).toISOString(), ...ALL_DENIED }
+    // A pre-consent opt-out is a denial the visitor already expressed.
+    if (store?.getItem(LEGACY_ANALYTICS_STORAGE_KEY) === "off") {
+      return {
+        v: CONSENT_VERSION,
+        at: new Date(0).toISOString(),
+        ...ALL_DENIED,
+      }
+    }
+  } catch {
+    // Storage blocked: undecided.
   }
   return null
 }
@@ -42,11 +53,13 @@ function isCurrentRecord(value: unknown): value is ConsentRecord {
   )
 }
 
+// `choices` may be a whole record (the form seeds its draft from one), so the
+// version and timestamp are written last and always describe this decision.
 export function writeConsent(choices: ConsentChoices): ConsentRecord {
   const record: ConsentRecord = {
+    ...choices,
     v: CONSENT_VERSION,
     at: new Date().toISOString(),
-    ...choices,
   }
   const store = localStorageOrNull()
   setItemOrIgnore(store, CONSENT_STORAGE_KEY, JSON.stringify(record))

@@ -444,7 +444,7 @@ are:
 
 | Collected | Not collected |
 |---|---|
-| The pages you view, for example `/cs1-fall-2026/assignments`, and how long you stay | Query strings. Cloudflare removes them in your browser and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded. |
+| The pages you view, for example `/cs1-fall-2026/assignments`, and how long you stay | Query strings. Cloudflare removes them in your browser, and our Google Analytics setup is configured not to record them, so sign-in codes, invite link keys, and roster searches stay out of the data. |
 | The site that linked to the page | Your GitHub username, email, or roster data |
 | Your country, worked out from your connection | Anything that follows you to other sites |
 | Browser, operating system, device type, and language | |

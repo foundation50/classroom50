@@ -5,6 +5,7 @@ import {
   CONSENT_STORAGE_KEY,
   CONSENT_VERSION,
   LEGACY_ANALYTICS_STORAGE_KEY,
+  OPTIONAL_CONSENT_CATEGORIES,
   type OptionalConsentCategory,
 } from "../src/types/consent.ts"
 
@@ -78,16 +79,20 @@ export const ANALYTICS_PROVIDERS: readonly Provider[] = [
 ]
 
 // The consent runtime, injected once ahead of any vendor. `granted()` mirrors
-// readConsent() in src/lib/consent.ts (current version, or the legacy opt-out
-// as a denial); keep the two in step. Storage access throws in some hardened
-// modes; that reads as "no decision", so nothing loads.
+// readConsent() in src/lib/consent.ts (current version with every category a
+// boolean, or the legacy opt-out as a denial); the parity test in
+// analytics.test.ts feeds both the same records. Storage access throws in some
+// hardened modes; that reads as "no decision", so nothing loads.
 function runtimeScript(): string {
   const g = `window.${ANALYTICS_RUNTIME_GLOBAL}`
+  const categories = JSON.stringify(OPTIONAL_CONSENT_CATEGORIES)
   return (
-    `${g}=${g}||(function(){var loaders={},started={};` +
+    `${g}=${g}||(function(){var loaders={},started={},cats=${categories};` +
     `function blocked(){return navigator.globalPrivacyControl===true||navigator.doNotTrack==="1"}` +
+    `function current(c){if(!c||typeof c!=="object"||c.v!==${CONSENT_VERSION}||typeof c.at!=="string")return false;` +
+    `for(var i=0;i<cats.length;i++){if(typeof c[cats[i]]!=="boolean")return false}return true}` +
     `function granted(){try{var raw=localStorage.getItem(${JSON.stringify(CONSENT_STORAGE_KEY)});` +
-    `if(raw){var c=JSON.parse(raw);if(c&&c.v===${CONSENT_VERSION}){return c}}` +
+    `if(raw){var c=JSON.parse(raw);if(current(c)){return c}}` +
     `if(localStorage.getItem(${JSON.stringify(LEGACY_ANALYTICS_STORAGE_KEY)})==="off"){return {}}}catch(e){}return null}` +
     `function run(fn){try{fn()}catch(e){}}` +
     `function enable(categories){if(blocked())return;for(var i=0;i<categories.length;i++){var c=categories[i];` +
@@ -121,7 +126,10 @@ function insertBefore(
   )
 }
 
-export function analyticsPlugin(env: AnalyticsEnv): Plugin {
+// `dev` (the Vite dev server) injects the consent runtime even with no vendor
+// configured, so the prompt can be worked on locally; the app shows it only
+// when the runtime exists, and production builds without a vendor carry none.
+export function analyticsPlugin(env: AnalyticsEnv, dev = false): Plugin {
   const enabled = ANALYTICS_PROVIDERS.flatMap((provider) => {
     const id = env[provider.envVar]
     if (!id) return []
@@ -133,7 +141,7 @@ export function analyticsPlugin(env: AnalyticsEnv): Plugin {
   return {
     name: "classroom50:analytics",
     transformIndexHtml(html) {
-      if (enabled.length === 0) return html
+      if (enabled.length === 0 && !dev) return html
       // The runtime goes first in <head> so a vendor injected anywhere after it
       // can register, and so the app can call `enable` even before any vendor
       // registered.

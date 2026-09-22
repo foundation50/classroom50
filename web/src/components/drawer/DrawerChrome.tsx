@@ -14,16 +14,21 @@ import { ClassroomLogo, ExpandSidebarButton } from "./primitives"
 import { SidebarFooter } from "./SidebarFooter"
 import { AccessibilitySidebarNav } from "./AccessibilitySidebarNav"
 import { PrivacySidebarNav } from "./PrivacySidebarNav"
+import { useSidebarNav } from "./useSidebarNav"
+import { sidebarLevelVariants, pageContentVariants } from "@/lib/motion"
+import { PUBLIC_PAGE_PATHS, type PublicPagePath } from "@/auth/authedPath"
 
 // Public pages get their own rail (a way back, plus the accessibility page's
 // section deep links) instead of the org/class menus, which need a GitHub
 // client; signed-in users still get "Back to app" and the full account footer.
-const PUBLIC_RAILS: Record<string, () => ReactNode> = {
+// Keyed by the auth layer's list so a new public page fails to type-check
+// until it gets a rail.
+const PUBLIC_RAILS: Record<PublicPagePath, () => ReactNode> = {
   "/accessibility": AccessibilitySidebarNav,
   "/privacy": PrivacySidebarNav,
 }
-import { useSidebarNav } from "./useSidebarNav"
-import { sidebarLevelVariants, pageContentVariants } from "@/lib/motion"
+const publicPagePath = (pathname: string): PublicPagePath | undefined =>
+  PUBLIC_PAGE_PATHS.find((path) => path === pathname)
 
 // Replays a subtle enter animation on each route swap. Keying the motion element
 // by pathname remounts it, so it plays `initial -> animate` once per navigation
@@ -140,7 +145,8 @@ export const DrawerSidebar = () => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const PublicRail = PUBLIC_RAILS[pathname.replace(/\/$/, "")]
+  const publicPage = publicPagePath(pathname.replace(/\/$/, ""))
+  const PublicRail = publicPage ? PUBLIC_RAILS[publicPage] : undefined
   const { page, selected, settings, levelKey } = useSidebarNav()
   return (
     <div className="drawer-side z-40">

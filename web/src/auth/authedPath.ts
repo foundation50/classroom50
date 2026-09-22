@@ -3,19 +3,20 @@
 // the sign-out hard-redirect fallback share one source of truth.
 export const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "")
 
-// Public routes that must NOT bounce to /login when the session ends: the auth
-// screens, the public accessibility report (readable by an ADA/VPAT reviewer
-// without a GitHub login, see routes/accessibility.tsx), and the privacy notice
-// (a visitor must be able to read it and object before signing in, see
-// routes/privacy.tsx). Everything else, the app home "/" included, is authed.
-const PUBLIC_PATHS = new Set([
+// Public pages a visitor can read without a GitHub login: the accessibility
+// report (an ADA/VPAT reviewer, see routes/accessibility.tsx) and the privacy
+// notice (a visitor must be able to read it and object before signing in, see
+// routes/privacy.tsx). The drawer keys its public rails on this list.
+export const PUBLIC_PAGE_PATHS = ["/accessibility", "/privacy"] as const
+export type PublicPagePath = (typeof PUBLIC_PAGE_PATHS)[number]
+
+// Routes that must NOT bounce to /login when the session ends: the auth screens
+// plus the public pages. Everything else, the app home "/" included, is authed.
+const PUBLIC_PATHS = new Set<string>([
   "/login",
   "/auth",
   "/auth/",
-  "/accessibility",
-  "/accessibility/",
-  "/privacy",
-  "/privacy/",
+  ...PUBLIC_PAGE_PATHS.flatMap((path) => [path, `${path}/`]),
 ])
 
 // When a session ends mid-flight the router keeps the authed route mounted for

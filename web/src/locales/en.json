@@ -1135,7 +1135,7 @@
     },
     "analytics": {
       "heading": "Cookies and analytics",
-      "subheading": "Analytics help improve Classroom 50. Choose which services can count your visits in this browser. Functional cookies stay on.",
+      "subheading": "Analytics help improve Classroom 50. Choose which services can count your visits in this browser. Functional storage stays on.",
       "privacyLink": "Read the privacy notice"
     }
   },
@@ -4232,7 +4232,7 @@
       },
       "notCollectedHeading": "Not collected",
       "notCollected": {
-        "queryStrings": "Query strings. Cloudflare removes them in your browser, and Google Analytics is set to drop them, so sign-in codes, invite link keys, and roster searches are not recorded.",
+        "queryStrings": "Query strings. Cloudflare removes them in your browser, and our Google Analytics setup is configured not to record them, so sign-in codes, invite link keys, and roster searches stay out of the data.",
         "identity": "Your GitHub username, email, or roster data",
         "crossSite": "Anything that follows you to other sites"
       },

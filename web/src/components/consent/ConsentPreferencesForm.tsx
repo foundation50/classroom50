@@ -6,7 +6,6 @@ import { useConsent } from "@/context/consent/ConsentProvider"
 import {
   ALL_DENIED,
   DEFAULT_CHOICES,
-  OPTIONAL_CONSENT_CATEGORIES,
   type ConsentChoices,
   type ConsentRecord,
 } from "@/types/consent"
@@ -49,8 +48,8 @@ function Draft({
 }) {
   const { t } = useTranslation()
   const { decide, reset } = useConsent()
-  const [draft, setDraft] = useState<ConsentChoices>(() =>
-    record ? choicesOf(record) : DEFAULT_CHOICES,
+  const [draft, setDraft] = useState<ConsentChoices>(
+    () => record ?? DEFAULT_CHOICES,
   )
 
   return (
@@ -95,12 +94,4 @@ function Draft({
       </div>
     </form>
   )
-}
-
-// Only the categories: a record also carries `v` and `at`, which must not
-// leak into a new decision.
-function choicesOf(record: ConsentRecord): ConsentChoices {
-  return Object.fromEntries(
-    OPTIONAL_CONSENT_CATEGORIES.map((category) => [category, record[category]]),
-  ) as ConsentChoices
 }

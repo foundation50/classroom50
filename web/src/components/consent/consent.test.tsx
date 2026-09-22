@@ -216,6 +216,27 @@ describe("ConsentPreferencesForm", () => {
     expect(document.cookie).not.toContain("_ga=")
   })
 
+  it("turning Google back on in the same session tells it to store again", async () => {
+    installRuntime(["google"])
+    decide({ cloudflare: true, google: false })
+    renderForm()
+    await userEvent.click(checkbox("google"))
+    await userEvent.click(screen.getByText("consent.savePreferences"))
+    expect(stored()).toMatchObject({ google: true })
+    // The script already ran, so enable() is a no-op; only the update reaches it.
+    expect(lastConsentUpdate()).toEqual([
+      "consent",
+      "update",
+      { analytics_storage: "granted" },
+    ])
+  })
+
+  it("pushes nothing to Google when declining before it ever started", async () => {
+    renderForm()
+    await userEvent.click(screen.getByText("consent.declineAll"))
+    expect(window.dataLayer).toEqual([])
+  })
+
   it("says so instead of offering controls when the browser declines tracking", () => {
     Object.defineProperty(window.navigator, "globalPrivacyControl", {
       value: true,
