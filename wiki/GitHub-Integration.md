@@ -326,7 +326,7 @@ browser itself must reach these hosts.
 | `*.github.io` | Web app, Actions | The organization's Pages site (`YOUR-ORGANIZATION.github.io/classroom50/…`): the assignment manifest, autograders, and the runner. If the organization's Pages site uses a custom domain, allow that domain too. See [Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain). |
 | `codeload.github.com` | Web app | Repository archive (zip) downloads, reached through the proxy. |
 | `www.githubstatus.com` | Web app | GitHub status check for the outage banner (best-effort). |
-| `static.cloudflareinsights.com`, `cloudflareinsights.com` | Web app | Optional. Anonymous usage analytics on classroom50.org. Blocking them has no effect on the app. See [Usage analytics](#usage-analytics). |
+| `www.googletagmanager.com`, `*.google-analytics.com`, `static.cloudflareinsights.com`, `cloudflareinsights.com` | Web app | Optional. Usage analytics on classroom50.org. Blocking them has no effect on the app. See [Usage analytics](#usage-analytics). |
 
 ### The GitHub proxy
 
@@ -432,35 +432,55 @@ much student data reaches GitHub in the first place:
 
 ### Usage analytics
 
-classroom50.org uses [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/)
-to count visits and see which countries and sites they come from. It sets no
-cookies and doesn't track you across sites.
+Analytics show how many people use classroom50.org, which features they use,
+and where they get stuck, so the app can improve. With your permission, two
+services do this, and you can turn either one off. Neither knows who you
+are:
+
+- **Cloudflare Web Analytics** sets no cookies and stores no identifiers, so it
+  counts visits, not people.
+- **Google Analytics**, loaded through Google Tag Manager, shows how features
+  are used and sets a cookie so a returning browser is counted once.
 
 | Collected | Not collected |
 |---|---|
-| The page path, for example `/cs1-fall-2026/assignments` | Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device. |
-| The site that linked to the page | Cookies, local storage, or fingerprints |
-| Your country, worked out from your connection | Your GitHub username or roster data |
-| Browser, operating system, and device type | |
+| The pages you view, for example `/cs1-fall-2026/assignments`, and how long you stay | Query strings. Cloudflare removes them in your browser, and our Google Analytics setup is configured not to record them, so sign-in codes, invite link keys, and roster searches stay out of the data. |
+| The site that linked to the page | Your GitHub username, email, or roster data |
+| Your country, worked out from your connection | Anything that follows you to other sites |
+| Browser, operating system, device type, and language | |
 | Page load time | |
+| Google Analytics only: a cookie holding a random ID. It expires after 2 years, and turning Google Analytics off removes it. | |
 
-Cloudflare processes this data for the Fifty Foundation under its
-[data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
-It keeps full data for 7 days and a sample for 6 months.
-The legal basis is legitimate interest, so you can object at any time:
+Google and Cloudflare process this data for the Fifty Foundation. How each
+handles it: the
+[Google Privacy Policy](https://policies.google.com/privacy),
+[How Google uses information from sites that use its services](https://policies.google.com/technologies/partner-sites),
+and the
+[Cloudflare data processing addendum](https://www.cloudflare.com/cloudflare-customer-dpa/).
+Google keeps event data for up to 14 months. Cloudflare keeps full data for 7
+days and a sample for 6 months.
 
-- In the app, open **Settings**, then **Usage analytics**, and select **Don't
-  count my visits**. The same choice is on the public
-  [privacy page](https://classroom50.org/privacy). It applies to that browser
-  from the next page load.
+On your first visit, a bar along the bottom of the page lists both services,
+preselected. Uncheck any you'd rather not share and select **Accept**, or
+select **Decline** to turn off all analytics. Nothing runs until you choose.
+Functional storage stays on regardless and never leaves your browser: your
+GitHub sign-in so you stay signed in, your settings, and your answer here. To
+change your answer later:
+
+- In the app, open **Settings**, then **Cookies and analytics**. The same
+  controls are on the public [privacy page](https://classroom50.org/privacy)
+  and always show what you chose in the bar. Turning a service off removes its
+  cookies now and stops it from the next page load in that browser. **Reset and
+  ask again** clears your answer so the bar returns.
 - In your browser, turn on the Global Privacy Control or Do Not Track signal.
+  No analytics runs and Classroom 50 doesn't ask.
 
 Content blockers and network filters that block the analytics hosts don't
 affect the app. See [Network and allowed domains](#network-and-allowed-domains).
 
-Only classroom50.org and preview.classroom50.org include the script, each
-reporting to its own Cloudflare site. `gh teacher` and `gh student` send no
-analytics.
+Only classroom50.org and preview.classroom50.org include the analytics scripts,
+each reporting to its own Google and Cloudflare properties. `gh teacher` and
+`gh student` send no analytics.
 
 This section describes how Classroom 50 handles data; it isn't legal advice.
 Confirm your obligations with your institution's privacy office.

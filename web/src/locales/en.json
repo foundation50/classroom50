@@ -1134,14 +1134,8 @@
       "saved": "Name order preference saved."
     },
     "analytics": {
-      "heading": "Usage analytics",
-      "subheading": "Classroom 50 counts visits anonymously to see how many people use it and where they come from. Nothing identifies you.",
-      "on": "Count my visits anonymously",
-      "onHint": "Shares the page path, browser type, and load time. No cookies, no names, no query strings.",
-      "off": "Don't count my visits",
-      "offHint": "Applies to this browser from the next page load.",
-      "groupAria": "Usage analytics preference",
-      "saved": "Usage analytics preference saved. It applies from the next page load.",
+      "heading": "Cookies and analytics",
+      "subheading": "Analytics help improve Classroom 50. Choose which services can count your visits in this browser. Functional storage stays on.",
       "privacyLink": "Read the privacy notice"
     }
   },
@@ -4217,7 +4211,7 @@
   },
   "privacy": {
     "pageTitle": "Privacy",
-    "pageSubtitle": "How the Classroom 50 web app handles your data, and how to opt out of usage analytics.",
+    "pageSubtitle": "How the Classroom 50 web app handles your data, and what you can choose.",
     "data": {
       "heading": "Your classroom data",
       "body": "Classroom 50 has no server, database, or accounts of its own. Rosters, assignment repositories, scores, and feedback stay in your GitHub organization. The app reads and writes them through the GitHub API with a token you grant. Sign-in and repository downloads pass through a proxy that stores nothing.",
@@ -4226,34 +4220,83 @@
     },
     "analytics": {
       "heading": "Usage analytics",
-      "intro": "classroom50.org uses Cloudflare Web Analytics to count visits and see which countries and sites they come from. It sets no cookies and doesn't track you across sites.",
+      "intro": "Analytics show how many people use classroom50.org, which features they use, and where they get stuck, so the app can improve. With your permission, two services do this: Cloudflare Web Analytics, which sets no cookies, and Google Analytics, loaded through Google Tag Manager, which recognizes a returning browser with a cookie. You can turn either one off. Neither knows who you are.",
       "collectedHeading": "Collected",
       "collected": {
-        "path": "The page path, for example /cs1-fall-2026/assignments",
+        "path": "The pages you view, for example /cs1-fall-2026/assignments, and how long you stay",
         "referrer": "The site that linked to the page",
         "country": "Your country, worked out from your connection",
-        "device": "Browser, operating system, and device type",
-        "timings": "Page load time"
+        "device": "Browser, operating system, device type, and language",
+        "timings": "Page load time",
+        "cookie": "Google Analytics only: a cookie holding a random ID, so a returning browser is counted once. It expires after 2 years, and turning Google Analytics off removes it."
       },
       "notCollectedHeading": "Not collected",
       "notCollected": {
-        "queryStrings": "Query strings. The browser removes them before sending, so sign-in codes, invite link keys, and roster searches stay on your device.",
-        "storage": "Cookies, local storage, or fingerprints",
-        "identity": "Your GitHub username or roster data"
+        "queryStrings": "Query strings. Cloudflare removes them in your browser, and our Google Analytics setup is configured not to record them, so sign-in codes, invite link keys, and roster searches stay out of the data.",
+        "identity": "Your GitHub username, email, or roster data",
+        "crossSite": "Anything that follows you to other sites"
       },
-      "processing": "Cloudflare processes this data for us under its",
-      "processingLink": "data processing addendum",
-      "processingAfter": ". It keeps full data for 7 days and a sample for 6 months. Our legal basis is legitimate interest, and you can object at any time by opting out below."
+      "processing": "Google and Cloudflare process this data for the Fifty Foundation. How each handles it:",
+      "googleTerms": "Google Privacy Policy",
+      "googleUsage": "How Google uses information from sites that use its services",
+      "cloudflareTerms": "Cloudflare data processing addendum",
+      "retention": "Google keeps event data for up to 14 months. Cloudflare keeps full data for 7 days and a sample for 6 months. Neither service runs until you accept, and you can change your answer at any time below."
     },
     "choice": {
       "heading": "Your choice",
-      "body": "Your choice is saved in this browser and applies from the next page load. When you're signed in, you can also change it in Settings.",
-      "signals": "If your browser sends the Global Privacy Control or Do Not Track signal, the analytics script never loads, regardless of this setting."
+      "body": "Your choice is saved in this browser. Accepting starts the services you left on right away. Turning one off removes its cookies now and stops it from the next page load. When you're signed in, you can also change it in Settings.",
+      "signals": "If your browser sends the Global Privacy Control or Do Not Track signal, no analytics runs and Classroom 50 doesn't ask."
     },
     "contact": {
       "heading": "Questions",
-      "body": "Classroom 50 is an open source project of the Fifty Foundation. To ask about this notice, start a thread in",
+      "body": "Classroom 50 is an open source project supported by the Fifty Foundation. To ask about this notice, start a thread in",
       "link": "GitHub Discussions"
+    }
+  },
+  "consent": {
+    "banner": {
+      "title": "Analytics help improve Classroom 50",
+      "body": "Anonymous usage data shows which features get used and where people get stuck, so the app can get better. Nothing identifies you, and you can change your choice any time in Settings. Uncheck anything you'd rather not share, then select Accept.",
+      "readNotice": "Read the privacy notice",
+      "hideNotice": "Hide the privacy notice",
+      "accept": "Accept",
+      "decline": "Decline"
+    },
+    "alwaysOn": "Always on",
+    "whatThisIncludes": "What this includes",
+    "savePreferences": "Save preferences",
+    "declineAll": "Decline all analytics",
+    "reset": "Reset and ask again",
+    "browserDeclines": "Your browser sends the Global Privacy Control or Do Not Track signal, so analytics stays off and Classroom 50 doesn't ask.",
+    "categories": {
+      "functional": {
+        "label": "Functional",
+        "caption": "Required for the app to work. Stays in this browser.",
+        "tooltip": "Stored in this browser only: your GitHub sign-in so you stay signed in, your settings (language, theme, name order, motion, hidden organizations, and sidebar layout), and the choice you make here. None of it is used for analytics.",
+        "items": {
+          "session": "Your GitHub sign-in, so you stay signed in",
+          "preferences": "Your settings: language, theme, name order, motion, hidden organizations, and sidebar layout",
+          "consent": "The choice you make here"
+        }
+      },
+      "cloudflare": {
+        "label": "Cloudflare Web Analytics",
+        "caption": "Counts visits. No cookies.",
+        "items": {
+          "collected": "Page path, referring site, country, browser type, and load time",
+          "noCookies": "No cookies and no identifiers, so it counts visits, not people",
+          "notCollected": "Never your GitHub username, email, roster data, or the query string of a URL"
+        }
+      },
+      "google": {
+        "label": "Google Analytics",
+        "caption": "Shows how features are used. Sets one cookie.",
+        "items": {
+          "collected": "Pages you view and how long you stay, the site that linked to the page, your country, and your browser, device, and language, sent through Google Tag Manager",
+          "cookie": "A cookie holding a random ID, so a returning browser is counted once. It expires after 2 years.",
+          "notCollected": "Never your GitHub username, email, roster data, or the query string of a URL"
+        }
+      }
     }
   }
 }

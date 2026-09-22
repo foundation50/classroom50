@@ -16,6 +16,7 @@ import { GitHubClientProviderFromAuth } from "./context/github/GitHubClientProvi
 import { NotificationProvider } from "./context/notifications/NotificationProvider"
 import { HiddenOrgsProvider } from "./context/hiddenOrgs/HiddenOrgsProvider"
 import { UserPreferencesProvider } from "./context/userPreferences/UserPreferencesProvider"
+import { ConsentProvider } from "./context/consent/ConsentProvider"
 import { ActionActivityProvider } from "./context/actions/ActionActivityProvider"
 import { ActionsBanner } from "./components/status/ActionsBanner"
 import { BackgroundPassTag } from "./components/status/BackgroundPassTag"
@@ -23,6 +24,7 @@ import { KeepTabOpenGuard } from "./components/status/KeepTabOpenGuard"
 import { LiveAnnouncer } from "./components/status/LiveAnnouncer"
 import { RouteProgressBar } from "./components/status/RouteProgressBar"
 import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpdateToaster"
+import { ConsentBanner } from "./components/consent/ConsentBanner"
 import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
 import { installDiagnosticsHandlers } from "./lib/diagnostics/globalHandlers"
@@ -108,13 +110,16 @@ createRoot(document.getElementById("root")!).render(
               <NotificationProvider>
                 <HiddenOrgsProvider>
                   <UserPreferencesProvider>
-                    <RouteProgressBar />
-                    <LiveAnnouncer />
-                    <BackgroundPassTag />
-                    <KeepTabOpenGuard />
-                    <App />
-                    <ActionsBanner />
-                    <LanguagePackUpdateToaster />
+                    <ConsentProvider>
+                      <RouteProgressBar />
+                      <LiveAnnouncer />
+                      <BackgroundPassTag />
+                      <KeepTabOpenGuard />
+                      <App />
+                      <ActionsBanner />
+                      <LanguagePackUpdateToaster />
+                      <ConsentBanner />
+                    </ConsentProvider>
                   </UserPreferencesProvider>
                 </HiddenOrgsProvider>
               </NotificationProvider>

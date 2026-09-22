@@ -261,11 +261,13 @@ jobs:
       - id: sha
         run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      # Cloudflare Web Analytics site token (public, ships in the HTML; see
-      # web/README.md "Usage analytics"). Delete this step to ship without it.
-      - name: Enable Cloudflare Web Analytics
-        if: vars.VITE_CF_BEACON_TOKEN != ''
-        run: echo "VITE_CF_BEACON_TOKEN=${{ vars.VITE_CF_BEACON_TOKEN }}" >> "$GITHUB_ENV"
+      # Switches analytics vendors on for this build from repository variables.
+      # Which vendors exist, and which variable each reads, lives in the action.
+      - name: Enable analytics
+        uses: ./.github/actions/web-analytics-env
+        with:
+          environment: production
+          variables: ${{ toJSON(vars) }}
 
       - run: npm run build
         env:

@@ -1,0 +1,67 @@
+name: Web analytics environment
+description: >
+  The single place analytics vendors are switched on for a deploy. Maps
+  repository variables to the VITE_* variables that web/vite/analytics.ts reads
+  at build time, one row per vendor below, and exports them to $GITHUB_ENV for
+  the caller's `npm run build`. Adding a vendor is one row here and one provider
+  entry in web/vite/analytics.ts; no deploy workflow changes.
+
+  Each environment (production, preview) reads its own repository variable so
+  the vendors' dashboards never mix. Every value is a public site identifier
+  that ships in the HTML, so repository variables are right, not secrets. An
+  unset variable leaves that vendor off; the step summary says which ran.
+
+  Takes the repository variables as JSON (`${{ toJSON(vars) }}`) because the
+  `vars` context is not available inside a composite action. Delete a vendor's
+  row here, or unset its variable, to ship without it.
+
+inputs:
+  environment:
+    description: Which deployment this build is for, `production` or `preview`.
+    required: true
+  variables:
+    description: The caller's repository variables, `${{ toJSON(vars) }}`.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Export analytics variables
+      shell: bash
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+        VARIABLES: ${{ inputs.variables }}
+      run: |
+        set -euo pipefail
+        case "$ENVIRONMENT" in
+          production) suffix="" ;;
+          preview) suffix="_PREVIEW" ;;
+          *) echo "::error::environment must be production or preview, got '$ENVIRONMENT'"; exit 1 ;;
+        esac
+
+        # vendor label | VITE_* variable the build reads | repository variable (production; preview appends _PREVIEW)
+        vendors=(
+          "Google Tag Manager|VITE_GTM_CONTAINER_ID|VITE_GTM_CONTAINER_ID"
+          "Cloudflare Web Analytics|VITE_CF_BEACON_TOKEN|VITE_CF_BEACON_TOKEN"
+        )
+
+        {
+          echo "### Analytics ($ENVIRONMENT)"
+          echo
+          echo "| Vendor | Repository variable | Status |"
+          echo "| --- | --- | --- |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        for row in "${vendors[@]}"; do
+          IFS="|" read -r label build_var repo_var <<< "$row"
+          repo_var="${repo_var}${suffix}"
+          value="$(jq -r --arg k "$repo_var" '.[$k] // empty' <<< "$VARIABLES")"
+          if [ -n "$value" ]; then
+            echo "${build_var}=${value}" >> "$GITHUB_ENV"
+            status="enabled"
+          else
+            status="off (variable unset)"
+          fi
+          echo "$label: $status"
+          echo "| $label | \`$repo_var\` | $status |" >> "$GITHUB_STEP_SUMMARY"
+        done

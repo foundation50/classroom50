@@ -8,7 +8,6 @@ import {
   readUserPreference,
   readUserPreferences,
 } from "./userPreferences"
-import { ANALYTICS_STORAGE_KEY } from "@/types/preferences"
 
 // happy-dom doesn't back window.localStorage here, so install a minimal
 // in-memory store (same shape the hiddenOrgsStore / useTheme tests use).
@@ -74,19 +73,5 @@ describe("userPreferences", () => {
     const keys = Object.values(USER_PREFERENCE_SPECS).map((s) => s.storageKey)
     expect(keys.every((k) => k.startsWith("classroom50:"))).toBe(true)
     expect(new Set(keys).size).toBe(keys.length)
-  })
-
-  // The analytics loader injected into index.html (vite.config.ts) reads this
-  // key before React boots and treats exactly the literal "off" as an opt-out,
-  // so the registry must never store the default and must store "off" as-is.
-  it("stores the analytics opt-out as the literal 'off' and nothing else", () => {
-    expect(readUserPreference("analytics")).toBe("on")
-    expect(window.localStorage.getItem(ANALYTICS_STORAGE_KEY)).toBeNull()
-
-    persistUserPreference("analytics", "off")
-    expect(window.localStorage.getItem(ANALYTICS_STORAGE_KEY)).toBe("off")
-
-    persistUserPreference("analytics", "on")
-    expect(window.localStorage.getItem(ANALYTICS_STORAGE_KEY)).toBeNull()
   })
 })
