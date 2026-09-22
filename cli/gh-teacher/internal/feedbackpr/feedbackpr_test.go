@@ -344,6 +344,58 @@ func TestRun_IncompleteSetupIsNotFailed(t *testing.T) {
 	}
 }
 
+// The same empty marker history on a no_autograder entry is the norm, not a
+// half-finished accept: Run threads entry.NoAutograder through to the ensure
+// flow, which anchors the PR on the branch's root commit instead.
+func TestRun_NoAutograderMarkerlessRepoAnchorsOnRoot(t *testing.T) {
+	entry := `{"slug":"hello","name":"Hello","mode":"individual","autograder":"default","feedback_pr":true,"no_autograder":true}`
+	mux := classroomMux(t, assignmentsJSON(t, entry), []string{"alice"}, nil)
+	base := "/repos/o/cs-hello-alice"
+	mux.HandleFunc(base, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main"})
+	})
+	mux.HandleFunc(base+"/pulls", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 1, "html_url": "https://x/pull/1"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	})
+	mux.HandleFunc(base+"/commits", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("path") != "" {
+			_ = json.NewEncoder(w).Encode([]map[string]string{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]string{{"sha": "work"}, {"sha": "seed"}})
+	})
+	var frozen map[string]string
+	mux.HandleFunc(base+"/git/refs", func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &frozen)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ref": "refs/heads/feedback"})
+	})
+	mux.HandleFunc(base+"/labels", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{}`)
+	})
+	mux.HandleFunc(base+"/issues/1/labels", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `[]`)
+	})
+
+	out, _, err := runCmd(t, mux, params(nil))
+	if err != nil {
+		t.Fatalf("a markerless no_autograder repo must open, got: %v", err)
+	}
+	if frozen["sha"] != "seed" {
+		t.Errorf("feedback base frozen at %q, want the root commit seed", frozen["sha"])
+	}
+	if !strings.Contains(out, "1 opened, 0 already had one, 0 blocked, 0 setup incomplete, 0 failed") {
+		t.Errorf("summary not as expected:\n%s", out)
+	}
+}
+
 // TestRun_MarkerReadErrorStaysFailed pins the boundary of the incomplete
 // bucket: only an EMPTY marker history means the accept never finished. A
 // marker read that fails outright (5xx) is transient and must stay in the

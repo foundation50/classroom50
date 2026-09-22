@@ -10,6 +10,7 @@ import {
 import { is422NoCommitsBetween } from "@/github-core/errors"
 import {
   getBranchRefRepo,
+  baselineSource,
   getMarkerBaseline,
   type MarkerBaseline,
   getRootCommitSha,
@@ -470,10 +471,17 @@ export async function resolveFeedbackBaselineSha(
   } catch {
     return null
   }
-  if (marker && !marker.backfilled) return marker.sha
-  const useRoot = marker?.backfilled || options.rootIsBaseline
-  if (!useRoot || !options.branch) return null
-  return getRootCommitSha(client, org, repo, options.branch).catch(() => null)
+  switch (baselineSource(marker, options)) {
+    case "marker":
+      return marker!.sha
+    case "root":
+      if (!options.branch) return null
+      return getRootCommitSha(client, org, repo, options.branch).catch(
+        () => null,
+      )
+    case "none":
+      return null
+  }
 }
 
 // A teacher-initiated repair returns the ensure result, plus an "unsupported"
@@ -525,12 +533,15 @@ export async function repairFeedbackPullRequest(params: {
   let acceptCommitSha: string | null
   try {
     const marker = await getMarkerBaseline(client, org, repo)
-    if (marker && !marker.backfilled) {
-      acceptCommitSha = marker.sha
-    } else if (marker?.backfilled || !autograded) {
-      acceptCommitSha = await getRootCommitSha(client, org, repo, branch)
-    } else {
-      acceptCommitSha = null
+    switch (baselineSource(marker, { rootIsBaseline: !autograded })) {
+      case "marker":
+        acceptCommitSha = marker!.sha
+        break
+      case "root":
+        acceptCommitSha = await getRootCommitSha(client, org, repo, branch)
+        break
+      case "none":
+        acceptCommitSha = null
     }
   } catch (err) {
     return {

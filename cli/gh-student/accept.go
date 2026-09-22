@@ -813,7 +813,7 @@ func acceptWithoutSetupCommit(client githubapi.Client, u *ui.UI, verbose bool, o
 	branchReady := false
 	if p.noAutograder && (p.pages != nil || p.feedbackPR) {
 		if err := waitForStableBranch(client, p.org, p.repoName, p.branch); err != nil {
-			u.Warn("could not read %s/%s's default branch (%v); the feedback pull request is skipped, run accept again to retry it. GitHub Pages was not enabled; your teacher can enable it from the submissions page", p.org, p.repoName, err)
+			u.Warn("could not read %s/%s's default branch (%v); %s", p.org, p.repoName, err, branchUnsettledRemedies(p))
 		} else {
 			branchReady = true
 		}
@@ -1076,6 +1076,20 @@ func verifyProvisioned(client githubapi.Client, org, repoName string) error {
 // waitForStableBranch is classroomcfg.WaitForStableBranch behind a var so tests
 // can short-circuit its ~50s failure budget.
 var waitForStableBranch = classroomcfg.WaitForStableBranch
+
+// branchUnsettledRemedies names only the steps the assignment configured that a
+// failed branch wait skipped, each with its remedy, so a pages-only or
+// feedback-only accept is not told about a step it never requested.
+func branchUnsettledRemedies(p acceptRepoParams) string {
+	var parts []string
+	if p.feedbackPR {
+		parts = append(parts, "the feedback pull request is skipped, run accept again to retry it")
+	}
+	if p.pages != nil {
+		parts = append(parts, "GitHub Pages was not enabled; your teacher can enable it from the submissions page")
+	}
+	return strings.Join(parts, ". ")
+}
 
 // verifyProvisionAttempts / verifyProvisionBackoff bound the read-back poll
 // (~4s total). Vars, not consts, so tests can shrink the backoff.

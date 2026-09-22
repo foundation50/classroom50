@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest"
 import {
   getAssignmentRepos,
   getMarkerBaseline,
-  getMarkerBaselineSha,
+  baselineSource,
   getOrgRepos,
   getRootCommitSha,
 } from "./repoRefReads"
@@ -67,48 +67,25 @@ describe("getMarkerBaseline", () => {
   })
 })
 
-describe("getMarkerBaselineSha", () => {
-  function fakeClient(opts: {
-    marker: Array<{ sha: string; commit?: { message: string } }>
-    branch: Array<{ sha: string }>
-  }) {
-    const request = vi.fn(async (url: string) =>
-      url.includes("path=") ? opts.marker : opts.branch,
-    )
-    return { client: { request } as unknown as GitHubClient, request }
-  }
-
-  it("prefers the marker commit", async () => {
-    const { client } = fakeClient({
-      marker: [{ sha: "accept" }],
-      branch: [{ sha: "work" }, { sha: "accept" }, { sha: "seed" }],
-    })
-    await expect(getMarkerBaselineSha(client, "o", "r", "main")).resolves.toBe(
-      "accept",
-    )
+// The one place the marker -> backfilled -> root rule lives; every reader
+// decides through it, so these cases pin the table for all of them.
+describe("baselineSource", () => {
+  it("prefers a real marker commit whatever the shape says", () => {
+    const marker = { sha: "accept", backfilled: false }
+    expect(baselineSource(marker)).toBe("marker")
+    expect(baselineSource(marker, { rootIsBaseline: true })).toBe("marker")
   })
 
-  it("falls to the root commit when the marker was backfilled", async () => {
-    const { client } = fakeClient({
-      marker: [
-        { sha: "backfill", commit: { message: SHIM_BACKFILL_COMMIT_MESSAGE } },
-      ],
-      branch: [{ sha: "backfill" }, { sha: "work" }, { sha: "seed" }],
-    })
-    await expect(getMarkerBaselineSha(client, "o", "r", "main")).resolves.toBe(
-      "seed",
-    )
+  it("moves a backfilled marker to the root, even for a built-in shape", () => {
+    const marker = { sha: "backfill", backfilled: true }
+    expect(baselineSource(marker)).toBe("root")
+    expect(baselineSource(marker, { rootIsBaseline: false })).toBe("root")
   })
 
-  it("resolves null with no marker, leaving the shape decision to the caller", async () => {
-    const { client, request } = fakeClient({
-      marker: [],
-      branch: [{ sha: "seed" }],
-    })
-    await expect(
-      getMarkerBaselineSha(client, "o", "r", "main"),
-    ).resolves.toBeNull()
-    expect(request).toHaveBeenCalledTimes(1)
+  it("uses the root with no marker only when the shape says the root is the seed", () => {
+    expect(baselineSource(null, { rootIsBaseline: true })).toBe("root")
+    expect(baselineSource(null)).toBe("none")
+    expect(baselineSource(null, { rootIsBaseline: false })).toBe("none")
   })
 })
 

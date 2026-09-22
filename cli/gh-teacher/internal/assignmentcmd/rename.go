@@ -59,7 +59,9 @@ func assignmentRenameCmd() *cobra.Command {
 			"     redirects git/web/API traffic from the old name indefinitely,\n" +
 			"     so student clones keep working; grading picks up the new slug\n" +
 			"     on the next run. An assignment without the built-in autograder\n" +
-			"     has no marker, so its repos are matched by prefix alone.\n" +
+			"     has no marker, so its repos are matched by prefix alone; repos\n" +
+			"     of a removed assignment whose slug extended this one would be\n" +
+			"     renamed too, so delete those first.\n" +
 			"  3. The lock is restored to its pre-rename state.\n\n" +
 			"Per-repo failures never abort the batch: they're reported with\n" +
 			"fixes, and re-running the same command resumes. Already-renamed\n" +
@@ -209,17 +211,23 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	newPrefix := contract.AssignmentRepoPrefix(p.classroom, p.newSlug)
 	// For a markerless assignment, the classroom's other slugs whose repo
 	// prefix extends this one ("hw" vs "hw-extra") are the over-match a marker
-	// would have caught; their repos are skipped as foreign.
+	// would have caught; their repos are skipped as foreign. A sibling's
+	// previous slug counts too: repos a partially completed sibling rename
+	// left behind still carry the old prefix.
 	var siblingPrefixes []siblingPrefix
 	if markerless {
-		for _, a := range preFile.Assignments {
-			if strings.EqualFold(a.Slug, p.oldSlug) || strings.EqualFold(a.Slug, p.newSlug) {
-				continue
+		addSibling := func(slug string) {
+			if slug == "" || strings.EqualFold(slug, p.oldSlug) || strings.EqualFold(slug, p.newSlug) {
+				return
 			}
-			prefix := contract.AssignmentRepoPrefix(p.classroom, a.Slug)
+			prefix := contract.AssignmentRepoPrefix(p.classroom, slug)
 			if strings.HasPrefix(prefix, oldPrefix) || strings.HasPrefix(prefix, newPrefix) {
-				siblingPrefixes = append(siblingPrefixes, siblingPrefix{slug: a.Slug, prefix: prefix})
+				siblingPrefixes = append(siblingPrefixes, siblingPrefix{slug: slug, prefix: prefix})
 			}
+		}
+		for _, a := range preFile.Assignments {
+			addSibling(a.Slug)
+			addSibling(a.RenamedFrom)
 		}
 	}
 	ownership := markerOwnership{markerless: markerless, siblings: siblingPrefixes}

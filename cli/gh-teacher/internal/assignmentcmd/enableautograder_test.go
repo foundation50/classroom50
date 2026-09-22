@@ -150,6 +150,42 @@ func TestRunEnableAutograder_AddsMissingMarkerWithShim(t *testing.T) {
 	}
 }
 
+// A repo that already carries the default shim but no marker (a template that
+// ships the shim, or a backfill by a release that wrote the shim alone) still
+// gets its marker: without it the runner refuses the repo, and the only remedy
+// left would be a heal re-accept whose marker commit moves the baseline.
+func TestRunEnableAutograder_AddsMarkerWhenShimAlreadyPresent(t *testing.T) {
+	server, fix := newSMServer(t, smServerConfig{
+		assignments: eaAssignmentsBody(true, nil),
+		repos:       map[string]string{"dst-hello-alice": cliShimEveryPush},
+		markerless:  map[string]bool{"dst-hello-alice": true},
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runEnableAutograder(client, &out, &errOut, eaParams()); err != nil {
+		t.Fatalf("runEnableAutograder: %v\nstderr: %s", err, errOut.String())
+	}
+	fix.mu.Lock()
+	defer fix.mu.Unlock()
+	alice := fix.committedFiles["dst-hello-alice"]
+	if _, ok := alice[contract.MetadataPath]; !ok {
+		t.Fatalf("marker must be added to a shim-only repo; files = %v", slices.Sorted(maps.Keys(alice)))
+	}
+	if _, rewrote := alice[autogradeShimPath]; rewrote {
+		t.Error("an existing default shim must not be rewritten")
+	}
+	if msg := fix.commitMessages["dst-hello-alice"]; msg != contract.ShimBackfillCommitMessage() {
+		t.Errorf("marker-only commit message = %q, want the backfill subject so readers keep the root baseline", msg)
+	}
+	if !strings.Contains(out.String(), "Added the missing "+contract.MetadataPath+" to dst-hello-alice") {
+		t.Errorf("per-repo line should name the marker-only write:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "1 added, 0 already had it") {
+		t.Errorf("summary should count the marker-only write as an addition:\n%s", out.String())
+	}
+}
+
 func TestRunEnableAutograder_RendersModeAndTags(t *testing.T) {
 	server, fix := newSMServer(t, smServerConfig{
 		assignments: eaAssignmentsBody(true, map[string]any{

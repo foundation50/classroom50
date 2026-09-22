@@ -386,4 +386,43 @@ describe("acceptAssignment fresh no_autograder create", () => {
       vi.useRealTimers()
     }
   })
+
+  // Each step reports only what the assignment asked for: a feedback-only
+  // accept says nothing about Pages, a pages-only one nothing about the PR.
+  it("names only the configured steps when the branch never settles", async () => {
+    vi.useFakeTimers()
+    try {
+      const runWith = async (entry: typeof BASE_ENTRY) => {
+        mocked.assignment = entry
+        const { client } = makeFreshClient({ settle: "never" })
+        const messages: Record<string, string> = {}
+        const run = acceptAssignment({
+          client,
+          org: ORG,
+          classroom: CLASSROOM,
+          assignmentSlug: SLUG,
+          onStepUpdate: (u) => {
+            if (u.message) messages[u.id] = u.message.key
+          },
+        })
+        await vi.runAllTimersAsync()
+        await run
+        return messages
+      }
+      const feedbackOnly = await runWith({ ...BASE_ENTRY, no_autograder: true })
+      expect(feedbackOnly.setup).toBe("accept.stepDone.setupSkipped")
+      expect(feedbackOnly.feedback).toBe("accept.stepDone.feedbackDeferred")
+
+      const pagesOnly = await runWith({
+        ...BASE_ENTRY,
+        no_autograder: true,
+        feedback_pr: false,
+        pages: PAGES,
+      })
+      expect(pagesOnly.setup).toBe("accept.stepDone.setupBranchUnsettled")
+      expect(pagesOnly.feedback).toBe("accept.stepDone.feedbackSkipped")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

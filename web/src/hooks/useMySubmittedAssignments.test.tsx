@@ -194,4 +194,29 @@ describe("useMySubmittedAssignments", () => {
     expect(page.result.current.data?.map((c) => c.sha)).toEqual(["work"])
     expect(request.mock.calls.length).toBe(reads)
   })
+
+  // With no marker commit the root commit is the baseline for every
+  // initialized repo (the template or README seed is not a submission), but a
+  // bare empty_repo has no seed: its root commit IS the student's first push.
+  it("counts the root commit as a submission only for an empty_repo assignment", async () => {
+    request.mockImplementation((url: string) =>
+      branchClient({
+        baselineCommits: [],
+        branchCommits: [{ sha: "first-push" }],
+      })(url),
+    )
+    const { result } = renderHook(
+      () =>
+        useMySubmittedAssignments("acme", [
+          accepted("hw1", { no_autograder: true }, { defaultBranch: "main" }),
+          accepted("hw2", { empty_repo: true }, { defaultBranch: "main" }),
+        ]),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() =>
+      expect(Object.values(result.current).every(settled)).toBe(true),
+    )
+    expect(result.current.hw1.kind).toBe("none")
+    expect(result.current.hw2.kind).toBe("submitted")
+  })
 })

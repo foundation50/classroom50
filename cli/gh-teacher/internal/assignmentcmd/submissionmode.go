@@ -150,6 +150,7 @@ type shimOutcome int
 
 const (
 	shimUpdated      shimOutcome = iota // shim written (trigger rewritten, or shim added)
+	shimMarkerAdded                     // shim already present; only the missing .classroom50.yaml was written
 	shimCurrent                         // already in the target state — no commit
 	shimUnrecognized                    // content doesn't match a known default-shim shape — left untouched
 	shimNotAccepted                     // repo doesn't exist yet
@@ -523,6 +524,12 @@ func (r shimReport) result(res shimResult) {
 		} else {
 			_, _ = fmt.Fprintf(r.out, r.words.done, res.repo)
 		}
+	case shimMarkerAdded:
+		if r.dryRun {
+			_, _ = fmt.Fprintf(r.out, "dry run: %s already has the autograde workflow; would have added the missing %s\n", res.repo, contract.MetadataPath)
+		} else {
+			_, _ = fmt.Fprintf(r.out, "Added the missing %s to %s (it already had the autograde workflow)\n", contract.MetadataPath, res.repo)
+		}
 	case shimCurrent:
 		if r.verbose {
 			_, _ = fmt.Fprintf(r.out, r.words.current, res.repo)
@@ -543,7 +550,7 @@ func (r shimReport) summarize(org string, results []shimResult, notAccepted int)
 	var unrecognized, failed []shimResult
 	for _, res := range results {
 		switch res.outcome {
-		case shimUpdated:
+		case shimUpdated, shimMarkerAdded:
 			updated++
 		case shimCurrent:
 			current++

@@ -133,7 +133,7 @@ export const AddShimButton = ({
       icon={WorkflowIcon}
       i18nKey="rowShim"
       repo={repo}
-      successStatuses={["added", "present"]}
+      successStatuses={["added", "markerAdded", "present"]}
       noRepo={noRepo}
       act={async () => {
         const config = await getRepo(client, org, CONFIG_REPO)

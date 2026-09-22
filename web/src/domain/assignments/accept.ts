@@ -1243,11 +1243,14 @@ export async function acceptAssignment(params: {
           id: "setup",
           status: "complete",
           message: {
-            key: !branchReady
-              ? "accept.stepDone.setupBranchUnsettled"
-              : pagesRefusal
-                ? PAGES_SKIPPED_MESSAGE_KEYS[pagesRefusal]
-                : "accept.stepDone.setupSkipped",
+            // The feedback step reports its own deferral below, so the setup
+            // message speaks only for Pages, and only when Pages was asked for.
+            key:
+              !branchReady && assignment.pages
+                ? "accept.stepDone.setupBranchUnsettled"
+                : pagesRefusal
+                  ? PAGES_SKIPPED_MESSAGE_KEYS[pagesRefusal]
+                  : "accept.stepDone.setupSkipped",
           },
         })
       } else {
@@ -1257,7 +1260,7 @@ export async function acceptAssignment(params: {
           message: { key: "accept.stepDone.setupSkipped" },
         })
       }
-      if (needsBranch && !branchReady) {
+      if (needsBranch && !branchReady && wantsFeedbackPr) {
         // Nothing to anchor the PR on yet; the re-run heals it.
         onStepUpdate?.({
           id: "feedback",

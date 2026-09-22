@@ -683,14 +683,17 @@ export async function renameAssignment(
   // A no_autograder assignment's repos carry no marker, so the fan-out falls
   // back to prefix ownership. The classroom's other slugs whose repo prefix
   // extends this one ("hw" vs "hw-extra") are the over-match a marker would
-  // have caught; their repos are skipped as foreign.
+  // have caught; their repos are skipped as foreign. A sibling's previous slug
+  // counts too: repos a partially completed sibling rename left behind still
+  // carry the old prefix.
   const entry = oldEntry ?? newEntry
   const markerless = entry ? isNoAutograderAssignment(entry) : false
   const siblingPrefixes = preFile.assignments
-    .filter((a) => a.slug !== oldSlug && a.slug !== newSlug)
-    .map((a) => ({
-      slug: a.slug,
-      prefix: assignmentRepoPrefix(classroom, a.slug),
+    .flatMap((a) => [a.slug, a.renamed_from ?? ""])
+    .filter((slug) => slug !== "" && slug !== oldSlug && slug !== newSlug)
+    .map((slug) => ({
+      slug,
+      prefix: assignmentRepoPrefix(classroom, slug),
     }))
     .filter(
       (s) => s.prefix.startsWith(oldPrefix) || s.prefix.startsWith(newPrefix),

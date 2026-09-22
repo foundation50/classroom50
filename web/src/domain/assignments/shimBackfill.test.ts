@@ -228,6 +228,32 @@ describe("addAutogradeShim", () => {
     expect(writes(calls)).toEqual([])
   })
 
+  // A template that ships the default shim, or a backfill by a release that
+  // wrote the shim alone, leaves a repo the runner refuses (no marker). Adding
+  // the marker under the backfill subject keeps the root baseline; the only
+  // other remedy, a heal re-accept, would move it.
+  it("adds only the marker when the default shim is already present", async () => {
+    const { client, calls } = fakeClient({
+      shimExists: true,
+      markerExists: false,
+      users: { alice: 42, acme: 7 },
+    })
+    const outcome = await addAutogradeShim({
+      client,
+      org: "o",
+      repo: "r",
+      configBranch: "main",
+      submissionMode: "every-push",
+      marker,
+    })
+    expect(outcome).toEqual({ status: "markerAdded" })
+    expect(treeEntries(calls).map((e) => e.path)).toEqual([".classroom50.yaml"])
+    const commit = writes(calls).find((c) => c.url === "/repos/o/r/git/commits")
+    expect((commit?.body as { message: string }).message).toBe(
+      SHIM_BACKFILL_COMMIT_MESSAGE,
+    )
+  })
+
   it("reports a foreign file at the shim path as unrecognized, untouched", async () => {
     const { client, calls } = fakeClient({
       shimExists: true,

@@ -821,7 +821,11 @@ class TestBaselineScanSource:
         (path / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
         _git(path, "add", "-A")
         _git(path, "commit", "-q", "-m", ag.SHIM_BACKFILL_COMMIT_SUBJECT + "\n\n[skip ci]")
-        assert ag._baseline_scan(path) == (shas[0], "root")
+        # A trusted source: the root IS this shape's baseline, so main() must
+        # not annotate it as untrusted.
+        assert ag._baseline_scan(path) == (shas[0], "root-backfill")
+        assert "root-backfill" in ag.SOURCE_OPENABLE
+        assert ag.feedback_base_outcome(path) == (shas[0], "root-backfill")
 
     def test_backfill_subject_matches_the_shared_contract(self):
         assert ag.SHIM_BACKFILL_COMMIT_SUBJECT == "[Classroom 50] Add autograde workflow (enable-autograder)"

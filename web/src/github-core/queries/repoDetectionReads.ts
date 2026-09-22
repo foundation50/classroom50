@@ -5,7 +5,7 @@ import type { GitHubCommit, GitHubTag } from "../types"
 import { tolerateGitHubError, type GitHubAPIError } from "../errors"
 import { paginateAll } from "../paginate"
 import { githubKeys } from "./keys"
-import { getMarkerBaseline } from "./repoRefReads"
+import { baselineSource, getMarkerBaseline } from "./repoRefReads"
 
 // Detection reads for the submission-configuration hybrid model. Unlike the
 // release reads (which key off submit/* Releases the autograder publishes),
@@ -76,12 +76,14 @@ export async function readBranchSubmissionLog(
         repo,
         branch,
       )
+      const source = baselineSource(marker, options)
       // Newest-first, so the root commit is the last entry.
-      const rootSha = commits.at(-1)?.sha ?? null
-      let baselineSha: string | null = null
-      if (marker && !marker.backfilled) baselineSha = marker.sha
-      else if (options.rootIsBaseline || marker?.backfilled)
-        baselineSha = rootSha
+      const baselineSha =
+        source === "marker"
+          ? marker!.sha
+          : source === "root"
+            ? (commits.at(-1)?.sha ?? null)
+            : null
       return { commits, baselineSha }
     },
     { commits: [], baselineSha: null },

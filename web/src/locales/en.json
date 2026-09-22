@@ -2884,7 +2884,7 @@
       "access": "Set your repository access",
       "setup": "Configured autograding",
       "setupSkipped": "No setup files needed: this assignment adds nothing to your repository",
-      "setupBranchUnsettled": "GitHub is still initializing your repository, so GitHub Pages and the feedback pull request were skipped. Accept again in a minute to add them",
+      "setupBranchUnsettled": "GitHub is still initializing your repository, so GitHub Pages wasn't enabled. Accept again in a minute to enable it, or your teacher can enable it from the submissions page",
       "pagesSkipped": {
         "plan": "GitHub Pages wasn't enabled: this organization's GitHub plan doesn't allow Pages on private repositories. Your teacher can make the repository public and enable Pages from the submissions page.",
         "policy": "GitHub Pages wasn't enabled: the organization doesn't let members publish Pages sites. Your teacher can enable it from the submissions page.",
@@ -3527,6 +3527,7 @@
       "aria": "Add the autograding workflow to {{repo}}",
       "outcome": {
         "added": "Autograding workflow added. The student must pull before their next push, and that push is what grades work already in the repository.",
+        "markerAdded": "This repository already had the autograding workflow. Its missing .classroom50.yaml marker was added, so autograding can find the assignment. The student must pull before their next push.",
         "present": "This repository already has the autograding workflow.",
         "unrecognized": "Skipped: a different workflow is already at the autograding workflow's path, so nothing was changed.",
         "notAccepted": "No repository exists yet, so there's nothing to add.",

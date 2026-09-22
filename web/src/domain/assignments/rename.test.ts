@@ -423,6 +423,34 @@ describe("renameAssignment (fresh)", () => {
     expect(summary.failed).toBe(0)
   })
 
+  // A sibling that was itself renamed may still have repos under its OLD slug
+  // (a partially completed rename); that previous slug is a sibling prefix too.
+  it("skips a repo left under a sibling's previous slug", async () => {
+    const fix = makeFixture({
+      assignments: assignmentsBody([
+        baseEntry({ no_autograder: true }),
+        {
+          slug: "bonus",
+          renamed_from: `${OLD}-b`,
+          name: "Sibling",
+          mode: "individual",
+        },
+      ]),
+      repos: [aliceRepo, foreignRepo],
+      markers: {},
+    })
+    const summary = await renameAssignment(fix.client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      oldSlug: OLD,
+      newSlug: NEW,
+    })
+    expect(fix.captured.renames[aliceRepo]).toBe(aliceNewRepo)
+    const foreign = summary.results.find((r) => r.repo === foreignRepo)
+    expect(foreign?.outcome).toBe("skippedForeign")
+    expect(fix.captured.renames[foreignRepo]).toBeUndefined()
+  })
+
   it("still rewrites a marker a no_autograder repo happens to carry", async () => {
     const fix = makeFixture({
       assignments: assignmentsBody([baseEntry({ no_autograder: true })]),

@@ -376,6 +376,40 @@ func TestRunAssignmentRename_MarkerlessNoAutograder(t *testing.T) {
 	}
 }
 
+// A sibling that was itself renamed may still have repos under its OLD slug
+// (a partially completed rename); that previous slug is a sibling prefix too.
+func TestRunAssignmentRename_MarkerlessSkipsRenamedFromSibling(t *testing.T) {
+	assignments := func() string {
+		doc := map[string]any{
+			"schema": "classroom50/assignments/v1",
+			"assignments": []any{
+				map[string]any{"slug": renameOldSlug, "name": "Long", "mode": "individual", "autograder": "default", "no_autograder": true},
+				map[string]any{"slug": "bonus", "renamed_from": renameOldSlug + "-extra", "name": "Sibling", "mode": "individual", "autograder": "default"},
+			},
+		}
+		b, _ := json.Marshal(doc)
+		return string(b)
+	}()
+	server, fix := newRenameServer(t, assignments,
+		[]string{renameAliceRepo, renameForeignRepo},
+		map[string]string{renameAliceRepo: "", renameForeignRepo: ""},
+	)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentRename(client, strings.NewReader(""), &out, &errOut, baseRenameParams()); err != nil {
+		t.Fatalf("runAssignmentRename: %v", err)
+	}
+	fix.mu.Lock()
+	defer fix.mu.Unlock()
+	if got := fix.renamePatches[renameAliceRepo]; got != "cs-ps3-alice" {
+		t.Errorf("alice rename PATCH = %q, want cs-ps3-alice", got)
+	}
+	if _, patched := fix.renamePatches[renameForeignRepo]; patched {
+		t.Error("a repo left under a sibling's previous slug was renamed")
+	}
+}
+
 // TestRunAssignmentRename_EligibilityGates: only an over-budget, never-renamed
 // slug qualifies; the new slug must be free and unreserved.
 func TestRunAssignmentRename_EligibilityGates(t *testing.T) {

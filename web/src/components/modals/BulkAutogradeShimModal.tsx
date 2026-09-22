@@ -131,7 +131,11 @@ export function BulkAutogradeShimModal({
     })
     if (!bulk.isMounted()) return
 
-    const added = outcomes.filter((o) => o.status === "added")
+    // A marker-only write is still a commit the student must pull, so it counts
+    // with the additions rather than the untouched repos.
+    const added = outcomes.filter(
+      (o) => o.status === "added" || o.status === "markerAdded",
+    )
     const present = outcomes.filter((o) => o.status === "present")
     const unrecognized = outcomes.filter((o) => o.status === "unrecognized")
     const notAccepted = outcomes.filter((o) => o.status === "notAccepted")

@@ -312,20 +312,26 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 	})
 
 	var unrecognized error
+	// markerOnly records that the last build found the default shim already in
+	// place and wrote just the marker (a template that ships the shim, or a
+	// backfill by a release that wrote the shim alone). Without the marker the
+	// runner refuses the repo and the only remedy left is a heal re-accept,
+	// whose marker commit would move the baseline off the root.
+	markerOnly := false
 	build := func(parentSHA string) (map[string]string, error) {
 		unrecognized = nil
+		markerOnly = false
 		current, exists, err := configrepo.ReadFileContents(client, org, repo, autogradeShimPath, parentSHA)
 		if err != nil {
 			return nil, err
 		}
-		if exists {
-			if !isDefaultShim(string(current)) {
-				unrecognized = errors.New("a workflow already exists at " + autogradeShimPath + " but is not the default autograde shim; left untouched")
-			}
+		if exists && !isDefaultShim(string(current)) {
+			unrecognized = errors.New("a workflow already exists at " + autogradeShimPath + " but is not the default autograde shim; left untouched")
 			return nil, nil
 		}
-		files := map[string]string{
-			autogradeShimPath: contract.RenderDefaultShim(org, branch, configBranch, submissionMode, submissionTags),
+		files := map[string]string{}
+		if !exists {
+			files[autogradeShimPath] = contract.RenderDefaultShim(org, branch, configBranch, submissionMode, submissionTags)
 		}
 		_, hasMarker, err := configrepo.ReadFileContents(client, org, repo, contract.MetadataPath, parentSHA)
 		if err != nil {
@@ -341,8 +347,18 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 				return nil, err
 			}
 			files[contract.MetadataPath] = rendered
+			markerOnly = exists
+		}
+		if len(files) == 0 {
+			return nil, nil
 		}
 		return files, nil
+	}
+	written := func() shimResult {
+		if markerOnly {
+			return shimResult{repo: repo, outcome: shimMarkerAdded}
+		}
+		return shimResult{repo: repo, outcome: shimUpdated}
 	}
 
 	if dryRun {
@@ -355,7 +371,7 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 		case files == nil:
 			return shimResult{repo: repo, outcome: shimCurrent}
 		default:
-			return shimResult{repo: repo, outcome: shimUpdated}
+			return written()
 		}
 	}
 
@@ -372,7 +388,7 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 	if commitSHA == "" {
 		return shimResult{repo: repo, outcome: shimCurrent}
 	}
-	return shimResult{repo: repo, outcome: shimUpdated}
+	return written()
 }
 
 // isDefaultShim recognizes a default autograde shim from either accept client:

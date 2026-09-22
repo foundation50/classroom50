@@ -37,6 +37,8 @@ import {
 
 export type ShimBackfillOutcome =
   | { status: "added" }
+  // The default shim was already there; only the missing marker was written.
+  | { status: "markerAdded" }
   | { status: "present" }
   | { status: "unrecognized"; reason: string }
   | { status: "notAccepted" }
@@ -86,8 +88,8 @@ export async function addAutogradeShim(params: {
   const head = await readRepoHead(client, { owner: org, repo }, branch)
 
   const current = await readShimAtHead(client, org, repo, head.headSha)
-  if (current !== null) {
-    if (isDefaultShim(current)) return { status: "present" }
+  const shimPresent = current !== null
+  if (shimPresent && !isDefaultShim(current)) {
     return {
       status: "unrecognized",
       reason:
@@ -95,8 +97,9 @@ export async function addAutogradeShim(params: {
     }
   }
 
-  const files = [
-    {
+  const files: { path: string; content: string }[] = []
+  if (!shimPresent) {
+    files.push({
       path: AUTOGRADE_SHIM_PATH,
       content: defaultAutograderWorkflow(
         org,
@@ -105,8 +108,8 @@ export async function addAutogradeShim(params: {
         submissionMode,
         submissionTags,
       ),
-    },
-  ]
+    })
+  }
   const hasMarker =
     (await getRepoFileAtRef(client, {
       owner: org,
@@ -118,12 +121,17 @@ export async function addAutogradeShim(params: {
     // Landing the marker here does not move the repo's baseline: every reader
     // (runner.py, collect_scores.py, both CLIs, getMarkerBaseline) recognizes
     // SHIM_BACKFILL_COMMIT_MESSAGE's subject and keeps the root commit, so a
-    // Feedback PR the no_autograder accept froze there stays valid.
+    // Feedback PR the no_autograder accept froze there stays valid. A repo
+    // with the shim but no marker (a template that ships the shim, or a
+    // backfill by a release that wrote the shim alone) still gets it here:
+    // without it the runner refuses the repo and the only remedy left would
+    // be a heal re-accept, whose marker commit would move the baseline.
     files.push({
       path: MARKER_PATH,
       content: await buildBackfillMarker(client, marker),
     })
   }
+  if (files.length === 0) return { status: "present" }
 
   const committed = await commitShimFiles(
     client,
@@ -136,7 +144,7 @@ export async function addAutogradeShim(params: {
   if (committed === "missingWorkflowScope") {
     return { status: "missingWorkflowScope" }
   }
-  return { status: "added" }
+  return { status: shimPresent ? "markerAdded" : "added" }
 }
 
 // The marker accept would have written, minus accepted_at (this is not the

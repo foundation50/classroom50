@@ -91,19 +91,24 @@ export async function getMarkerBaseline(
   }
 }
 
-// The baseline SHA for a repo on `branch`: the marker commit, or the root
-// commit when the marker was backfilled (see getMarkerBaseline). Null when no
-// marker exists; callers decide whether their shape may fall back to the root.
-export async function getMarkerBaselineSha(
-  client: GitHubClient,
-  owner: string,
-  repo: string,
-  branch: string,
-): Promise<string | null> {
-  const marker = await getMarkerBaseline(client, owner, repo)
-  if (!marker) return null
-  if (marker.backfilled) return getRootCommitSha(client, owner, repo, branch)
-  return marker.sha
+// Which commit anchors a repo's baseline, given its marker history and shape.
+// The one place the marker -> backfilled -> root rule lives; every reader
+// (Feedback PR base, teacher repair, submission detection) decides through it.
+//   "marker": the marker's introducing commit (marker.sha).
+//   "root":   the branch's root commit: the marker was backfilled (that repo
+//             was accepted without one), or there is no marker and the shape
+//             says the root is the seed (rootIsBaseline).
+//   "none":   no baseline (a bare empty_repo, or a built-in assignment whose
+//             accept never finished).
+export type BaselineSource = "marker" | "root" | "none"
+
+export function baselineSource(
+  marker: MarkerBaseline | null,
+  options: { rootIsBaseline?: boolean } = {},
+): BaselineSource {
+  if (marker && !marker.backfilled) return "marker"
+  if (marker?.backfilled || options.rootIsBaseline) return "root"
+  return "none"
 }
 
 const MARKER_PATH = ".classroom50.yaml"

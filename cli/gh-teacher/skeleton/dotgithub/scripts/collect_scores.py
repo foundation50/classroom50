@@ -3293,26 +3293,6 @@ def marker_baseline(
     return sha, False
 
 
-def oldest_commit_sha_for_path(
-    api_url: str, owner: str, repo: str, path: str, token: str
-) -> str | None:
-    """The oldest commit touching a path, the accept-marker baseline. None when
-    the path has no history (a bare repo), which trims nothing."""
-    commits = _paginate_objects(
-        lambda page: (
-            f"{_repo_url(api_url, owner, repo)}/commits"
-            f"?path={urllib.parse.quote(path, safe='')}&per_page=100&page={page}"
-        ),
-        api_url,
-        token,
-        f"{owner}/{repo} marker history",
-    )
-    if not commits:
-        return None
-    sha = commits[-1].get("sha")
-    return sha if isinstance(sha, str) and sha else None
-
-
 def list_repo_tags(
     api_url: str, owner: str, repo: str, token: str
 ) -> list[dict[str, Any]]:

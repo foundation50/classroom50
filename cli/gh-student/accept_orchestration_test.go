@@ -1038,6 +1038,94 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 	})
 
+	// Repos accepted before the accept-time PR existed get theirs by
+	// re-accepting: the already-accepted no_autograder path opens it at the
+	// root, or at a marker an older accept happened to write.
+	t.Run("no_autograder already accepted + feedback_pr -> opens the PR at the resolved base", func(t *testing.T) {
+		cases := []struct {
+			name          string
+			markerCommits []map[string]any
+			wantBase      string
+		}{
+			{"no marker -> root commit", []map[string]any{}, "seed"},
+			{"older marker wins", []map[string]any{{"sha": "accept", "commit": map[string]any{"message": "[Classroom 50] Accept"}}}, "accept"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				var (
+					pullPosts, branchReads int
+					refBody                map[string]string
+				)
+				mux := http.NewServeMux()
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
+					branchReads++
+					_ = json.NewEncoder(w).Encode(map[string]any{"commit": map[string]any{"sha": "head"}})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/commits", func(w http.ResponseWriter, r *http.Request) {
+					if r.URL.Query().Get("path") != "" {
+						_ = json.NewEncoder(w).Encode(tc.markerCommits)
+						return
+					}
+					_ = json.NewEncoder(w).Encode([]map[string]any{{"sha": "head"}, {"sha": "accept"}, {"sha": "seed"}})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/pulls", func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet {
+						_ = json.NewEncoder(w).Encode([]map[string]any{})
+						return
+					}
+					pullPosts++
+					w.WriteHeader(http.StatusCreated)
+					_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/refs", func(w http.ResponseWriter, r *http.Request) {
+					raw, _ := io.ReadAll(r.Body)
+					_ = json.Unmarshal(raw, &refBody)
+					w.WriteHeader(http.StatusCreated)
+					_ = json.NewEncoder(w).Encode(map[string]any{"ref": "refs/heads/feedback"})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/labels", func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusCreated)
+					_, _ = io.WriteString(w, `{}`)
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/issues/1/labels", func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = io.WriteString(w, `[]`)
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+					writePermissionReadback(w, "push")
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusNoContent)
+				})
+				server := httptest.NewServer(mux)
+				t.Cleanup(server.Close)
+
+				p := baseParams()
+				p.shim = ""
+				p.noAutograder = true
+				p.alreadyExisted = true
+				p.feedbackPR = true
+				p.feedbackPRBody = feedbackBodySpec{autograded: false}
+				var out bytes.Buffer
+				if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p); err != nil {
+					t.Fatalf("acceptIntoRepo: unexpected error: %v", err)
+				}
+				if pullPosts != 1 {
+					t.Errorf("PR opened %d times, want 1", pullPosts)
+				}
+				if refBody["sha"] != tc.wantBase {
+					t.Errorf("feedback base frozen at %q, want %q", refBody["sha"], tc.wantBase)
+				}
+				// The repo is settled; only a fresh create waits for the branch.
+				if branchReads != 0 {
+					t.Errorf("branch read %d times on an already-accepted repo, want 0", branchReads)
+				}
+				if !strings.Contains(out.String(), "Assignment already accepted") {
+					t.Errorf("expected the already-accepted report on stdout:\n%s", out.String())
+				}
+			})
+		}
+	})
+
 	t.Run("no_autograder branch never settles -> warns, skips Pages and PR, still grants", func(t *testing.T) {
 		// Short-circuit the ~50s poll budget: the outcome under test is what
 		// accept does AFTER the wait gives up.
@@ -1094,6 +1182,34 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 		if !strings.Contains(out.String(), "Assignment accepted") {
 			t.Errorf("expected an accepted report on stdout:\n%s", out.String())
+		}
+	})
+
+	t.Run("branch-unsettled warning names only the configured steps", func(t *testing.T) {
+		pages := &assignments.Pages{Source: "branch", Branch: "main", Path: "/"}
+		cases := []struct {
+			name              string
+			feedbackPR        bool
+			pages             *assignments.Pages
+			wantPR, wantPages bool
+		}{
+			{"both", true, pages, true, true},
+			{"feedback only", true, nil, true, false},
+			{"pages only", false, pages, false, true},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				p := baseParams()
+				p.feedbackPR = tc.feedbackPR
+				p.pages = tc.pages
+				got := branchUnsettledRemedies(p)
+				if hasPR := strings.Contains(got, "feedback pull request"); hasPR != tc.wantPR {
+					t.Errorf("mentions the feedback PR = %v, want %v:\n%s", hasPR, tc.wantPR, got)
+				}
+				if hasPages := strings.Contains(got, "GitHub Pages"); hasPages != tc.wantPages {
+					t.Errorf("mentions Pages = %v, want %v:\n%s", hasPages, tc.wantPages, got)
+				}
+			})
 		}
 	})
 
