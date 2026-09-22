@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.55.0](https://github.com/foundation50/classroom50/compare/web-v1.54.0...web-v1.55.0) (2026-09-22)
+
+
+### Features
+
+* **web:** ask visitors' consent before analytics, add Google Tag Manager ([#1046](https://github.com/foundation50/classroom50/issues/1046)) ([a96f6df](https://github.com/foundation50/classroom50/commit/a96f6df4b7bc3d86618df6bddb9d90d5599a54e4))
+
 ## [1.54.0](https://github.com/foundation50/classroom50/compare/web-v1.53.0...web-v1.54.0) (2026-09-21)
 
 
