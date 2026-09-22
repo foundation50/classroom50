@@ -1166,15 +1166,17 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 }
 
 // validateNoAutograderExclusions rejects the combinations no_autograder rules
-// out. A narrower sibling of empty_repo: it commits no shim, and it must not
-// coexist with empty_repo (already shim-less) or a non-default autograder
+// out. A narrower sibling of empty_repo: it commits no shim and no marker
+// (accept leaves the repo exactly as GitHub created it), and it must not
+// coexist with empty_repo (already file-less) or a non-default autograder
 // (which fetches a teacher-authored Pages workflow — the opposite of adding
 // nothing). It applies to any initialized repo, templated or README (a
 // template may carry teacher-supplied CI; a README repo simply has no
 // autograder), and UNLIKE empty_repo it permits feedback_pr (an initialized
-// repo has a baseline commit). submission_mode/submission_tags are PERMITTED —
-// with no shim they carry no trigger, but they still define what the
-// submissions page counts as a submission (branch commits / milestone tags).
+// repo has a root commit to freeze the base at). submission_mode/
+// submission_tags are PERMITTED — with no shim they carry no trigger, but they
+// still define what the submissions page counts as a submission (branch
+// commits / milestone tags).
 // Unlike empty_repo, no_autograder has no `assignment add` flag yet (it is
 // GUI/manifest-set), so error wording names the JSON fields, not a
 // --no-autograder flag; the parse path wraps with the entry context.

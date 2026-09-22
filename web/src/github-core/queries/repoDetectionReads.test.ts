@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
 
+import { SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
 import {
   listDefaultBranchCommits,
   listRepoTags,
@@ -155,6 +156,53 @@ describe("readBranchSubmissionLog", () => {
     const log = await readBranchSubmissionLog(client, "o", "r", "main")
     expect(log.baselineSha).toBeNull()
     expect(log.commits).toHaveLength(1)
+  })
+
+  // no_autograder: accept writes no marker, so the root commit (the template
+  // seed) is the baseline rather than a student submission.
+  it("falls back to the root commit when asked and the marker is absent", async () => {
+    const request = vi.fn(async (url: string) =>
+      url.includes("path=.classroom50.yaml")
+        ? []
+        : [{ sha: "work" }, { sha: "seed" }],
+    )
+    const client = { request } as unknown as GitHubClient
+    const log = await readBranchSubmissionLog(client, "o", "r", "main", {
+      rootIsBaseline: true,
+    })
+    expect(log.baselineSha).toBe("seed")
+  })
+
+  it("keeps the marker baseline over the root fallback when both exist", async () => {
+    const request = vi.fn(async (url: string) =>
+      url.includes("path=.classroom50.yaml")
+        ? [{ sha: "accept" }]
+        : [{ sha: "work" }, { sha: "accept" }, { sha: "seed" }],
+    )
+    const client = { request } as unknown as GitHubClient
+    const log = await readBranchSubmissionLog(client, "o", "r", "main", {
+      rootIsBaseline: true,
+    })
+    expect(log.baselineSha).toBe("accept")
+  })
+
+  // After enable-autograder the marker exists but was introduced by the
+  // backfill: the repo keeps its root baseline, so pre-backfill pushes still
+  // count and the seed still does not, even with the root fallback off.
+  it("uses the root when the only marker commit is the shim backfill", async () => {
+    const request = vi.fn(async (url: string) =>
+      url.includes("path=.classroom50.yaml")
+        ? [
+            {
+              sha: "backfill",
+              commit: { message: SHIM_BACKFILL_COMMIT_MESSAGE },
+            },
+          ]
+        : [{ sha: "backfill" }, { sha: "early-work" }, { sha: "seed" }],
+    )
+    const client = { request } as unknown as GitHubClient
+    const log = await readBranchSubmissionLog(client, "o", "r", "main")
+    expect(log.baselineSha).toBe("seed")
   })
 
   it("reads a commitless repo (409 Git Repository is empty) as an empty log", async () => {

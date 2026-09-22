@@ -148,12 +148,32 @@ export async function readShimAtHead(
 // classified: it is the call GitHub rejects with a 404 when the token lacks the
 // `workflow` scope needed to touch a workflow file, surfaced as its own outcome
 // so the UI can show the re-auth remediation once, not per repo.
-export async function commitShimFile(
+export function commitShimFile(
   client: GitHubClient,
   org: string,
   repo: string,
   head: RepoHead,
   content: string,
+  message: string,
+): Promise<"committed" | "missingWorkflowScope"> {
+  return commitShimFiles(
+    client,
+    org,
+    repo,
+    head,
+    [{ path: AUTOGRADE_SHIM_PATH, content }],
+    message,
+  )
+}
+
+// The multi-file form of commitShimFile: the shim plus whatever else must land
+// in the same commit (the backfill's marker). Same workflow-scope classification.
+export async function commitShimFiles(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+  head: RepoHead,
+  files: readonly { path: string; content: string }[],
   message: string,
 ): Promise<"committed" | "missingWorkflowScope"> {
   let tree: { sha: string }
@@ -162,9 +182,12 @@ export async function commitShimFile(
       owner: org,
       repo,
       baseTreeSha: head.baseTreeSha,
-      tree: [
-        { path: AUTOGRADE_SHIM_PATH, mode: "100644", type: "blob", content },
-      ],
+      tree: files.map(({ path, content }) => ({
+        path,
+        mode: "100644" as const,
+        type: "blob" as const,
+        content,
+      })),
     })
   } catch (err) {
     if (

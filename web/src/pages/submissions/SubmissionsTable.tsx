@@ -94,6 +94,7 @@ import {
 } from "@/components/submissions/SubmissionRowCells"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
+import type { BackfillMarkerSource } from "@/domain/assignments/shimBackfill"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupDisplayName } from "@/util/groupTeam"
 import type {
@@ -330,6 +331,7 @@ const SubmissionsTable = ({
   emptyRepoAssignment = false,
   submissionMode,
   submissionTags,
+  markerSource,
   assignmentMode = "every-push",
   overrideGrade,
   canPauseAutograding = false,
@@ -420,6 +422,8 @@ const SubmissionsTable = ({
   submissionMode?: SubmissionMode
   // The assignment's milestone submission_tags for the same action.
   submissionTags?: string[]
+  // What "Add autograding workflow" rebuilds a missing marker from.
+  markerSource?: BackfillMarkerSource
   // The assignment's real submission_mode (independent of the autograder gate
   // that shapes `submissionMode` above). Drives the type-aware count wording
   // and the submission-details modal. Absent reads as every-push.
@@ -1330,6 +1334,7 @@ const SubmissionsTable = ({
               : () => setAccessOwner(manageSubmission.owner),
             submissionMode,
             submissionTags,
+            markerSource,
             canPauseAutograding,
             canChangeVisibility,
             canRegrade,

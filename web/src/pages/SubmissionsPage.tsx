@@ -454,6 +454,11 @@ const SubmissionsPageContent = () => {
   // must carry the key as `?k=<secret>`, else students hit "not found".
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = classroomMeta?.secret
+  // What "Add autograding workflow" rebuilds a missing .classroom50.yaml from
+  // (a no_autograder accept writes none); see shimBackfill.ts.
+  const markerSource = assignmentResolved
+    ? { secret, template: assignmentInfo.template }
+    : undefined
   // An archived classroom refuses config-repo writes, so delete hides.
   const classroomArchived = isClassroomArchived(classroomMeta ?? {})
 
@@ -789,6 +794,7 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
+    rootIsBaseline: assignmentResolved && !isEmptyRepoAssignment,
     enabled: detectionCapable,
   })
 
@@ -1706,6 +1712,7 @@ const SubmissionsPageContent = () => {
               : undefined
           }
           submissionTags={assignmentInfo?.submission_tags}
+          markerSource={markerSource}
           // The assignment's real submission_mode (independent of the autograder
           // gate above) — drives the type-aware submission-details modal and the
           // count wording, which apply regardless of who authored the shim.
@@ -1977,6 +1984,7 @@ const SubmissionsPageContent = () => {
           assignment={assignment}
           submissionMode={resolveSubmissionMode(assignmentInfo.submission_mode)}
           submissionTags={assignmentInfo.submission_tags}
+          markerSource={{ secret, template: assignmentInfo.template }}
           owners={acceptedOwners}
           students={students}
         />

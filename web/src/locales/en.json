@@ -1343,7 +1343,7 @@
         "choices": {
           "none": {
             "label": "Do not use the built-in autograder",
-            "help": "Grade with your own GitHub Actions workflow instead. With a template, add the workflow to it; without one, the assignment has no autograder."
+            "help": "Grade with your own GitHub Actions workflow instead, or don't grade on GitHub at all. Classroom 50 adds no files to the repositories: with a template, each student gets an exact copy of it; without one, a repository with only a README."
           },
           "built-in": {
             "label": "Use the built-in autograder",
@@ -1840,6 +1840,7 @@
       },
       "reason": {
         "noMarker": "no .classroom50.yaml, so ownership can't be verified and the repository was left untouched (re-accepting heals the marker; then finish the rename)",
+        "foreignSibling": "its name also matches assignment \"{{slug}}\", a sibling assignment sharing the name prefix, and this assignment's repositories carry no marker to tell them apart, left untouched",
         "unparseableMarker": "unreadable .classroom50.yaml ({{message}}), so the repository was left untouched",
         "foreignMarker": "its marker names assignment \"{{slug}}\", a sibling assignment sharing the name prefix, left untouched",
         "markerRewriteFailed": "updating .classroom50.yaml failed: {{message}}",
@@ -2057,7 +2058,7 @@
       "provisioningIntro_other": "{{count}} students have already accepted. These changes apply only to repositories accepted from now on; the {{count}} existing repositories keep their current setup:",
       "provisioning": {
         "repo_source": "Repository source: existing repositories keep their original starter content.",
-        "autograder_on": "Built-in autograder: existing repositories have no autograding workflow yet. After saving, use \"Add autograding workflow\" on the submissions page to add it to them.",
+        "autograder_on": "Built-in autograder: existing repositories have no autograding files yet. After saving, use \"Add autograding workflow\" on the submissions page to add the workflow and the .classroom50.yaml marker to them.",
         "autograder_off": "Built-in autograder: turning it off makes existing repositories' autograde runs fail and drop out of the collected scores.",
         "grading_mode": "Grading mode: scores recorded under the old mode may read differently.",
         "student_permission": "Student repository access: change existing repositories from the submissions page.",
@@ -2882,13 +2883,14 @@
       "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
       "access": "Set your repository access",
       "setup": "Configured autograding",
-      "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository",
+      "setupSkipped": "No setup files needed: this assignment adds nothing to your repository",
+      "setupBranchUnsettled": "GitHub is still initializing your repository, so GitHub Pages and the feedback pull request were skipped. Accept again in a minute to add them",
       "pagesSkipped": {
-        "plan": "Configured autograding. GitHub Pages wasn't enabled: this organization's GitHub plan doesn't allow Pages on private repositories. Your teacher can make the repository public and enable Pages from the submissions page.",
-        "policy": "Configured autograding. GitHub Pages wasn't enabled: the organization doesn't let members publish Pages sites. Your teacher can enable it from the submissions page.",
-        "branch": "Configured autograding. GitHub Pages wasn't enabled: the branch it publishes from doesn't exist in your repository yet. Your teacher can enable it from the submissions page.",
-        "access": "Configured autograding. GitHub Pages wasn't enabled: you don't have permission to change Pages settings on this repository. Your teacher can enable it from the submissions page.",
-        "unknown": "Configured autograding. GitHub Pages couldn't be enabled right now. Your teacher can enable it from the submissions page."
+        "plan": "GitHub Pages wasn't enabled: this organization's GitHub plan doesn't allow Pages on private repositories. Your teacher can make the repository public and enable Pages from the submissions page.",
+        "policy": "GitHub Pages wasn't enabled: the organization doesn't let members publish Pages sites. Your teacher can enable it from the submissions page.",
+        "branch": "GitHub Pages wasn't enabled: the branch it publishes from doesn't exist in your repository yet. Your teacher can enable it from the submissions page.",
+        "access": "GitHub Pages wasn't enabled: you don't have permission to change Pages settings on this repository. Your teacher can enable it from the submissions page.",
+        "unknown": "GitHub Pages couldn't be enabled right now. Your teacher can enable it from the submissions page."
       },
       "feedback": "Feedback pull request ready",
       "feedbackSkipped": "No feedback pull request for this assignment",
@@ -2983,7 +2985,7 @@
     "grading": {
       "badgeBuiltIn": "Autograded",
       "badgeNoAutograder": "No built-in autograder",
-      "titleNoAutograder": "This assignment doesn't use the built-in autograder, so built-in scores and regrading are disabled. A template's own grading workflow still runs, and the feedback pull request still works when enabled.",
+      "titleNoAutograder": "This assignment doesn't use the built-in autograder, so built-in scores and regrading are disabled. Repositories carry no Classroom 50 files. A template's own grading workflow still runs, and the feedback pull request still works when enabled.",
       "badgeEmptyRepo": "No autograding",
       "titleEmptyRepo": "This assignment uses empty repositories, so autograding, scores, and the feedback pull request are disabled. The table shows who has accepted and who has pushed."
     },
@@ -3515,13 +3517,13 @@
       "notAcceptedDetail": "No repository exists. It gets the workflow when the student accepts.",
       "warningLead_one": "This commits the autograding workflow to {{count}} student's repository.",
       "warningLead_other": "This commits the autograding workflow to {{count}} students' repositories.",
-      "warningPoint1": "Repositories that already have the workflow are left untouched.",
+      "warningPoint1": "Repositories that already have the workflow are left untouched. A repository missing its .classroom50.yaml marker gets it in the same commit.",
       "warningPoint2": "The commit is marked so it doesn't trigger grading. Work students already pushed is graded on their next push; \"Regrade all\" can't reach commits made before the workflow existed.",
       "warningPoint3": "Students must pull afterward. Clones made before this change will conflict on their next push."
     },
     "rowShim": {
       "title": "Add autograding workflow",
-      "description": "Add the built-in autograding workflow to this repository if it was accepted while the autograder was off.",
+      "description": "Add the built-in autograding workflow, and the .classroom50.yaml marker it needs, to this repository if it was accepted while the autograder was off.",
       "aria": "Add the autograding workflow to {{repo}}",
       "outcome": {
         "added": "Autograding workflow added. The student must pull before their next push, and that push is what grades work already in the repository.",

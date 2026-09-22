@@ -200,7 +200,7 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 			continue
 		}
 
-		res := ensureOne(client, p.org, repo, branch, entry.Mode, body)
+		res := ensureOne(client, p.org, repo, branch, entry.Mode, body, entry.NoAutograder)
 		results = append(results, res)
 		reportRepo(out, res, p.quiet, p.verbose)
 	}
@@ -235,9 +235,10 @@ func resolveFeedbackTemplateRef(entry assignment.AssignmentEntry) *feedbackTempl
 }
 
 // ensureOne runs the idempotent ensure flow for one repo and classifies the
-// result into a summary bucket.
-func ensureOne(client githubapi.Client, org, repo, branch, mode string, body feedbackBodySpec) repoResult {
-	err := ensureFeedbackPullRequest(client, org, repo, branch, mode, body)
+// result into a summary bucket. markerless (no_autograder) anchors the base on
+// the root commit when the repo has no marker.
+func ensureOne(client githubapi.Client, org, repo, branch, mode string, body feedbackBodySpec, markerless bool) repoResult {
+	err := ensureFeedbackPullRequest(client, org, repo, branch, mode, body, markerless)
 	switch {
 	case err == nil:
 		return repoResult{repo: repo, outcome: outcomeCreated}

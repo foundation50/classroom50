@@ -24,9 +24,9 @@ What accept creates is a per-assignment choice. All six shapes:
 | Shape | Set with | Students get | Autogrades? |
 | --- | --- | --- | --- |
 | **Template** | `--template` (or the web form's template field) | A copy of the template plus the control files | Yes |
-| **Template, own CI** | `no_autograder: true` (web: **Do not use the built-in autograder**) | A copy of the template with no autograding workflow; the template's own CI runs instead | No scores, but collection still records who submitted |
+| **Template, own CI** | `no_autograder: true` (web: **Do not use the built-in autograder**) | An exact copy of the template, with no Classroom 50 files added (no autograding workflow, no `.classroom50.yaml`); the template's own CI runs instead, if it has any | No scores, but collection still records who submitted |
 | **Template-less with a README** | Omit `--template` (web: **No template**, **Add a README** on) | An initialized repository: README plus the control files | Yes |
-| **Template-less with a README, no autograder** | `no_autograder: true` without a template (web: **No template**, **Add a README** on, **Do not use the built-in autograder**) | An initialized repository: README plus the `.classroom50.yaml` marker, no autograding workflow | No scores, but collection still records who submitted |
+| **Template-less with a README, no autograder** | `no_autograder: true` without a template (web: **No template**, **Add a README** on, **Do not use the built-in autograder**) | An initialized repository with only its README, no Classroom 50 files | No scores, but collection still records who submitted |
 | **Template-less, no README** | `init_shim: true` (web: **No template**, **Add a README** off, built-in autograder on) | An initialized repository carrying only the control files | Yes |
 | **Empty repository** | `--empty-repo` (web: **No template**, **Add a README** off, **Do not use the built-in autograder**) | A completely bare repository: no commits, no control files, and no feedback pull request, ever | Never |
 
@@ -38,7 +38,8 @@ Two rules apply across all of them:
   follow-up action is turning the built-in autograder **on**: **Add
   autograding workflow** on the submissions page, or
   [`gh teacher assignment enable-autograder`](gh-teacher#assignment-enable-autograder),
-  adds the workflow to the existing repositories. (**Assignment type**,
+  adds the workflow (and the `.classroom50.yaml` marker it needs) to the
+  existing repositories. (**Assignment type**,
   individual or group, is the exception: it stays locked once set.)
 - **A template brings only its default branch** unless the assignment turns
   on **Include all branches** (`include_all_branches: true`), which copies

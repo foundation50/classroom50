@@ -688,14 +688,17 @@ of every shape is in
 [Repository shapes](Assignment-Templates#repository-shapes).
 
 - **`no_autograder: true`** (web: **Do not use the built-in autograder**).
-  Accept commits the `.classroom50.yaml` marker and the starter content (the
-  template's content, or the README) but no autograde workflow. With a
+  Accept adds nothing to the repository: no autograde workflow and no
+  `.classroom50.yaml` marker, so each student gets the starter content (the
+  template's content, or the README) exactly as GitHub created it. With a
   template, its own CI runs instead; without one, the assignment has no
-  autograder. Keeps the feedback PR. Score collection records who submitted
-  but no scores (there are no `submit/*` releases); regrade skips it. Mutually
-  exclusive with `empty_repo`, `init_shim`, a non-default `--autograder`, and
-  the grading-adjacent fields (tests/allowed-files/release-assets/
-  pass-threshold).
+  autograder. Keeps the feedback PR, frozen at the repository's first commit.
+  Score collection records who submitted but no scores (there are no
+  `submit/*` releases); regrade skips it. `gh student submit` doesn't work on
+  these repositories (it reads the marker), so students push directly.
+  Mutually exclusive with `empty_repo`, `init_shim`, a non-default
+  `--autograder`, and the grading-adjacent fields (tests/allowed-files/
+  release-assets/pass-threshold).
 - **`init_shim: true`** (web: **No template**, **Add a README** off, built-in
   autograder on). An initialized but README-less repo carrying only the
   control files, which autogrades and is collected like any built-in
@@ -778,7 +781,9 @@ What happens, in order:
 2. Each student repo, matched by prefix and verified through its
    `.classroom50.yaml` marker, has the marker's `assignment` field rewritten
    (`[skip ci]`), then the repo is renamed. GitHub redirects git, web, and API
-   traffic from the old name indefinitely, so student clones keep working.
+   traffic from the old name indefinitely, so student clones keep working. An
+   assignment without the built-in autograder has no marker, so its repos are
+   matched by prefix alone.
 3. The lock is restored to its pre-rename state.
 
 Confirmation requires typing the new slug (skip with `--yes` in scripted
@@ -868,7 +873,12 @@ Turns on the built-in autograder for an assignment created with it off
 (`no_autograder`) and, by default, **adds the autograde workflow to every
 student repo accepted while it was off**. Accept writes
 `.github/workflows/autograde.yaml` only when the built-in autograder is on, so
-those repos have no workflow and never grade until it's added. The web app's
+those repos have no workflow and never grade until it's added. A repo without a
+`.classroom50.yaml` marker (accept writes none while the autograder is off)
+gets it in the same commit, since the autograder reads it to find the
+assignment. That commit doesn't change the repo's baseline: submissions and
+the Feedback PR keep measuring from the root commit, so pushes made before the
+backfill still count and an existing Feedback PR stays valid. The web app's
 **Add autograding workflow** action on the submissions page does the same
 thing.
 

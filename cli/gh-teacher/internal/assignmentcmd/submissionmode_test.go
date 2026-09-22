@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -134,7 +135,12 @@ type smFixture struct {
 	// config repo; committedShims maps student repo -> last shim blob.
 	committedAssignments []byte
 	committedShims       map[string][]byte
-	commitMessages       map[string]string // repo -> last commit message
+	// committedFiles maps student repo -> path -> blob, from the tree POST
+	// (which is where GitHub learns a blob's path).
+	committedFiles map[string]map[string][]byte
+	commitMessages map[string]string // repo -> last commit message
+	// blobs holds every blob POSTed, by the sha the fixture minted for it.
+	blobs map[string][]byte
 }
 
 type smServerConfig struct {
@@ -142,6 +148,11 @@ type smServerConfig struct {
 	// student repos: name -> shim content ("" => repo exists, shim missing;
 	// absent from map => repo 404s)
 	repos map[string]string
+	// student repos whose .classroom50.yaml is MISSING (a no_autograder
+	// accept); every other repo in `repos` serves one.
+	markerless map[string]bool
+	// classroom.json body; defaults to lockClassroomBody().
+	classroom string
 	// tree-write 404 with a scopes header, simulating a missing workflow scope
 	workflowScope404 bool
 }
@@ -150,7 +161,9 @@ func newSMServer(t *testing.T, cfg smServerConfig) (*httptest.Server, *smFixture
 	t.Helper()
 	fix := &smFixture{
 		committedShims: map[string][]byte{},
+		committedFiles: map[string]map[string][]byte{},
 		commitMessages: map[string]string{},
+		blobs:          map[string][]byte{},
 	}
 	mux := http.NewServeMux()
 
@@ -175,7 +188,19 @@ func newSMServer(t *testing.T, cfg smServerConfig) (*httptest.Server, *smFixture
 		serveContents(w, cfg.assignments)
 	})
 	mux.HandleFunc("/repos/o/classroom50/contents/dst/classroom.json", func(w http.ResponseWriter, _ *http.Request) {
+		if cfg.classroom != "" {
+			serveContents(w, cfg.classroom)
+			return
+		}
 		serveContents(w, lockClassroomBody())
+	})
+	// User id lookups for the marker backfill: alice resolves, anyone else 404s.
+	mux.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
+		if login := strings.TrimPrefix(r.URL.Path, "/users/"); login == "alice" {
+			serveJSON(w, map[string]any{"login": "alice", "id": 4242})
+			return
+		}
+		serve404(w)
 	})
 	mux.HandleFunc("/orgs/o/teams/classroom50-dst/members", func(w http.ResponseWriter, _ *http.Request) {
 		var members []map[string]string
@@ -207,20 +232,40 @@ func newSMServer(t *testing.T, cfg smServerConfig) (*httptest.Server, *smFixture
 			_ = json.Unmarshal(body, &payload)
 			decoded, _ := base64.StdEncoding.DecodeString(payload.Content)
 			fix.mu.Lock()
+			sha := fmt.Sprintf("blob-%d", len(fix.blobs)+1)
+			fix.blobs[sha] = decoded
 			if repoName == "classroom50" {
 				fix.committedAssignments = decoded
-			} else {
-				fix.committedShims[repoName] = decoded
 			}
 			fix.mu.Unlock()
-			serveJSON(w, map[string]string{"sha": "blob-sha"})
+			serveJSON(w, map[string]string{"sha": sha})
 		})
-		mux.HandleFunc(base+"/git/trees", func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc(base+"/git/trees", func(w http.ResponseWriter, r *http.Request) {
 			if cfg.workflowScope404 && repoName != "classroom50" {
 				w.Header().Set("X-OAuth-Scopes", "repo, read:org")
 				serve404(w)
 				return
 			}
+			body, _ := io.ReadAll(r.Body)
+			var payload struct {
+				Tree []struct{ Path, SHA string } `json:"tree"`
+			}
+			_ = json.Unmarshal(body, &payload)
+			fix.mu.Lock()
+			for _, e := range payload.Tree {
+				content, ok := fix.blobs[e.SHA]
+				if !ok {
+					continue
+				}
+				if fix.committedFiles[repoName] == nil {
+					fix.committedFiles[repoName] = map[string][]byte{}
+				}
+				fix.committedFiles[repoName][e.Path] = content
+				if e.Path == autogradeShimPath {
+					fix.committedShims[repoName] = content
+				}
+			}
+			fix.mu.Unlock()
 			serveJSON(w, map[string]string{"sha": "new-tree-sha"})
 		})
 		mux.HandleFunc(base+"/git/commits", func(w http.ResponseWriter, r *http.Request) {
@@ -246,6 +291,13 @@ func newSMServer(t *testing.T, cfg smServerConfig) (*httptest.Server, *smFixture
 				return
 			}
 			serveContents(w, shim)
+		})
+		mux.HandleFunc("/repos/o/"+repoName+"/contents/.classroom50.yaml", func(w http.ResponseWriter, _ *http.Request) {
+			if cfg.markerless[repoName] {
+				serve404(w)
+				return
+			}
+			serveContents(w, "classroom: \"dst\"\nassignment: \"hello\"\n")
 		})
 		gitData(repoName)
 	}

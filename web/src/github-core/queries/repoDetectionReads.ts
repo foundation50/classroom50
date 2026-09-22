@@ -5,7 +5,7 @@ import type { GitHubCommit, GitHubTag } from "../types"
 import { tolerateGitHubError, type GitHubAPIError } from "../errors"
 import { paginateAll } from "../paginate"
 import { githubKeys } from "./keys"
-import { getOldestCommitShaForPath } from "./repoRefReads"
+import { getMarkerBaseline } from "./repoRefReads"
 
 // Detection reads for the submission-configuration hybrid model. Unlike the
 // release reads (which key off submit/* Releases the autograder publishes),
@@ -46,6 +46,17 @@ export type BranchSubmissionLog = {
   baselineSha: string | null
 }
 
+export type BranchSubmissionLogOptions = {
+  // An initialized repo's root commit is the template (or README) seed, never
+  // a submission, so it is the baseline when no marker commit anchors one: a
+  // no_autograder accept writes no marker, and a built-in assignment's repos
+  // may sit unbackfilled after the autograder was turned on. Off only for a
+  // bare empty_repo, whose root commit IS the student's first push. A marker
+  // still wins when present, unless the backfill introduced it (that repo was
+  // accepted without one and keeps the root baseline).
+  rootIsBaseline?: boolean
+}
+
 // The two reads branch-mode detection narrows with submissionCommits. Any error
 // other than the empty-repo 409 propagates: swallowing a transient one to a
 // null baseline would count the accept commit.
@@ -54,21 +65,23 @@ export async function readBranchSubmissionLog(
   owner: string,
   repo: string,
   branch: string,
+  options: BranchSubmissionLogOptions = {},
 ): Promise<BranchSubmissionLog> {
   return tolerateGitHubError(
     async () => {
-      const baselineSha = await getOldestCommitShaForPath(
-        client,
-        owner,
-        repo,
-        ".classroom50.yaml",
-      )
+      const marker = await getMarkerBaseline(client, owner, repo)
       const commits = await listDefaultBranchCommits(
         client,
         owner,
         repo,
         branch,
       )
+      // Newest-first, so the root commit is the last entry.
+      const rootSha = commits.at(-1)?.sha ?? null
+      let baselineSha: string | null = null
+      if (marker && !marker.backfilled) baselineSha = marker.sha
+      else if (options.rootIsBaseline || marker?.backfilled)
+        baselineSha = rootSha
       return { commits, baselineSha }
     },
     { commits: [], baselineSha: null },

@@ -811,6 +811,21 @@ class TestBaselineScanSource:
         ])
         assert ag._baseline_scan(tmp_path / "repo") == (shas[0], "root")
 
+    def test_backfill_introduced_marker_keeps_root_source(self, tmp_path):
+        # A no_autograder accept writes no marker; enable-autograder later adds
+        # it in the backfill commit. That commit must not become the baseline:
+        # the Feedback PR accept froze at the root, and the runner's base check
+        # would otherwise refuse it for the repo's whole life.
+        path = tmp_path / "repo"
+        shas = _make_repo(path, ["Initial commit", "Submit hello"])
+        (path / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        _git(path, "add", "-A")
+        _git(path, "commit", "-q", "-m", ag.SHIM_BACKFILL_COMMIT_SUBJECT + "\n\n[skip ci]")
+        assert ag._baseline_scan(path) == (shas[0], "root")
+
+    def test_backfill_subject_matches_the_shared_contract(self):
+        assert ag.SHIM_BACKFILL_COMMIT_SUBJECT == "[Classroom 50] Add autograde workflow (enable-autograder)"
+
     def test_failed_marker_query_yields_git_error_not_root(self, tmp_path, monkeypatch):
         # A failed marker query must surface as "git-error", NOT degrade
         # to "root" -- git-error skips the PR, "root" would open it

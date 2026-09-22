@@ -8,6 +8,7 @@ import type {
   GitHubRepo,
 } from "../types"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { commitSubject, SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
 import { tolerateGitHubError } from "../errors"
 import {
   PAGE_FETCH_CONCURRENCY,
@@ -56,27 +57,77 @@ export function getCommitByRepo(
   )
 }
 
-// The OLDEST commit touching `path` on the default branch, or null when none
-// do. Used to recover the accept commit (the one that created
-// .classroom50.yaml) — the same resolution rule as the runner's baseline_sha().
-// Paginated to exhaustion because a wrong SHA is worse than a slow read: the
-// runner refuses to maintain a Feedback PR whose base isn't the baseline it
-// resolves, and a single page would hand back a NEWER commit once the marker's
-// history exceeds 100 entries.
-export async function getOldestCommitShaForPath(
+// The accept-marker baseline: the OLDEST commit touching `.classroom50.yaml`,
+// the same resolution rule as the runner's baseline_sha(). Null when no commit
+// does (a bare or no_autograder repo). `backfilled` marks the one case where
+// that oldest commit must NOT anchor anything: the enable-autograder backfill
+// introduced it, so the repo was accepted without a marker and its baseline is
+// the root commit (a Feedback PR frozen there would otherwise mismatch the
+// runner for the repo's whole life). Paginated to exhaustion because a wrong
+// SHA is worse than a slow read: a single page would hand back a NEWER commit
+// once the marker's history exceeds 100 entries.
+export type MarkerBaseline = { sha: string; backfilled: boolean }
+
+export async function getMarkerBaseline(
   client: GitHubClient,
   owner: string,
   repo: string,
-  path: string,
-): Promise<string | null> {
-  const commits = await paginateAll<{ sha: string }>(
+): Promise<MarkerBaseline | null> {
+  const commits = await paginateAll<{
+    sha: string
+    commit?: { message?: string }
+  }>(
     client,
     (page) =>
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(path)}&per_page=100&page=${page}`,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(MARKER_PATH)}&per_page=100&page=${page}`,
   )
-  if (!commits.length) return null
-  // Newest-first, so the last entry is the accept commit.
-  return commits[commits.length - 1].sha
+  // Newest-first, so the last entry is the commit that introduced the marker.
+  const oldest = commits.at(-1)
+  if (!oldest) return null
+  const subject = commitSubject(oldest.commit?.message ?? "")
+  return {
+    sha: oldest.sha,
+    backfilled: subject === commitSubject(SHIM_BACKFILL_COMMIT_MESSAGE),
+  }
+}
+
+// The baseline SHA for a repo on `branch`: the marker commit, or the root
+// commit when the marker was backfilled (see getMarkerBaseline). Null when no
+// marker exists; callers decide whether their shape may fall back to the root.
+export async function getMarkerBaselineSha(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<string | null> {
+  const marker = await getMarkerBaseline(client, owner, repo)
+  if (!marker) return null
+  if (marker.backfilled) return getRootCommitSha(client, owner, repo, branch)
+  return marker.sha
+}
+
+const MARKER_PATH = ".classroom50.yaml"
+
+// The ROOT commit of `branch`, or null on a commitless repo. The Feedback-PR
+// and submission baseline for a no_autograder repo, which carries no marker:
+// its root is the template (or README) seed, so everything above it is the
+// student's. Only the oldest commit matters, so after page 1 reveals the page
+// count the walk jumps straight to the last page instead of reading every page
+// in between.
+export async function getRootCommitSha(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<string | null> {
+  const makePath = (page: number) =>
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?sha=${encodeURIComponent(branch)}&per_page=100&page=${page}`
+  const first = await paginateFirstPage<{ sha: string }>(client, makePath)
+  const last =
+    first.lastPage === null
+      ? first.items
+      : await client.request<{ sha: string }[]>(makePath(first.lastPage))
+  return last.at(-1)?.sha ?? null
 }
 export function commitQuery(
   client: GitHubClient,

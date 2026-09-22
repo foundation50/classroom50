@@ -30,6 +30,7 @@ import useSetRepoPages, {
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useSubmissionFeedback } from "./submissionFeedback"
 import { AddShimButton, UpdateTriggerButton } from "./ShimRowActions"
+import type { BackfillMarkerSource } from "@/domain/assignments/shimBackfill"
 import type {
   AssignmentMode,
   AssignmentPages,
@@ -352,6 +353,10 @@ export type SubmissionActionListProps = {
   submissionMode?: SubmissionMode
   // The assignment's milestone submission_tags (if any) for the same action.
   submissionTags?: string[]
+  // What "Add autograding workflow" rebuilds a missing `.classroom50.yaml`
+  // from: the classroom secret and the template source. Required alongside
+  // submissionMode; the row supplies classroom/assignment/owner itself.
+  markerSource?: BackfillMarkerSource
   // Whether the Pause/Resume-autograding action applies: owner + a gradable
   // default-autograder assignment (same gate as submissionMode). Omitted/false
   // hides the action — a non-owner can't disable workflows, and there's no
@@ -397,6 +402,7 @@ export const SubmissionActionList = ({
   onManageAccess,
   submissionMode,
   submissionTags,
+  markerSource,
   canPauseAutograding = false,
   canChangeVisibility = false,
   repoPrivate,
@@ -488,6 +494,7 @@ export const SubmissionActionList = ({
                 submissionMode={submissionMode}
                 submissionTags={submissionTags}
                 noRepo={!hasRepo}
+                marker={{ classroom, assignment, owner, ...markerSource }}
               />
             </>
           )}

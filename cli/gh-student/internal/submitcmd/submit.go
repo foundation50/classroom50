@@ -84,13 +84,13 @@ func NewCmd() *cobra.Command {
 }
 
 // annotateMissingConfig turns a failed .classroom50.yaml read into the most
-// helpful error. A missing marker (fs.ErrNotExist) is the empty_repo case:
-// those repos carry no marker and submit can't identify the assignment, so
-// hint that students on them push directly. Any other read error passes
-// through unchanged.
+// helpful error. A missing marker (fs.ErrNotExist) is the empty_repo or
+// no_autograder case: those repos carry no marker and submit can't identify
+// the assignment, so hint that students on them push directly. Any other read
+// error passes through unchanged.
 func annotateMissingConfig(err error) error {
 	if errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("%w; if this is an empty-repository assignment, autograding is disabled and `gh student submit` isn't used, so commit and `git push` directly", err)
+		return fmt.Errorf("%w; if this assignment uses an empty repository or no built-in autograder, `gh student submit` isn't used, so commit and `git push` directly", err)
 	}
 	return err
 }

@@ -273,6 +273,34 @@ describe("ManageSubmissionModal", () => {
     )
   })
 
+  // A no_autograder accept commits nothing, so a healthy repo has no marker
+  // and the probe would misreport it as incomplete.
+  it("does not probe the setup marker for a no_autograder assignment", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{
+          ...individualAction,
+          skipsGrading: true,
+          emptyRepoAssignment: false,
+        }}
+      />,
+    )
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101-hw1-alice",
+      expect.objectContaining({ enabled: false }),
+    )
+  })
+
   it("shows the autograding status when the assignment autogrades", () => {
     repoData.mockReturnValue({
       data: { created_at: "2026-06-01T09:00:00Z" },

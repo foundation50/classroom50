@@ -7,7 +7,10 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
-import { addAutogradeShim } from "@/domain/assignments/shimBackfill"
+import {
+  addAutogradeShim,
+  type BackfillMarker,
+} from "@/domain/assignments/shimBackfill"
 import type { SubmissionMode } from "@/types/classroom"
 import { errorText } from "@/types/localizedMessage"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
@@ -114,14 +117,16 @@ export const UpdateTriggerButton = ({
 // Add the built-in autograding workflow to this repo if it was accepted while
 // the autograder was off. The config repo's default branch is read first and
 // fails closed: a guessed `uses:` ref would be baked into a file that is never
-// rewritten.
+// rewritten. `marker` rebuilds the `.classroom50.yaml` such an accept never
+// wrote (see shimBackfill.ts).
 export const AddShimButton = ({
   org,
   repo,
   submissionMode,
   submissionTags,
   noRepo,
-}: ShimButtonProps) => {
+  marker,
+}: ShimButtonProps & { marker: BackfillMarker }) => {
   const client = useGitHubClient()
   return (
     <ShimRowAction
@@ -139,6 +144,7 @@ export const AddShimButton = ({
           configBranch: config?.default_branch || DEFAULT_BRANCH,
           submissionMode,
           submissionTags,
+          marker,
         })
       }}
     />

@@ -19,7 +19,12 @@ export function useMySubmissions(
   classroom: string | undefined,
   assignment: string | undefined,
   username: string | undefined,
-  options: { mode: SubmissionMode | undefined; submissionTags?: string[] },
+  options: {
+    mode: SubmissionMode | undefined
+    submissionTags?: string[]
+    // no_autograder assignment: the push reader's baseline is the root commit.
+    rootIsBaseline?: boolean
+  },
 ): {
   releases: GitHubRelease[] | undefined
   tags: DetectedSubmission[]
@@ -65,6 +70,7 @@ export function useMySubmissions(
     isTagMode ? undefined : classroom,
     isTagMode ? undefined : assignment,
     isTagMode ? undefined : username,
+    { rootIsBaseline: options.rootIsBaseline },
   )
 
   return {

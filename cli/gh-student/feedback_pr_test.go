@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -483,7 +484,7 @@ func TestAcceptCommitSHA(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 
-	sha, err := acceptCommitSHA(client, "o", "r")
+	sha, err := acceptCommitSHA(client, "o", "r", "main")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -522,7 +523,7 @@ func TestAcceptCommitSHA_PaginatesToTheOldestCommit(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 
-	sha, err := acceptCommitSHA(client, "o", "r")
+	sha, err := acceptCommitSHA(client, "o", "r", "main")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -535,7 +536,8 @@ func TestAcceptCommitSHA_PaginatesToTheOldestCommit(t *testing.T) {
 }
 
 // TestAcceptCommitSHA_NoMarkerCommits pins the empty-history error (a repo
-// that never landed the marker cannot anchor a feedback base).
+// that never landed the marker cannot anchor a feedback base) and its sentinel,
+// which the no_autograder root fallback keys on.
 func TestAcceptCommitSHA_NoMarkerCommits(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/o/r/commits", func(w http.ResponseWriter, _ *http.Request) {
@@ -545,9 +547,111 @@ func TestAcceptCommitSHA_NoMarkerCommits(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 
-	if _, err := acceptCommitSHA(client, "o", "r"); err == nil {
+	_, err := acceptCommitSHA(client, "o", "r", "main")
+	if err == nil {
 		t.Fatal("want error when no commits touch the marker, got nil")
 	}
+	if !errors.Is(err, errNoAcceptMarker) {
+		t.Errorf("empty marker history must wrap errNoAcceptMarker, got %v", err)
+	}
+}
+
+// TestAcceptCommitSHA_BackfilledMarkerUsesRoot pins the one case a marker
+// commit must NOT anchor: the enable-autograder backfill introduced it, so the
+// repo was accepted without one and its Feedback PR (if any) is frozen at the
+// root. Resolving the backfill commit would strand that PR behind the runner's
+// base check for the repo's whole life.
+func TestAcceptCommitSHA_BackfilledMarkerUsesRoot(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/commits", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("path") == ".classroom50.yaml" {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"sha": "backfill", "commit": map[string]string{"message": contract.ShimBackfillCommitMessage()}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"sha": "backfill"}, {"sha": "work"}, {"sha": "seed"},
+		})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	sha, err := acceptCommitSHA(newTestRESTClient(t, server), "o", "r", "main")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sha != "seed" {
+		t.Errorf("acceptCommitSHA = %q, want the root commit seed, not the backfill", sha)
+	}
+}
+
+// TestFeedbackBaseSHAOrRoot pins the no_autograder baseline rule: the marker
+// commit when one exists (a repo accepted before the marker was dropped), the
+// branch's root commit when none does, and no fallback on a transient failure.
+func TestFeedbackBaseSHAOrRoot(t *testing.T) {
+	newServer := func(markerCommits []string, branchCommits []string, markerStatus int) *httptest.Server {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/r/commits", func(w http.ResponseWriter, r *http.Request) {
+			var shas []string
+			if r.URL.Query().Get("path") == ".classroom50.yaml" {
+				if markerStatus != 0 {
+					w.WriteHeader(markerStatus)
+					return
+				}
+				shas = markerCommits
+			} else {
+				if got := r.URL.Query().Get("sha"); got != "main" {
+					t.Errorf("branch log filtered by sha %q, want main", got)
+				}
+				shas = branchCommits
+			}
+			out := make([]map[string]string, 0, len(shas))
+			for _, sha := range shas {
+				out = append(out, map[string]string{"sha": sha})
+			}
+			_ = json.NewEncoder(w).Encode(out)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		return server
+	}
+
+	t.Run("marker present -> its oldest commit", func(t *testing.T) {
+		server := newServer([]string{"accept-sha"}, []string{"work", "accept-sha", "seed"}, 0)
+		sha, err := feedbackBaseSHAOrRoot(newTestRESTClient(t, server), "o", "r", "main")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sha != "accept-sha" {
+			t.Errorf("got %q, want the marker commit accept-sha", sha)
+		}
+	})
+
+	t.Run("no marker -> the root commit", func(t *testing.T) {
+		server := newServer(nil, []string{"work", "seed"}, 0)
+		sha, err := feedbackBaseSHAOrRoot(newTestRESTClient(t, server), "o", "r", "main")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if sha != "seed" {
+			t.Errorf("got %q, want the root commit seed", sha)
+		}
+	})
+
+	t.Run("marker read fails -> error, never the root", func(t *testing.T) {
+		server := newServer(nil, []string{"work", "seed"}, http.StatusInternalServerError)
+		if _, err := feedbackBaseSHAOrRoot(newTestRESTClient(t, server), "o", "r", "main"); err == nil {
+			t.Fatal("a transient marker read failure must not fall back to the root commit")
+		}
+	})
+
+	t.Run("commitless repo -> error", func(t *testing.T) {
+		server := newServer(nil, nil, 0)
+		if _, err := feedbackBaseSHAOrRoot(newTestRESTClient(t, server), "o", "r", "main"); err == nil {
+			t.Fatal("want error for a repo with no commits at all")
+		}
+	})
 }
 
 // templatePRBodyMux serves the pulls POST for o/r (head already has a diff, so

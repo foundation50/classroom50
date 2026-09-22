@@ -4,6 +4,13 @@
 // already-accepted repos with no workflow and nothing ever grades them. This is
 // the web twin of `gh teacher assignment enable-autograder`'s per-repo loop.
 //
+// A no_autograder accept also writes no `.classroom50.yaml`, and the runner the
+// shim calls refuses a repo without one, so a missing marker is written in the
+// same commit. Built teacher-side from the assignment entry: the runner reads
+// only classroom/assignment/secret from it, and the template source lets
+// `gh student submit` refresh teacher files. Repos accepted while the marker
+// was still written keep theirs untouched.
+//
 // A repo that already carries a default shim is reported present and never
 // rewritten: the submission-mode retrofit (submissionTrigger.ts) owns
 // reconciling its trigger. Any other file at the reserved path is reported
@@ -12,14 +19,20 @@
 // callers, as they are for the retrofit.
 import type { GitHubClient } from "@/github-core/client"
 import { readRepoHead } from "@/github-core/mutations"
+import { getRepoFileAtRef, getUser } from "@/github-core/queries"
 import { SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
 import type { SubmissionMode } from "@/types/classroom"
-import { defaultAutograderWorkflow } from "./autograderYaml"
+import { log } from "./accessPrimitives"
 import {
-  commitShimFile,
+  createClassroom50Yaml,
+  defaultAutograderWorkflow,
+} from "./autograderYaml"
+import {
+  commitShimFiles,
   isDefaultShim,
   readShimAtHead,
   resolveStudentRepoBranch,
+  AUTOGRADE_SHIM_PATH,
 } from "./submissionTrigger"
 
 export type ShimBackfillOutcome =
@@ -28,6 +41,23 @@ export type ShimBackfillOutcome =
   | { status: "unrecognized"; reason: string }
   | { status: "notAccepted" }
   | { status: "missingWorkflowScope" }
+
+// What a missing `.classroom50.yaml` is rebuilt from. `owner` is the repo's
+// student login (the repo-name owner segment; the backfill is individual-only).
+export type BackfillMarker = {
+  classroom: string
+  assignment: string
+  owner: string
+  // The classroom's capability-URL secret, when protected.
+  secret?: string
+  template?: { owner: string; repo: string; branch?: string }
+}
+
+// The assignment-level half of BackfillMarker, threaded from the page that
+// holds the entry and the classroom secret down to each row.
+export type BackfillMarkerSource = Pick<BackfillMarker, "secret" | "template">
+
+const MARKER_PATH = ".classroom50.yaml"
 
 export async function addAutogradeShim(params: {
   client: GitHubClient
@@ -39,9 +69,17 @@ export async function addAutogradeShim(params: {
   configBranch: string
   submissionMode: SubmissionMode
   submissionTags?: string[]
+  marker: BackfillMarker
 }): Promise<ShimBackfillOutcome> {
-  const { client, org, repo, configBranch, submissionMode, submissionTags } =
-    params
+  const {
+    client,
+    org,
+    repo,
+    configBranch,
+    submissionMode,
+    submissionTags,
+    marker,
+  } = params
 
   const branch = await resolveStudentRepoBranch(client, org, repo)
   if (!branch) return { status: "notAccepted" }
@@ -57,23 +95,81 @@ export async function addAutogradeShim(params: {
     }
   }
 
-  const content = defaultAutograderWorkflow(
-    org,
-    branch,
-    configBranch,
-    submissionMode,
-    submissionTags,
-  )
-  const committed = await commitShimFile(
+  const files = [
+    {
+      path: AUTOGRADE_SHIM_PATH,
+      content: defaultAutograderWorkflow(
+        org,
+        branch,
+        configBranch,
+        submissionMode,
+        submissionTags,
+      ),
+    },
+  ]
+  const hasMarker =
+    (await getRepoFileAtRef(client, {
+      owner: org,
+      repo,
+      path: MARKER_PATH,
+      ref: head.headSha,
+    })) !== null
+  if (!hasMarker) {
+    // Landing the marker here does not move the repo's baseline: every reader
+    // (runner.py, collect_scores.py, both CLIs, getMarkerBaseline) recognizes
+    // SHIM_BACKFILL_COMMIT_MESSAGE's subject and keeps the root commit, so a
+    // Feedback PR the no_autograder accept froze there stays valid.
+    files.push({
+      path: MARKER_PATH,
+      content: await buildBackfillMarker(client, marker),
+    })
+  }
+
+  const committed = await commitShimFiles(
     client,
     org,
     repo,
     head,
-    content,
+    files,
     SHIM_BACKFILL_COMMIT_MESSAGE,
   )
   if (committed === "missingWorkflowScope") {
     return { status: "missingWorkflowScope" }
   }
   return { status: "added" }
+}
+
+// The marker accept would have written, minus accepted_at (this is not the
+// accept). The numeric ids are best-effort lookups, null when unresolved, the
+// same rule accept applies.
+async function buildBackfillMarker(
+  client: GitHubClient,
+  marker: BackfillMarker,
+): Promise<string> {
+  const lookupId = async (login: string): Promise<number | null> => {
+    try {
+      return (await getUser(client, login)).id
+    } catch (err) {
+      log.debug("shim backfill: user id lookup failed (non-fatal)", {
+        login,
+        err,
+      })
+      return null
+    }
+  }
+  const [ownerId, sourceOwnerId] = await Promise.all([
+    lookupId(marker.owner),
+    marker.template ? lookupId(marker.template.owner) : null,
+  ])
+  return createClassroom50Yaml({
+    classroom: marker.classroom,
+    assignment: marker.assignment,
+    ownerUsername: marker.owner,
+    ownerId,
+    secret: marker.secret,
+    sourceOwner: marker.template?.owner,
+    sourceOwnerId,
+    sourceRepo: marker.template?.repo,
+    sourceBranch: marker.template?.branch,
+  })
 }

@@ -393,6 +393,52 @@ describe("renameAssignment (fresh)", () => {
     expect(summary.lockReleased).toBe(true)
   })
 
+  // A no_autograder accept writes no marker, so for that shape ownership falls
+  // back to the repo-name prefix, with the classroom's longer sibling slugs
+  // standing in for the foreign-marker check.
+  it("renames a markerless no_autograder repo by prefix and skips a sibling slug's repo", async () => {
+    const fix = makeFixture({
+      assignments: assignmentsBody([
+        baseEntry({ no_autograder: true }),
+        { slug: `${OLD}-b`, name: "Sibling", mode: "individual" },
+      ]),
+      repos: [aliceRepo, foreignRepo],
+      markers: {},
+    })
+    const summary = await renameAssignment(fix.client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      oldSlug: OLD,
+      newSlug: NEW,
+    })
+    const alice = summary.results.find((r) => r.repo === aliceRepo)
+    expect(alice?.outcome).toBe("renamed")
+    expect(fix.captured.renames[aliceRepo]).toBe(aliceNewRepo)
+    // No marker rewrite commit on a repo that has none.
+    expect(fix.state.markers[aliceRepo]).toBeUndefined()
+
+    const foreign = summary.results.find((r) => r.repo === foreignRepo)
+    expect(foreign?.outcome).toBe("skippedForeign")
+    expect(fix.captured.renames[foreignRepo]).toBeUndefined()
+    expect(summary.failed).toBe(0)
+  })
+
+  it("still rewrites a marker a no_autograder repo happens to carry", async () => {
+    const fix = makeFixture({
+      assignments: assignmentsBody([baseEntry({ no_autograder: true })]),
+      repos: [aliceRepo],
+      markers: { [aliceRepo]: marker(OLD) },
+    })
+    const summary = await renameAssignment(fix.client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      oldSlug: OLD,
+      newSlug: NEW,
+    })
+    expect(summary.results[0].outcome).toBe("renamed")
+    expect(fix.state.markers[aliceRepo]).toContain(`assignment: "${NEW}"`)
+  })
+
   it("preserves a pre-existing teacher lock instead of releasing it", async () => {
     const fix = makeFixture({
       assignments: assignmentsBody([baseEntry({ locked: true })]),

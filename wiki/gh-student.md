@@ -98,7 +98,9 @@ Flags:
    points at the grading logic your teacher manages, so grading updates apply
    on your next submission without changing your repository. When the teacher
    turned the README off for an assignment with no starter code, this commit
-   also removes the seeded README.
+   also removes the seeded README. When the assignment doesn't use the
+   built-in autograder, this step is skipped entirely: nothing is added to
+   your repository.
 8. Opens the feedback pull request when the assignment enables it.
    Best-effort: if this fails, the autograding run creates the pull request on
    your first submission instead.

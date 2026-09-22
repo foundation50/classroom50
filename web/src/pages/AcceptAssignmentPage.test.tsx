@@ -25,6 +25,9 @@ let assignmentClosed = false
 // Whether the fetched assignment is an empty_repo one (never writes the setup
 // marker), reset per test.
 let assignmentEmptyRepo = false
+// Whether the fetched assignment is a no_autograder one (accept commits no
+// files, so no marker either), reset per test.
+let assignmentNoAutograder = false
 // The repo useGetRepo returns (null = the student hasn't accepted yet), reset
 // per test. Set to acceptedRepo to model an already-accepted student.
 let existingRepo: GitHubRepo | null = null
@@ -60,6 +63,7 @@ vi.mock("@/hooks/usePagesAssignments", () => ({
           autograder: "default",
           ...(assignmentClosed ? { closed: true } : {}),
           ...(assignmentEmptyRepo ? { empty_repo: true } : {}),
+          ...(assignmentNoAutograder ? { no_autograder: true } : {}),
         },
       ],
       isLoading: false,
@@ -215,6 +219,7 @@ beforeEach(() => {
   enrollmentVerdict = "enrolled"
   assignmentClosed = false
   assignmentEmptyRepo = false
+  assignmentNoAutograder = false
   existingRepo = null
   repoSetupState = "complete"
   repoSetupRefetch.mockReset()
@@ -697,6 +702,19 @@ describe("AcceptAssignmentPage incomplete setup", () => {
     )
     expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
     expect(screen.queryByText("accept.repair.havingTrouble")).not.toBeNull()
+  })
+
+  it("does not probe, or warn, for a no_autograder assignment", () => {
+    existingRepo = acceptedRepo
+    assignmentNoAutograder = true
+    repoSetupState = "incomplete"
+    renderWith()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      acceptedRepo.name,
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
   })
 
   it("does not probe before the student has a repo", () => {

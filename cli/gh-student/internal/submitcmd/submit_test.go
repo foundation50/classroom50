@@ -80,7 +80,7 @@ func TestAnnotateMissingConfig(t *testing.T) {
 		if !errors.Is(got, fs.ErrNotExist) {
 			t.Errorf("annotated error must still satisfy errors.Is(fs.ErrNotExist), got %v", got)
 		}
-		if !strings.Contains(got.Error(), "empty-repository assignment") {
+		if !strings.Contains(got.Error(), "git push` directly") {
 			t.Errorf("missing marker should surface the empty-repo hint, got %q", got)
 		}
 	})
@@ -91,7 +91,7 @@ func TestAnnotateMissingConfig(t *testing.T) {
 		if got != base {
 			t.Errorf("a non-ErrNotExist error must pass through unchanged, got %v", got)
 		}
-		if strings.Contains(got.Error(), "empty-repository assignment") {
+		if strings.Contains(got.Error(), "git push` directly") {
 			t.Errorf("a non-missing-marker error must not get the empty-repo hint, got %q", got)
 		}
 	})

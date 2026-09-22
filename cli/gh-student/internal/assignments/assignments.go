@@ -113,12 +113,13 @@ type Entry struct {
 	SubmissionTags []string `json:"submission_tags,omitempty"`
 
 	// NoAutograder marks an initialized assignment (templated or README) as
-	// having no built-in autograder: accept commits the .classroom50.yaml
-	// marker and the starter content but NO autograde shim (neither the default
-	// shim nor a Pages-fetched workflow), so a template's own .github/ CI runs
-	// instead, or nothing does. UNLIKE EmptyRepo it keeps the starter content
-	// and permits the Feedback PR. Absent reads as false (the teacher CLI omits
-	// it when false).
+	// having no built-in autograder: accept commits NOTHING into the repo, no
+	// .classroom50.yaml marker and no autograde shim (neither the default shim
+	// nor a Pages-fetched workflow), so each repo is exactly what GitHub
+	// created and a template's own .github/ CI runs instead, or nothing does.
+	// UNLIKE EmptyRepo it keeps the starter content and permits the Feedback
+	// PR (anchored on the root commit). Absent reads as false (the teacher CLI
+	// omits it when false).
 	NoAutograder bool `json:"no_autograder,omitempty"`
 
 	// InitShim marks a TEMPLATE-LESS assignment whose repo is initialized with
@@ -174,8 +175,9 @@ func (e Entry) IsTagSubmissionMode() bool {
 
 // CommitsShim reports whether accept commits an autograde shim for this entry.
 // Both no-shim states suppress it: EmptyRepo (a bare repo commits nothing) and
-// NoAutograder (teacher-supplied CI). Centralized so the two accept-time shim
-// branches can't drift on the predicate.
+// NoAutograder (teacher-supplied CI, or none). Neither commits the marker
+// either, so false also means "accept writes no files at all". Centralized so
+// the accept-time branches can't drift on the predicate.
 func (e Entry) CommitsShim() bool {
 	return !e.EmptyRepo && !e.NoAutograder
 }

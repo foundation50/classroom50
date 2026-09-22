@@ -193,6 +193,57 @@ describe("useDetectedSubmissions — branch mode", () => {
     expect(result.current.errorCount).toBe(0)
   })
 
+  // A no_autograder accept writes no marker either, but its root commit is the
+  // template (or README) seed, not a submission.
+  it("excludes the root commit on a no_autograder repo with no marker", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [],
+        branchCommits: [{ sha: "work2" }, { sha: "work1" }, { sha: "seed" }],
+      }),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+          rootIsBaseline: true,
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected[0].count).toBe(2)
+    expect(result.current.detected[0].entries.map((e) => e.sha)).toEqual([
+      "work2",
+      "work1",
+    ])
+  })
+
+  it("reads a no_autograder repo with only its seed commit as no submissions", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [],
+        branchCommits: [{ sha: "seed" }],
+      }),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+          rootIsBaseline: true,
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected).toEqual([])
+    expect(result.current.errorCount).toBe(0)
+  })
+
   it("reads a commitless bare repo (409 on the commit reads) as no submissions, not an error", async () => {
     request.mockImplementation((url: string) => {
       if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {

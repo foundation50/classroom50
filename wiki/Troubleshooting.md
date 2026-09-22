@@ -858,9 +858,10 @@ assignment. Two causes:
 - You're running submit from outside the cloned assignment repository, or from
   a clone not created by `gh student accept`. `cd` into the directory the
   `git clone` command created.
-- The assignment is an **empty-repository assignment**, whose repositories
-  carry no marker file. As the error's hint says, autograding is disabled there
-  and `gh student submit` is not used: commit and `git push` directly.
+- The assignment is an **empty-repository assignment** or one that **doesn't
+  use the built-in autograder**. Neither kind of repository carries the marker
+  file. As the error's hint says, `gh student submit` is not used there:
+  commit and `git push` directly.
 
 ### Submit pushed a commit but the teacher sees no new work
 

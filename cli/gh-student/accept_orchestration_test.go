@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -880,74 +881,219 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 	})
 
-	t.Run("template-less no_autograder -> provisions the marker only, no shim", func(t *testing.T) {
+	t.Run("template-less no_autograder -> commits nothing, no marker probe", func(t *testing.T) {
 		var (
-			refPatched bool
-			treePaths  []string
+			collaboratorPut bool
+			forbiddenCall   bool
 		)
 		mux := http.NewServeMux()
-		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
-			if refPatched {
-				_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+			writePermissionReadback(w, "push")
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			collaboratorPut = true
+			w.WriteHeader(http.StatusNoContent)
+		})
+		// A no_autograder accept leaves the repo exactly as GitHub created it
+		// (discussion #1045): every contents/git-data endpoint trips the flag.
+		for _, path := range []string{
+			markerPath,
+			"/repos/" + org + "/" + repoName + "/git/trees",
+			"/repos/" + org + "/" + repoName + "/git/blobs",
+			"/repos/" + org + "/" + repoName + "/git/commits",
+			"/repos/" + org + "/" + repoName + "/git/refs/heads/main",
+			"/repos/" + org + "/" + repoName + "/branches/main",
+		} {
+			mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
+				forbiddenCall = true
+				w.WriteHeader(http.StatusNotFound)
+			})
+		}
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		for _, alreadyExisted := range []bool{false, true} {
+			collaboratorPut, forbiddenCall = false, false
+			p := baseParams()
+			p.shim = ""
+			p.noAutograder = true
+			p.alreadyExisted = alreadyExisted
+			p.feedbackPRBody = feedbackBodySpec{autograded: false}
+			var out bytes.Buffer
+			if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p); err != nil {
+				t.Fatalf("acceptIntoRepo (no_autograder, alreadyExisted=%v): unexpected error: %v", alreadyExisted, err)
+			}
+			if forbiddenCall {
+				t.Errorf("alreadyExisted=%v: no_autograder accept must not probe, commit, or verify the marker", alreadyExisted)
+			}
+			if !collaboratorPut {
+				t.Errorf("alreadyExisted=%v: the founder grant is the only provisioning left and must run", alreadyExisted)
+			}
+			want := "Assignment accepted"
+			if alreadyExisted {
+				want = "Assignment already accepted"
+			}
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("alreadyExisted=%v: expected %q on stdout:\n%s", alreadyExisted, want, out.String())
+			}
+			// Not the bare repo's "no starter files" guidance: this repo has them.
+			if strings.Contains(out.String(), "empty repository") {
+				t.Errorf("alreadyExisted=%v: no_autograder report must not describe an empty repository:\n%s", alreadyExisted, out.String())
+			}
+		}
+	})
+
+	t.Run("no_autograder with feedback_pr + pages -> waits once, enables Pages, freezes feedback at the root", func(t *testing.T) {
+		var (
+			branchReads, pagesPosts, collaboratorPuts int
+			refBody                                   map[string]string
+			order                                     []string
+		)
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
+			branchReads++
+			order = append(order, "branch")
+			_ = json.NewEncoder(w).Encode(map[string]any{"commit": map[string]any{"sha": "seed"}})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/pages", func(w http.ResponseWriter, _ *http.Request) {
+			pagesPosts++
+			order = append(order, "pages")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"build_type": "legacy"})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/commits", func(w http.ResponseWriter, r *http.Request) {
+			// No marker commits (accept wrote none); the branch log's oldest
+			// entry is the template seed.
+			if r.URL.Query().Get("path") != "" {
+				_ = json.NewEncoder(w).Encode([]map[string]any{})
 				return
 			}
-			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"sha": "seed"}})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/pulls", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet {
+				_ = json.NewEncoder(w).Encode([]map[string]any{})
+				return
+			}
+			order = append(order, "pull")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/refs", func(w http.ResponseWriter, r *http.Request) {
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &refBody)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"ref": "refs/heads/feedback"})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/labels", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{}`)
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/issues/1/labels", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, `[]`)
 		})
 		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
 			writePermissionReadback(w, "push")
 		})
 		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			collaboratorPuts++
+			order = append(order, "grant")
 			w.WriteHeader(http.StatusNoContent)
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{"commit": map[string]any{"sha": "stable"}})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodGet:
-				_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": "parent"}})
-			case http.MethodPatch:
-				refPatched = true
-				w.WriteHeader(http.StatusOK)
-			}
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits/parent", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{"tree": map[string]string{"sha": "parent-tree"}})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/blobs", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob"})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/trees", func(w http.ResponseWriter, r *http.Request) {
-			var body struct {
-				Tree []struct {
-					Path string `json:"path"`
-				} `json:"tree"`
-			}
-			raw, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(raw, &body)
-			for _, e := range body.Tree {
-				treePaths = append(treePaths, e.Path)
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "tree"})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "commit"})
 		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
 
-		// A README-source no_autograder accept resolves no shim (CommitsShim
-		// false) and no template source; the marker is the only control file.
 		p := baseParams()
 		p.shim = ""
+		p.noAutograder = true
 		p.alreadyExisted = false
+		p.feedbackPR = true
 		p.feedbackPRBody = feedbackBodySpec{autograded: false}
+		p.pages = &assignments.Pages{Source: "branch", Branch: "main", Path: "/"}
 		var out bytes.Buffer
 		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p); err != nil {
-			t.Fatalf("acceptIntoRepo (no_autograder): unexpected error: %v", err)
+			t.Fatalf("acceptIntoRepo: unexpected error: %v", err)
 		}
-		if len(treePaths) != 1 || treePaths[0] != classroomcfg.MetadataPath {
-			t.Errorf("no_autograder tree = %v, want only %q", treePaths, classroomcfg.MetadataPath)
+		// One stable-branch wait serves both Pages and the PR (two identical
+		// reads is WaitForStableBranch's minimum), never one per step.
+		if branchReads != 2 {
+			t.Errorf("branch read %d times, want exactly 2 (one WaitForStableBranch)", branchReads)
+		}
+		if pagesPosts != 1 {
+			t.Errorf("Pages enabled %d times, want 1", pagesPosts)
+		}
+		if refBody["sha"] != "seed" {
+			t.Errorf("feedback base frozen at %q, want the root commit seed", refBody["sha"])
+		}
+		if collaboratorPuts != 1 {
+			t.Errorf("founder granted %d times, want 1", collaboratorPuts)
+		}
+		// Grant is last: the PR and Pages land before the founder's role can
+		// be narrowed.
+		if got := strings.Join(order, ","); !strings.HasSuffix(got, "grant") || !strings.Contains(got, "pages") || !strings.Contains(got, "pull") {
+			t.Errorf("step order = %s, want pages and pull before the final grant", got)
+		}
+		if !strings.Contains(out.String(), "Feedback pull request ready") {
+			t.Errorf("expected the feedback step on stdout:\n%s", out.String())
+		}
+	})
+
+	t.Run("no_autograder branch never settles -> warns, skips Pages and PR, still grants", func(t *testing.T) {
+		// Short-circuit the ~50s poll budget: the outcome under test is what
+		// accept does AFTER the wait gives up.
+		orig := waitForStableBranch
+		waitForStableBranch = func(githubapi.Client, string, string, string) error {
+			return errors.New("branch o/r:main did not stabilize")
+		}
+		t.Cleanup(func() { waitForStableBranch = orig })
+
+		var collaboratorPuts, pagesPosts, pullPosts int
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("the stubbed wait must be the only branch reader")
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/pages", func(w http.ResponseWriter, _ *http.Request) {
+			pagesPosts++
+			w.WriteHeader(http.StatusCreated)
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/pulls", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				pullPosts++
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+			writePermissionReadback(w, "push")
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			collaboratorPuts++
+			w.WriteHeader(http.StatusNoContent)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		p := baseParams()
+		p.shim = ""
+		p.noAutograder = true
+		p.alreadyExisted = false
+		p.feedbackPR = true
+		p.feedbackPRBody = feedbackBodySpec{autograded: false}
+		p.pages = &assignments.Pages{Source: "branch", Branch: "main", Path: "/"}
+		var out bytes.Buffer
+		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p); err != nil {
+			t.Fatalf("a failed branch wait must not fail the accept: %v", err)
+		}
+		if pagesPosts != 0 || pullPosts != 0 {
+			t.Errorf("Pages posts %d / PR posts %d, want 0/0 when the branch never settled", pagesPosts, pullPosts)
+		}
+		if collaboratorPuts != 1 {
+			t.Errorf("founder granted %d times, want 1: the grant must survive a failed wait", collaboratorPuts)
+		}
+		if !strings.Contains(out.String(), "run accept again to retry it") || !strings.Contains(out.String(), "submissions page") {
+			t.Errorf("warning must name the re-accept for the PR and the teacher for Pages:\n%s", out.String())
+		}
+		if !strings.Contains(out.String(), "Assignment accepted") {
+			t.Errorf("expected an accepted report on stdout:\n%s", out.String())
 		}
 	})
 

@@ -109,13 +109,13 @@ func TestCommitFiles_EmptyIsNoop(t *testing.T) {
 	}
 }
 
-// TestDropFiles_NoAutograderOmitsShim pins the no_autograder / empty-shim
-// behavior: an empty workflowContent must commit ONLY the .classroom50.yaml
-// marker, never an empty .github/workflows/autograde.yaml. A non-empty shim
-// still commits both. Also pins the init_shim README removal: the accept
-// commit deletes the auto_init README when asked, and skips the deletion
-// (rather than failing) when no README exists.
-func TestDropFiles_NoAutograderOmitsShim(t *testing.T) {
+// TestDropFiles_EmptyShimOmitsWorkflow pins the empty-shim behavior: an empty
+// workflowContent must commit ONLY the .classroom50.yaml marker, never an
+// empty .github/workflows/autograde.yaml. A non-empty shim still commits both.
+// Also pins the init_shim README removal: the accept commit deletes the
+// auto_init README when asked, and skips the deletion (rather than failing)
+// when no README exists.
+func TestDropFiles_EmptyShimOmitsWorkflow(t *testing.T) {
 	run := func(t *testing.T, workflowContent string, removeSeededReadme, readmeExists bool) (paths, deleted []string) {
 		var mu sync.Mutex
 		mux := http.NewServeMux()

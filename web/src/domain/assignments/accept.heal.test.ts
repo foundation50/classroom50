@@ -178,10 +178,9 @@ afterEach(() => {
 // On an init_shim repo the accept commit removes the auto_init README; that
 // must only happen while the branch is still at that seed.
 describe("acceptAssignment on a README-source no_autograder repo", () => {
-  // A README repo with the built-in autograder off gets marker-only
-  // provisioning: the auto_init README stays, and no shim is committed (the
-  // shape that used to silently commit the shim before no_autograder covered
-  // template-less repos).
+  // A README repo with the built-in autograder off gets NO provisioning
+  // commit: the auto_init README stays and neither the marker nor the shim is
+  // written, so the repo is exactly what GitHub created (discussion #1045).
   const README_NO_AUTOGRADER: Assignment = {
     slug: SLUG,
     name: "Homework 1",
@@ -191,7 +190,7 @@ describe("acceptAssignment on a README-source no_autograder repo", () => {
     no_autograder: true,
   }
 
-  it("commits only the .classroom50.yaml marker, keeps the README, and skips the shim", async () => {
+  it("commits nothing: no marker, no shim, README kept", async () => {
     mocked.assignment = README_NO_AUTOGRADER
     const { client, treeBodies, requests } = makeClient({
       repoExists: false,
@@ -205,12 +204,36 @@ describe("acceptAssignment on a README-source no_autograder repo", () => {
       assignmentSlug: SLUG,
     })
     expect(result.status).toBe("created")
-    expect(treeBodies).toHaveLength(1)
-    expect(treeBodies[0].tree.map((e) => e.path)).toEqual([".classroom50.yaml"])
-    expect(deletedPaths(treeBodies)).toEqual([])
+    expect(treeBodies).toEqual([])
+    expect(
+      requests.some((r) => r.startsWith("POST") && r.includes("/git/")),
+    ).toBe(false)
     // No Pages fetch for a shim and no template generate: a plain auto_init create.
     expect(requests).toContain(`POST /orgs/${ORG}/repos`)
     expect(requests.some((r) => r.includes("/generate"))).toBe(false)
+    // The founder grant still lands: it is the only provisioning left.
+    expect(requests.some((r) => r.includes("/collaborators/"))).toBe(true)
+  })
+
+  it("treats an existing repo as accepted without probing the marker", async () => {
+    mocked.assignment = README_NO_AUTOGRADER
+    const { client, treeBodies, requests } = makeClient({
+      repoExists: true,
+      markerPresent: false,
+      headParents: [],
+    })
+    const result = await acceptAssignment({
+      client,
+      org: ORG,
+      classroom: CLASSROOM,
+      assignmentSlug: SLUG,
+    })
+    // A missing marker is the norm for this shape, never a half-finished
+    // accept to repair.
+    expect(result.status).toBe("already-accepted")
+    expect(treeBodies).toEqual([])
+    expect(requests.some((r) => r.includes("/contents/"))).toBe(false)
+    expect(requests.some((r) => r.includes("/collaborators/"))).toBe(true)
   })
 })
 

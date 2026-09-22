@@ -960,11 +960,12 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
 
 def is_no_autograder(entry: dict[str, Any]) -> bool:
     """True only when no_autograder is the boolean `true` (strict, like
-    is_empty_repo). A no_autograder assignment commits no shim, so it
-    never autogrades and produces no submit/* releases: regrade skips it and
-    collection detects its submissions from repo state, exactly like empty_repo.
-    Keep byte-identical across collect/regrade and the autograde-runner read
-    step so every tool agrees."""
+    is_empty_repo). A no_autograder assignment commits no shim and no marker
+    (accept leaves the repo as GitHub created it), so it never autogrades and
+    produces no submit/* releases: regrade skips it and collection detects its
+    submissions from repo state, with the root commit as the baseline. Keep
+    byte-identical across collect/regrade and the autograde-runner read step so
+    every tool agrees."""
     return entry.get("no_autograder") is True
 
 
@@ -1196,6 +1197,11 @@ class SubmissionDetector:
         raw_tags = entry.get("submission_tags")
         self._tags = [t for t in (raw_tags or []) if isinstance(t, str) and t]
         self._due = due
+        # An initialized repo's root commit is the seed, never a submission, so
+        # it anchors the baseline when no marker does (a no_autograder accept,
+        # or the window between turning the autograder on and the backfill). A
+        # bare empty_repo has no seed: its root commit is student work.
+        self._root_is_baseline = not is_empty_repo(entry)
 
     def detect(self, username: str, repo_name: str) -> tuple[dict[str, Any] | None, bool]:
         facts = (
@@ -1210,6 +1216,7 @@ class SubmissionDetector:
                 self._mode,
                 self._tags,
                 facts=facts,
+                root_is_baseline=self._root_is_baseline,
             )
         except urllib.error.HTTPError as exc:
             if classify(exc) is not SKIPPABLE:
@@ -3038,12 +3045,17 @@ def _repo_url(api_url: str, owner: str, repo: str) -> str:
 # backfill after the built-in autograder is turned on). None is student work, so
 # none counts as a submission. Hand-mirrored with cli/shared/contract's
 # PrefixCommit forms and the web's TOOL_COMMIT_SUBJECTS.
+#
+# The backfill subject also matters to the BASELINE: a marker that commit
+# introduced belongs to a repo accepted without one (no_autograder), whose
+# baseline is the root commit. Mirrors runner.py SHIM_BACKFILL_COMMIT_SUBJECT.
+SHIM_BACKFILL_COMMIT_SUBJECT = "[Classroom 50] Add autograde workflow (enable-autograder)"
 TOOL_COMMIT_SUBJECTS = frozenset(
     {
         "[Classroom 50] Open Feedback PR (gh student accept)",
         "[Classroom 50] Update autograder trigger to every-push (submission-mode)",
         "[Classroom 50] Update autograder trigger to tag (submission-mode)",
-        "[Classroom 50] Add autograde workflow (enable-autograder)",
+        SHIM_BACKFILL_COMMIT_SUBJECT,
     }
 )
 
@@ -3252,6 +3264,35 @@ def list_default_branch_commits(
     )
 
 
+def marker_baseline(
+    api_url: str, owner: str, repo: str, token: str
+) -> tuple[str | None, bool]:
+    """The accept-marker baseline: (sha, backfilled). sha is the oldest commit
+    touching the marker, None when none does (a bare or no_autograder repo).
+    backfilled is True when that oldest commit is the enable-autograder
+    backfill: the repo was accepted without a marker, so the caller must use
+    the root commit instead of moving the baseline onto the backfill."""
+    commits = _paginate_objects(
+        lambda page: (
+            f"{_repo_url(api_url, owner, repo)}/commits"
+            f"?path={urllib.parse.quote(ACCEPT_MARKER_PATH, safe='')}&per_page=100&page={page}"
+        ),
+        api_url,
+        token,
+        f"{owner}/{repo} marker history",
+    )
+    if not commits:
+        return None, False
+    oldest = commits[-1]
+    sha = oldest.get("sha")
+    if not isinstance(sha, str) or not sha:
+        return None, False
+    message = (oldest.get("commit") or {}).get("message")
+    if commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT:
+        return None, True
+    return sha, False
+
+
 def oldest_commit_sha_for_path(
     api_url: str, owner: str, repo: str, path: str, token: str
 ) -> str | None:
@@ -3294,6 +3335,7 @@ def detect_repo_submissions(
     mode: str,
     submission_tags: list[str],
     facts: RepoFacts | None = None,
+    root_is_baseline: bool = False,
 ) -> list[dict[str, Any]]:
     """One repo's detected submissions. Branch mode reads the default branch, its
     accept-marker baseline and its commit log; tag mode reads its tags. Returns
@@ -3302,7 +3344,14 @@ def detect_repo_submissions(
     `facts` is what the org listing already said about the repo (RepoIndex): a
     known default branch spares the GET /repos read that only existed to learn
     it. A commitless repo is learned from the read itself (409), never from the
-    listing's lagging `size`, at the cost of one request per bare repo."""
+    listing's lagging `size`, at the cost of one request per bare repo.
+
+    `root_is_baseline` marks an initialized (non-empty_repo) repo: when no
+    marker commit anchors the baseline, the root commit (the template or README
+    seed) is it, rather than a submission. Off only for a bare empty_repo, whose
+    root commit IS the student's first push. A marker still wins when present,
+    unless the enable-autograder backfill introduced it: that repo was accepted
+    without one (no_autograder), so it keeps the root baseline."""
     try:
         if mode == "tag":
             tags = list_repo_tags(api_url, org, repo_name, token)
@@ -3315,12 +3364,14 @@ def detect_repo_submissions(
             branch = (info or {}).get("default_branch")
         if not isinstance(branch, str) or not branch:
             return []  # not accepted
-        baseline = oldest_commit_sha_for_path(
-            api_url, org, repo_name, ACCEPT_MARKER_PATH, token
-        )
+        baseline, backfilled = marker_baseline(api_url, org, repo_name, token)
         commits = list_default_branch_commits(
             api_url, org, repo_name, branch, token, stop_at_sha=baseline
         )
+        if baseline is None and (root_is_baseline or backfilled) and commits:
+            # Newest first, so the walk (unbounded without a marker) ends on
+            # the root commit.
+            baseline = commits[-1].get("sha")
     except urllib.error.HTTPError as exc:
         # 409 "Git Repository is empty": a bare repo nobody has pushed to yet,
         # so "no submissions" rather than a failed read.

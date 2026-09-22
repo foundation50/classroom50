@@ -69,10 +69,10 @@ Two related, optional settings:
   100) at or above which the submissions page shows a submission as *passing*
   (badges, passing/failing rollups, and filters). It never changes a student's
   actual score, and leaving it off turns the passing concept off.
-- **Do not use the built-in autograder** (`no_autograder`). Accept installs
-  no autograding workflow at all; a template's own CI runs instead, a README
-  repository simply has no autograder, and score collection records who
-  submitted but no scores. See
+- **Do not use the built-in autograder** (`no_autograder`). Accept adds no
+  Classroom 50 files at all (no autograding workflow, no `.classroom50.yaml`);
+  a template's own CI runs instead, a README repository simply has no
+  autograder, and score collection records who submitted but no scores. See
   [Turning autograding off or pausing it](Managing-Actions-Cost#turning-autograding-off-or-pausing-it).
 
 ### Declarative tests
