@@ -11,16 +11,17 @@ description: >
   that ships in the HTML, so repository variables are right, not secrets. An
   unset variable leaves that vendor off; the step summary says which ran.
 
-  Takes the repository variables as JSON (`${{ toJSON(vars) }}`) because the
-  `vars` context is not available inside a composite action. Delete a vendor's
-  row here, or unset its variable, to ship without it.
+  Takes the repository variables as JSON (the caller passes `toJSON(vars)` as
+  an expression) because the `vars` context is not available inside a
+  composite action. Delete a vendor's row here, or unset its variable, to ship
+  without it.
 
 inputs:
   environment:
     description: Which deployment this build is for, `production` or `preview`.
     required: true
   variables:
-    description: The caller's repository variables, `${{ toJSON(vars) }}`.
+    description: The caller's repository variables as JSON, from the `toJSON(vars)` expression.
     required: true
 
 runs:
