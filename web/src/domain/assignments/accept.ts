@@ -46,6 +46,7 @@ import {
   isDefaultAutograder,
   defaultAutograderWorkflow,
 } from "./autograderYaml"
+import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import {
   addFounderCollaborator,
   founderPermission,
@@ -1343,7 +1344,7 @@ export async function acceptAssignment(params: {
         client,
         org,
         created.repo.name,
-        ".classroom50.yaml",
+        ACCEPT_MARKER_PATH,
       ),
       repoContentsPathExists(
         client,

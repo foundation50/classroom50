@@ -78,20 +78,27 @@ describe("getMarkerBaseline", () => {
 describe("baselineSource", () => {
   it("prefers a real marker commit whatever the shape says", () => {
     const marker = { sha: "accept", backfilled: false }
-    expect(baselineSource(marker)).toBe("marker")
-    expect(baselineSource(marker, { rootIsBaseline: true })).toBe("marker")
+    const want = { source: "marker", sha: "accept" }
+    expect(baselineSource(marker)).toEqual(want)
+    expect(baselineSource(marker, { rootIsBaseline: true })).toEqual(want)
   })
 
   it("moves a backfilled marker to the root, even for a built-in shape", () => {
     const marker = { sha: "backfill", backfilled: true }
-    expect(baselineSource(marker)).toBe("root")
-    expect(baselineSource(marker, { rootIsBaseline: false })).toBe("root")
+    expect(baselineSource(marker)).toEqual({ source: "root" })
+    expect(baselineSource(marker, { rootIsBaseline: false })).toEqual({
+      source: "root",
+    })
   })
 
   it("uses the root with no marker only when the shape says the root is the seed", () => {
-    expect(baselineSource(null, { rootIsBaseline: true })).toBe("root")
-    expect(baselineSource(null)).toBe("none")
-    expect(baselineSource(null, { rootIsBaseline: false })).toBe("none")
+    expect(baselineSource(null, { rootIsBaseline: true })).toEqual({
+      source: "root",
+    })
+    expect(baselineSource(null)).toEqual({ source: "none" })
+    expect(baselineSource(null, { rootIsBaseline: false })).toEqual({
+      source: "none",
+    })
   })
 
   // The web half of the baseline lockstep: the same golden cases Go
@@ -126,7 +133,7 @@ describe("baselineSource", () => {
           ? null
           : { sha: "x", backfilled: isShimBackfillCommit(c.marker_message) }
       expect(
-        baselineSource(marker, { rootIsBaseline: c.root_is_baseline }),
+        baselineSource(marker, { rootIsBaseline: c.root_is_baseline }).source,
       ).toBe(c.expected)
     })
   })

@@ -9,6 +9,7 @@ import type {
 } from "../types"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { isShimBackfillCommit } from "@/util/commit"
+import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import { tolerateGitHubError } from "../errors"
 import {
   PAGE_FETCH_CONCURRENCY,
@@ -79,7 +80,7 @@ export async function getMarkerBaseline(
   }>(
     client,
     (page) =>
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(MARKER_PATH)}&per_page=100&page=${page}`,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(ACCEPT_MARKER_PATH)}&per_page=100&page=${page}`,
   )
   // Newest-first, so the last entry is the commit that introduced the marker.
   const oldest = commits.at(-1)
@@ -93,24 +94,24 @@ export async function getMarkerBaseline(
 // Which commit anchors a repo's baseline, given its marker history and shape.
 // The one place the marker -> backfilled -> root rule lives; every reader
 // (Feedback PR base, teacher repair, submission detection) decides through it.
-//   "marker": the marker's introducing commit (marker.sha).
-//   "root":   the branch's root commit: the marker was backfilled (that repo
-//             was accepted without one), or there is no marker and the shape
-//             says the root is the seed (rootIsBaseline).
-//   "none":   no baseline (a bare empty_repo, or a built-in assignment whose
-//             accept never finished).
-export type BaselineSource = "marker" | "root" | "none"
+//   marker: the marker's introducing commit, carried as `sha` so callers never
+//           reach back into a possibly-null marker.
+//   root:   the branch's root commit: the marker was backfilled (that repo
+//           was accepted without one), or there is no marker and the shape
+//           says the root is the seed (rootIsBaseline).
+//   none:   no baseline (a bare empty_repo, or a built-in assignment whose
+//           accept never finished).
+export type BaselineSource =
+  { source: "marker"; sha: string } | { source: "root" } | { source: "none" }
 
 export function baselineSource(
   marker: MarkerBaseline | null,
   options: { rootIsBaseline?: boolean } = {},
 ): BaselineSource {
-  if (marker && !marker.backfilled) return "marker"
-  if (marker?.backfilled || options.rootIsBaseline) return "root"
-  return "none"
+  if (marker && !marker.backfilled) return { source: "marker", sha: marker.sha }
+  if (marker?.backfilled || options.rootIsBaseline) return { source: "root" }
+  return { source: "none" }
 }
-
-const MARKER_PATH = ".classroom50.yaml"
 
 // The ROOT commit of `branch`, or null on a commitless repo. The Feedback-PR
 // and submission baseline for a no_autograder repo, which carries no marker:

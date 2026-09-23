@@ -12,6 +12,7 @@ import { parseDocument, isMap, isScalar } from "yaml"
 
 import type { GitHubClient } from "@/github-core/client"
 import type { Assignment } from "@/types/classroom"
+import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import {
   getAssignmentsFile,
@@ -450,7 +451,7 @@ async function renameOneRepo(params: {
       const raw = await getRepoFileAtRef(client, {
         owner: org,
         repo,
-        path: ".classroom50.yaml",
+        path: ACCEPT_MARKER_PATH,
         ref: head.headSha,
       })
       if (raw === null) {
@@ -506,7 +507,7 @@ async function renameOneRepo(params: {
         head,
         [
           {
-            path: ".classroom50.yaml",
+            path: ACCEPT_MARKER_PATH,
             mode: "100644",
             type: "blob",
             content: rewrite.content ?? "",

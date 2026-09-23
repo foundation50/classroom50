@@ -471,9 +471,10 @@ export async function resolveFeedbackBaselineSha(
   } catch {
     return null
   }
-  switch (baselineSource(marker, options)) {
+  const baseline = baselineSource(marker, options)
+  switch (baseline.source) {
     case "marker":
-      return marker!.sha
+      return baseline.sha
     case "root":
       if (!options.branch) return null
       return getRootCommitSha(client, org, repo, options.branch).catch(
@@ -533,9 +534,10 @@ export async function repairFeedbackPullRequest(params: {
   let acceptCommitSha: string | null
   try {
     const marker = await getMarkerBaseline(client, org, repo)
-    switch (baselineSource(marker, { rootIsBaseline: !autograded })) {
+    const baseline = baselineSource(marker, { rootIsBaseline: !autograded })
+    switch (baseline.source) {
       case "marker":
-        acceptCommitSha = marker!.sha
+        acceptCommitSha = baseline.sha
         break
       case "root":
         acceptCommitSha = await getRootCommitSha(client, org, repo, branch)
