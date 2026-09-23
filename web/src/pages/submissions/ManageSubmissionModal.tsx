@@ -50,7 +50,7 @@ const SubmissionDetails = ({
   repoLoading,
   latestCommitHref,
   canPauseAutograding = false,
-  emptyRepoAssignment = false,
+  skipsGrading = false,
   pagesConfigured = false,
 }: {
   org: string
@@ -63,9 +63,9 @@ const SubmissionDetails = ({
   // Whether this assignment autogrades (owner + default-autograder). Gates the
   // read-only "Autograding" status row so it only shows where a shim exists.
   canPauseAutograding?: boolean
-  // An empty_repo assignment never writes the setup marker, so there is no
-  // incomplete-setup state to probe for.
-  emptyRepoAssignment?: boolean
+  // An empty_repo or no_autograder assignment never writes the setup marker,
+  // so there is no incomplete-setup state to probe for.
+  skipsGrading?: boolean
   // The assignment configures GitHub Pages: show a "Not enabled" row for a repo
   // without a site. A repo with a site shows its row regardless (someone may
   // have enabled it by hand).
@@ -82,7 +82,7 @@ const SubmissionDetails = ({
   })
   // Distinguishes "accepted" (repo exists) from "set up" (marker landed).
   const repoSetup = useAssignmentRepoSetup(org, repo, {
-    enabled: !emptyRepoAssignment,
+    enabled: !skipsGrading,
   })
 
   const ownerLogin = normalizeUsername(owner)
@@ -470,7 +470,7 @@ export const ManageSubmissionModal = ({
           repoLoading={repoLoading}
           latestCommitHref={latestCommitHref}
           canPauseAutograding={action.canPauseAutograding}
-          emptyRepoAssignment={action.emptyRepoAssignment}
+          skipsGrading={action.skipsGrading}
           pagesConfigured={Boolean(action.assignmentPages)}
         />
       ) : null}

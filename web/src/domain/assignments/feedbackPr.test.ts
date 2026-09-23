@@ -7,11 +7,15 @@ import {
   feedbackPrBody,
   ensureFeedbackPullRequest,
   repairFeedbackPullRequest,
+  resolveFeedbackBaselineSha,
   openAllFeedbackPullRequests,
   readTemplatePrBody,
 } from "./feedbackPr"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
-import { FEEDBACK_OPEN_COMMIT_MESSAGE } from "@/util/commit"
+import {
+  FEEDBACK_OPEN_COMMIT_MESSAGE,
+  SHIM_BACKFILL_COMMIT_MESSAGE,
+} from "@/util/commit"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 
@@ -550,6 +554,9 @@ function fakeRepairClient(opts: {
   repoMissing?: boolean
   defaultBranch?: string
   markerCommits?: string[] // oldest resolves to markerCommits[last]
+  // The default branch's full log, newest-first (the root-commit fallback
+  // takes the last). Defaults to a single "accept-sha" root.
+  branchCommits?: string[]
   // HTTP status the marker commit-history read fails with (a 5xx / rate limit).
   markerReadError?: number
   existingPr?: { number: number; state: string }
@@ -570,8 +577,15 @@ function fakeRepairClient(opts: {
         if (opts.markerReadError) {
           throw apiError(opts.markerReadError, "Server Error")
         }
-        // getOldestCommitShaForPath returns newest-first; it takes the last.
-        return (opts.markerCommits ?? []).map((sha) => ({ sha }))
+        // getMarkerBaseline returns newest-first; it takes the last. An entry
+        // written as "sha|message" carries a commit subject.
+        return (opts.markerCommits ?? []).map((entry) => {
+          const [sha, message] = entry.split("|")
+          return message ? { sha, commit: { message } } : { sha }
+        })
+      }
+      if (url.startsWith("/repos/o/r/commits?sha=")) {
+        return (opts.branchCommits ?? ["accept-sha"]).map((sha) => ({ sha }))
       }
       if (url.startsWith("/repos/o/r/pulls?")) {
         return opts.existingPr ? [opts.existingPr] : []
@@ -676,6 +690,50 @@ describe("repairFeedbackPullRequest", () => {
     expect(writeCalls(calls)).toHaveLength(0)
   })
 
+  // A no_autograder accept writes no marker, so the repo's root commit (the
+  // template seed) is the baseline the feedback branch freezes at.
+  it("anchors a no_autograder repo on its root commit when the marker is absent", async () => {
+    const { client, calls } = fakeRepairClient({
+      markerCommits: [],
+      branchCommits: ["work", "accept-sha"],
+    })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+      autograded: false,
+    })
+    expect(result).toEqual({ ok: true, created: true })
+    const refCreate = calls.find(
+      (c) => c.url === "/repos/o/r/git/refs" && c.method === "POST",
+    )
+    expect(refCreate?.body).toMatchObject({
+      ref: "refs/heads/feedback",
+      sha: "accept-sha",
+    })
+  })
+
+  it("still reports no-baseline for a commitless no_autograder repo", async () => {
+    const { client, calls } = fakeRepairClient({
+      markerCommits: [],
+      branchCommits: [],
+    })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+      autograded: false,
+    })
+    expect(result).toEqual({
+      ok: false,
+      reason: "no-baseline",
+      unsupported: true,
+    })
+    expect(writeCalls(calls)).toHaveLength(0)
+  })
+
   // "no-baseline" sends the teacher to the student ("re-run setup"), so it
   // must never be the verdict for a read that simply failed (issue #502 review).
   it("reports a transient failure, not no-baseline, when the marker read fails", async () => {
@@ -776,6 +834,71 @@ function fakeBatchClient() {
   )
   return { client: { request } as unknown as GitHubClient }
 }
+
+// A marker the enable-autograder backfill introduced belongs to a repo
+// accepted without one: both resolvers anchor it on the root commit, whatever
+// the assignment's flag says today, so a Feedback PR the no_autograder accept
+// froze at the root keeps matching the runner's baseline.
+describe("baseline resolution after the shim backfill", () => {
+  it("repair anchors a backfilled marker on the root even for an autograded entry", async () => {
+    const { client, calls } = fakeRepairClient({
+      markerCommits: [`backfill-sha|${SHIM_BACKFILL_COMMIT_MESSAGE}`],
+      branchCommits: ["backfill-sha", "work", "accept-sha"],
+    })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+      autograded: true,
+    })
+    expect(result).toEqual({ ok: true, created: true })
+    const refCreate = calls.find(
+      (c) => c.url === "/repos/o/r/git/refs" && c.method === "POST",
+    )
+    expect(refCreate?.body).toMatchObject({ sha: "accept-sha" })
+  })
+
+  it("accept-side resolver anchors a backfilled marker on the root", async () => {
+    const { client } = fakeRepairClient({
+      markerCommits: [`backfill-sha|${SHIM_BACKFILL_COMMIT_MESSAGE}`],
+      branchCommits: ["backfill-sha", "accept-sha"],
+    })
+    await expect(
+      resolveFeedbackBaselineSha(client, "o", "r", { branch: "main" }),
+    ).resolves.toBe("accept-sha")
+  })
+
+  it("accept-side resolver keeps a real marker commit", async () => {
+    const { client } = fakeRepairClient({
+      markerCommits: ["newer", "accept-sha"],
+      branchCommits: ["newer", "accept-sha", "seed"],
+    })
+    await expect(
+      resolveFeedbackBaselineSha(client, "o", "r", {
+        branch: "main",
+        rootIsBaseline: true,
+      }),
+    ).resolves.toBe("accept-sha")
+  })
+
+  // The CLI twins only fall to the root on a definitive empty history; a
+  // transient marker read failure must defer, never freeze a marker-carrying
+  // repo at the wrong commit.
+  it("accept-side resolver defers on a transient marker read failure", async () => {
+    const { client, calls } = fakeRepairClient({
+      markerReadError: 500,
+      branchCommits: ["work", "seed"],
+    })
+    await expect(
+      resolveFeedbackBaselineSha(client, "o", "r", {
+        branch: "main",
+        rootIsBaseline: true,
+      }),
+    ).resolves.toBeNull()
+    expect(calls.some((c) => c.url.includes("commits?sha="))).toBe(false)
+  })
+})
 
 describe("openAllFeedbackPullRequests", () => {
   it("classifies each repo and reports progress to completion", async () => {

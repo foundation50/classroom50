@@ -58,7 +58,10 @@ func assignmentRenameCmd() *cobra.Command {
 			"     rewritten ([skip ci]), then the repo is renamed. GitHub\n" +
 			"     redirects git/web/API traffic from the old name indefinitely,\n" +
 			"     so student clones keep working; grading picks up the new slug\n" +
-			"     on the next run.\n" +
+			"     on the next run. An assignment without the built-in autograder\n" +
+			"     has no marker, so its repos are matched by prefix alone; repos\n" +
+			"     of a removed assignment whose slug extended this one would be\n" +
+			"     renamed too, so delete those first.\n" +
 			"  3. The lock is restored to its pre-rename state.\n\n" +
 			"Per-repo failures never abort the batch: they're reported with\n" +
 			"fixes, and re-running the same command resumes. Already-renamed\n" +
@@ -166,8 +169,12 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	}
 	resume := false
 	prevLocked := false
+	// A no_autograder assignment's repos carry no marker by design, so the
+	// fan-out falls back to prefix ownership for them (see renameOneRepo).
+	markerless := false
 	if idx, ok := assignment.FindAssignment(preFile.Assignments, p.oldSlug); ok {
 		entry := preFile.Assignments[idx]
+		markerless = entry.NoAutograder
 		if entry.RenamedFrom != "" {
 			return fmt.Errorf("assignment %q was already renamed once (from %q); a rename is one-shot, so it can't be renamed again", p.oldSlug, entry.RenamedFrom)
 		}
@@ -186,6 +193,7 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 		// The config commit already landed (a prior run died mid-fan-out, or
 		// this is a deliberate re-run to heal stragglers).
 		resume = true
+		markerless = preFile.Assignments[idx].NoAutograder
 	} else {
 		return fmt.Errorf("assignment %q not found in %s/%s/%s: run `gh teacher assignment list %s %s` to see available slugs",
 			p.oldSlug, p.org, configrepo.ConfigRepoName, assignmentsFilePath(p.classroom), p.org, p.classroom)
@@ -201,6 +209,28 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	}
 	oldPrefix := contract.AssignmentRepoPrefix(p.classroom, p.oldSlug)
 	newPrefix := contract.AssignmentRepoPrefix(p.classroom, p.newSlug)
+	// For a markerless assignment, the classroom's other slugs whose repo
+	// prefix extends this one ("hw" vs "hw-extra") are the over-match a marker
+	// would have caught; their repos are skipped as foreign. A sibling's
+	// previous slug counts too: repos a partially completed sibling rename
+	// left behind still carry the old prefix.
+	var siblingPrefixes []siblingPrefix
+	if markerless {
+		addSibling := func(slug string) {
+			if slug == "" || strings.EqualFold(slug, p.oldSlug) || strings.EqualFold(slug, p.newSlug) {
+				return
+			}
+			prefix := contract.AssignmentRepoPrefix(p.classroom, slug)
+			if strings.HasPrefix(prefix, oldPrefix) || strings.HasPrefix(prefix, newPrefix) {
+				siblingPrefixes = append(siblingPrefixes, siblingPrefix{slug: slug, prefix: prefix})
+			}
+		}
+		for _, a := range preFile.Assignments {
+			addSibling(a.Slug)
+			addSibling(a.RenamedFrom)
+		}
+	}
+	ownership := markerOwnership{markerless: markerless, siblings: siblingPrefixes}
 	var toRename, toHeal []string
 	for _, name := range names {
 		switch {
@@ -222,9 +252,13 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 			p.org, configrepo.ConfigRepoName, p.classroom, mode, p.oldSlug, p.newSlug, len(toRename), len(toHeal))
 	}
 	if p.dryRun {
+		markerNote := " (after rewriting its marker)"
+		if markerless {
+			markerNote = ""
+		}
 		for _, repo := range toRename {
-			_, _ = fmt.Fprintf(out, "  would rename %s -> %s%s (after rewriting its marker)\n",
-				repo, newPrefix, strings.TrimPrefix(repo, oldPrefix))
+			_, _ = fmt.Fprintf(out, "  would rename %s -> %s%s%s\n",
+				repo, newPrefix, strings.TrimPrefix(repo, oldPrefix), markerNote)
 		}
 		for _, repo := range toHeal {
 			_, _ = fmt.Fprintf(out, "  would re-check the marker of %s\n", repo)
@@ -260,10 +294,10 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	// repo-rename fan-out a liability (mirrors the shim retrofit).
 	var results []repoRenameResult
 	for _, repo := range toRename {
-		results = append(results, renameOneRepo(client, p, repo, oldPrefix, newPrefix, false))
+		results = append(results, renameOneRepo(client, p, repo, oldPrefix, newPrefix, false, ownership))
 	}
 	for _, repo := range toHeal {
-		results = append(results, renameOneRepo(client, p, repo, oldPrefix, newPrefix, true))
+		results = append(results, renameOneRepo(client, p, repo, oldPrefix, newPrefix, true, ownership))
 	}
 	failed := 0
 	for _, r := range results {
@@ -444,18 +478,46 @@ func setRenamedEntryLocked(client githubapi.Client, p renameParams, branch strin
 	return err
 }
 
+// siblingPrefix is another assignment in the classroom whose student-repo
+// prefix extends the renamed one, so a prefix match alone can't tell them apart.
+type siblingPrefix struct {
+	slug, prefix string
+}
+
+// markerOwnership is how renameOneRepo decides a prefix-matched repo is ours.
+// Marker-carrying assignments verify through the marker; a no_autograder
+// assignment (markerless) has none, so the prefix decides, with the sibling
+// prefixes ruling out the over-match the marker would have caught.
+type markerOwnership struct {
+	markerless bool
+	siblings   []siblingPrefix
+}
+
+// foreignSibling reports the sibling slug a markerless repo's name also
+// matches, if any: a prefix match alone can't rule that repo out as ours.
+func (o markerOwnership) foreignSibling(repo string) (slug string, ok bool) {
+	for _, s := range o.siblings {
+		if strings.HasPrefix(repo, s.prefix) {
+			return s.slug, true
+		}
+	}
+	return "", false
+}
+
 // renameOneRepo handles a single candidate repo: verify ownership via the
 // marker, rewrite the marker's `assignment` field ([skip ci]), then PATCH the
 // repo name. `healing` marks a repo already at the new name (resume path), so
 // only the marker is checked/rewritten. Ownership is marker-gated because the
 // prefix can over-match a sibling slug — a proper sibling repo carries a
-// marker naming ITS slug and is skipped untouched.
+// marker naming ITS slug and is skipped untouched. A markerless assignment's
+// repos fall back to prefix ownership (see markerOwnership); a marker one of
+// them happens to carry (accepted before the marker was dropped) still wins.
 //
 // Marker before rename, on purpose: the config already carries the new slug,
 // so a marker pointing at it grades correctly even while the repo still has
 // its old name; the reverse order leaves a window where the runner hard-fails
 // the manifest lookup.
-func renameOneRepo(client githubapi.Client, p renameParams, repo, oldPrefix, newPrefix string, healing bool) repoRenameResult {
+func renameOneRepo(client githubapi.Client, p renameParams, repo, oldPrefix, newPrefix string, healing bool, ownership markerOwnership) repoRenameResult {
 	newName := repo
 	if !healing {
 		newName = newPrefix + strings.TrimPrefix(repo, oldPrefix)
@@ -484,8 +546,14 @@ func renameOneRepo(client githubapi.Client, p renameParams, repo, oldPrefix, new
 			return nil, err
 		}
 		if !exists {
-			missing = "no " + contract.MetadataPath + ": ownership can't be verified, repo left untouched (re-accept heals the marker, then re-run)"
-			return nil, nil
+			if !ownership.markerless {
+				missing = "no " + contract.MetadataPath + ": ownership can't be verified, repo left untouched (re-accept heals the marker, then re-run)"
+				return nil, nil
+			}
+			if slug, ok := ownership.foreignSibling(repo); ok {
+				foreign = fmt.Sprintf("name also matches assignment %q, a sibling slug sharing the prefix, and this assignment's repos carry no marker to tell them apart; left untouched", slug)
+			}
+			return nil, nil // else ours by prefix; nothing to rewrite
 		}
 		rewritten, changed, current, err := rewriteMarkerAssignment(raw, p.oldSlug, p.newSlug)
 		if err != nil {

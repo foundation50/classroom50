@@ -589,7 +589,7 @@ class TestNoAutograder:
 
     def test_no_autograder_accepted_without_template(self):
         # A README-initialized repo with the built-in autograder off: accept
-        # commits only the marker. Only empty_repo is the bare shape.
+        # commits nothing (no marker, no shim). Only empty_repo is the bare shape.
         entry = self._entry(feedback_pr=True)
         del entry["template"]
         assert _errors(_manifest(entry)) == []

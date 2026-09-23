@@ -181,4 +181,12 @@ func TestShimBackfillCommitMessage(t *testing.T) {
 	if got != want {
 		t.Errorf("ShimBackfillCommitMessage = %q, want %q", got, want)
 	}
+	// The subject the baseline readers (runner.py, collect_scores.py, the web,
+	// both CLIs) compare against; pinned so none can drift.
+	if s := ShimBackfillCommitSubject(); s != "[Classroom 50] Add autograde workflow (enable-autograder)" {
+		t.Errorf("ShimBackfillCommitSubject = %q", s)
+	}
+	if s := CommitSubject("  first line \nbody\n[skip ci]"); s != "first line" {
+		t.Errorf("CommitSubject = %q, want trimmed first line", s)
+	}
 }

@@ -95,4 +95,39 @@ describe("useGetMyPushSubmissions", () => {
     )
     expect(request).not.toHaveBeenCalled()
   })
+
+  // No marker commit: the root is the seed of every initialized repo and is
+  // excluded by default; only a bare empty_repo (rootIsBaseline false) counts
+  // its root commit, which is the student's first push.
+  it("treats the root commit as the baseline unless the caller says the repo is bare", async () => {
+    const markerless = branchClient({
+      defaultBranch: "main",
+      baselineCommits: [],
+      branchCommits: [{ sha: "work" }, { sha: "seed" }],
+    })
+    request.mockImplementation(markerless)
+    const initialized = renderHook(
+      () => useGetMyPushSubmissions("acme", "cs101", "hw1", "alice"),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() =>
+      expect(initialized.result.current.isFetching).toBe(false),
+    )
+    expect((initialized.result.current.data ?? []).map((c) => c.sha)).toEqual([
+      "work",
+    ])
+
+    const bare = renderHook(
+      () =>
+        useGetMyPushSubmissions("acme", "cs101", "hw1", "alice", {
+          rootIsBaseline: false,
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(bare.result.current.isFetching).toBe(false))
+    expect((bare.result.current.data ?? []).map((c) => c.sha)).toEqual([
+      "work",
+      "seed",
+    ])
+  })
 })

@@ -104,8 +104,22 @@ func isFeedbackPRRetryable(err error) bool {
 // branch is the repo's settled default branch (the head the PR opens against),
 // resolved once by the caller from the same repo-object read that gates
 // not-accepted-yet, so this never re-fetches it.
-func ensureFeedbackPullRequest(client githubapi.Client, org, repoName, branch, mode string, body feedbackBodySpec) error {
-	acceptSHA := memoizeSHA(func() (string, error) { return acceptCommitSHA(client, org, repoName) })
+//
+// markerless is the no_autograder shape: accept writes no marker, so the
+// baseline falls back to the branch's root commit (the template or README
+// seed). A marker still wins when present (repos accepted before the marker was
+// dropped), unless the enable-autograder backfill introduced it, which
+// acceptCommitSHA resolves to the root regardless of the shape. Only the
+// definitive "no marker" verdict falls through, so a transient read failure
+// can't freeze a marker-carrying repo at the wrong commit.
+func ensureFeedbackPullRequest(client githubapi.Client, org, repoName, branch, mode string, body feedbackBodySpec, markerless bool) error {
+	acceptSHA := memoizeSHA(func() (string, error) {
+		sha, err := acceptCommitSHA(client, org, repoName, branch)
+		if err != nil && markerless && isNoAcceptMarker(err) {
+			return rootCommitSHA(client, org, repoName, branch)
+		}
+		return sha, err
+	})
 
 	var lastErr error
 	for attempt := range feedbackPRAttempts {
@@ -191,33 +205,69 @@ func feedbackPRRaceOr(client githubapi.Client, org, repoName, branch string, cre
 	return createErr
 }
 
-// acceptCommitSHA recovers the accept commit — the oldest commit touching the
-// .classroom50.yaml marker — via the commits API, the same rule the web GUI's
-// getOldestCommitShaForPath uses. Both are checkout-less API clients, so they
-// approximate the runner's git-side baseline_sha() (which uses
+// commitRef is the slice of a commits-listing entry the baseline readers need.
+type commitRef struct {
+	SHA    string `json:"sha"`
+	Commit struct {
+		Message string `json:"message"`
+	} `json:"commit"`
+}
+
+// oldestCommit walks a commits listing to exhaustion and returns the last
+// (oldest) entry, or nil when the listing is empty. Walked to exhaustion rather
+// than trusting one page: a wrong (newer) SHA is worse than a slow read once
+// the history exceeds one page.
+func oldestCommit(client githubapi.Client, org, repoName, query string) (*commitRef, error) {
+	commits, err := githubapi.PaginateAll[commitRef](client, 100, 100, func(page int) string {
+		return fmt.Sprintf("repos/%s/%s/commits?%s&per_page=100&page=%d",
+			url.PathEscape(org), url.PathEscape(repoName), query, page)
+	}, nil)
+	if err != nil || len(commits) == 0 {
+		return nil, err
+	}
+	return &commits[len(commits)-1], nil
+}
+
+// acceptCommitSHA recovers the accept baseline for a repo on branch: the oldest
+// commit touching the .classroom50.yaml marker, via the commits API, the same
+// rule the web GUI's getMarkerBaseline uses. Both are checkout-less API
+// clients, so they approximate the runner's git-side baseline_sha() (which uses
 // `git log --reverse --first-parent --diff-filter=A`, i.e. the oldest commit
 // that *added* the marker on the mainline). The two agree in the normal
 // single-add case; they can differ only when the marker is deleted-and-readded
 // or added off the mainline, in which case the runner's base-SHA check refuses
-// to adopt the frozen branch (a mismatch an org admin resolves). The history is
-// walked to exhaustion rather than trusting one page — a wrong (newer) SHA is
-// worse than a slow read once the marker's history exceeds one page.
-func acceptCommitSHA(client githubapi.Client, org, repoName string) (string, error) {
-	commits, err := githubapi.PaginateAll[struct {
-		SHA string `json:"sha"`
-	}](client, 100, 100, func(page int) string {
-		return fmt.Sprintf("repos/%s/%s/commits?path=%s&per_page=100&page=%d",
-			url.PathEscape(org), url.PathEscape(repoName),
-			url.QueryEscape(metadataPath), page)
-	}, nil)
+// to adopt the frozen branch (a mismatch an org admin resolves).
+//
+// A marker the enable-autograder backfill introduced does NOT anchor: that
+// repo was accepted without one (no_autograder), so its baseline is the root
+// commit, exactly as the runner resolves it.
+func acceptCommitSHA(client githubapi.Client, org, repoName, branch string) (string, error) {
+	oldest, err := oldestCommit(client, org, repoName, "path="+url.QueryEscape(metadataPath))
 	if err != nil {
 		return "", err
 	}
-	if len(commits) == 0 {
+	if oldest == nil {
 		return "", fmt.Errorf("%w: no commits touch %s in %s/%s", errNoAcceptMarker, metadataPath, org, repoName)
 	}
-	// Newest-first, so the last entry is the accept commit.
-	return commits[len(commits)-1].SHA, nil
+	if contract.CommitSubject(oldest.Commit.Message) == contract.ShimBackfillCommitSubject() {
+		return rootCommitSHA(client, org, repoName, branch)
+	}
+	return oldest.SHA, nil
+}
+
+// rootCommitSHA is the oldest commit on branch: the baseline for a
+// no_autograder repo, which carries no marker. A commitless repo has no
+// baseline either and reports errNoAcceptMarker, so the caller's "incomplete"
+// bucket covers it.
+func rootCommitSHA(client githubapi.Client, org, repoName, branch string) (string, error) {
+	oldest, err := oldestCommit(client, org, repoName, "sha="+url.QueryEscape(branch))
+	if err != nil {
+		return "", err
+	}
+	if oldest == nil {
+		return "", fmt.Errorf("%w: no commits on %s in %s/%s", errNoAcceptMarker, branch, org, repoName)
+	}
+	return oldest.SHA, nil
 }
 
 // feedbackPRExists reports whether a Feedback PR (base=feedback, head=branch)

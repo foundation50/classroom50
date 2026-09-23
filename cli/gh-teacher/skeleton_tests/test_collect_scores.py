@@ -2752,8 +2752,8 @@ class TestDetectionReusesTheListing:
             lambda *a, **k: calls.append("get_repo") or {"default_branch": "main"},
         )
         monkeypatch.setattr(
-            cs, "oldest_commit_sha_for_path",
-            lambda *a, **k: calls.append("baseline") or "base",
+            cs, "marker_baseline",
+            lambda *a, **k: calls.append("baseline") or ("base", False),
         )
         monkeypatch.setattr(
             cs, "list_default_branch_commits",
@@ -2797,7 +2797,7 @@ class TestDetectionReusesTheListing:
         def empty_repo(*a, **k):
             raise http_error(409, {}, b'{"message":"Git Repository is empty."}')
 
-        monkeypatch.setattr(cs, "oldest_commit_sha_for_path", empty_repo)
+        monkeypatch.setattr(cs, "marker_baseline", empty_repo)
         monkeypatch.setattr(cs, "list_default_branch_commits", empty_repo)
         monkeypatch.setattr(cs, "list_repo_tags", empty_repo)
         for mode in ("every-push", "tag"):
@@ -2813,7 +2813,7 @@ class TestDetectionReusesTheListing:
         def boom(*a, **k):
             raise http_error(500, {}, b"boom")
 
-        monkeypatch.setattr(cs, "oldest_commit_sha_for_path", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "marker_baseline", lambda *a, **k: (None, False))
         monkeypatch.setattr(cs, "list_default_branch_commits", boom)
         with pytest.raises(cs.urllib.error.HTTPError) as exc:
             cs.detect_repo_submissions(
@@ -2833,7 +2833,7 @@ class TestDetectionReusesTheListing:
     def test_detector_hands_the_index_facts_to_detection(self, monkeypatch):
         seen: dict[str, object] = {}
 
-        def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None):
+        def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
             seen["facts"] = facts
             return []
 
@@ -3737,7 +3737,7 @@ def test_collect_classroom_detects_empty_repo_assignment(monkeypatch, capsys):
 def test_detect_repo_submissions_counts_every_commit_on_a_bare_repo(monkeypatch):
     # No .classroom50.yaml marker means no baseline to trim.
     monkeypatch.setattr(cs, "get_repo", lambda *a, **k: {"default_branch": "main"})
-    monkeypatch.setattr(cs, "oldest_commit_sha_for_path", lambda *a, **k: None)
+    monkeypatch.setattr(cs, "marker_baseline", lambda *a, **k: (None, False))
     monkeypatch.setattr(
         cs,
         "list_default_branch_commits",
@@ -3750,6 +3750,124 @@ def test_detect_repo_submissions_counts_every_commit_on_a_bare_repo(monkeypatch)
         "https://api.github.com", "cs50", "cs-scratch-alice", "tok", "every-push", []
     )
     assert [d["sha"] for d in got] == ["c2", "c1"]
+
+
+def _markerless_branch(monkeypatch, shas):
+    monkeypatch.setattr(cs, "get_repo", lambda *a, **k: {"default_branch": "main"})
+    monkeypatch.setattr(cs, "marker_baseline", lambda *a, **k: (None, False))
+    monkeypatch.setattr(
+        cs,
+        "list_default_branch_commits",
+        lambda *a, **k: [
+            {"sha": sha, "commit": {"message": sha, "committer": {"date": "2026-06-01T10:00:00Z"}}}
+            for sha in shas
+        ],
+    )
+
+
+def test_detect_repo_submissions_root_is_baseline_trims_the_seed(monkeypatch):
+    # A no_autograder accept writes no marker either, but its root commit is
+    # the template (or README) seed, not a submission.
+    _markerless_branch(monkeypatch, ["work2", "work1", "seed"])
+    got = cs.detect_repo_submissions(
+        "https://api.github.com", "cs50", "cs-ci-lab-alice", "tok", "every-push", [],
+        root_is_baseline=True,
+    )
+    assert [d["sha"] for d in got] == ["work2", "work1"]
+
+
+def test_detect_repo_submissions_root_is_baseline_seed_only_is_no_submission(monkeypatch):
+    _markerless_branch(monkeypatch, ["seed"])
+    got = cs.detect_repo_submissions(
+        "https://api.github.com", "cs50", "cs-ci-lab-alice", "tok", "every-push", [],
+        root_is_baseline=True,
+    )
+    assert got == []
+
+
+def test_detect_repo_submissions_marker_wins_over_root_fallback(monkeypatch):
+    # A no_autograder repo accepted before the marker was dropped keeps its
+    # marker baseline (the accept commit atop the seed).
+    _markerless_branch(monkeypatch, ["work", "accept", "seed"])
+    monkeypatch.setattr(cs, "marker_baseline", lambda *a, **k: ("accept", False))
+    got = cs.detect_repo_submissions(
+        "https://api.github.com", "cs50", "cs-ci-lab-alice", "tok", "every-push", [],
+        root_is_baseline=True,
+    )
+    assert [d["sha"] for d in got] == ["work"]
+
+
+def test_submission_detector_root_is_baseline_for_every_initialized_shape(monkeypatch):
+    # Any initialized repo's root commit is the seed, never a submission: the
+    # no_autograder shape (no marker by design) and a built-in assignment whose
+    # repos have not been backfilled yet both need it. Only a bare empty_repo,
+    # whose root commit is the student's first push, turns it off.
+    seen = {}
+
+    def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
+        seen[repo_name] = root_is_baseline
+        return []
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", fake_detect)
+    for entry, want in (
+        ({"slug": "ci-lab", "no_autograder": True}, True),
+        ({"slug": "scratch", "empty_repo": True}, False),
+        ({"slug": "hw1"}, True),
+    ):
+        detector = cs.SubmissionDetector(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            slug=entry["slug"], entry=entry, service_token="tok",
+            roster_logins={"alice"}, due=None,
+        )
+        detector.detect("alice", f"cs-{entry['slug']}-alice")
+        assert seen[f"cs-{entry['slug']}-alice"] is want, entry
+
+
+def test_marker_baseline_backfill_commit_does_not_anchor(monkeypatch):
+    # A marker the enable-autograder backfill introduced belongs to a repo
+    # accepted without one; reporting it as the baseline would move the
+    # baseline past a Feedback PR frozen at the root.
+    def commits(page_url, api_url, token, label, **kwargs):
+        return [
+            {"sha": "newer", "commit": {"message": "student edit"}},
+            {"sha": "backfill", "commit": {"message": cs.SHIM_BACKFILL_COMMIT_SUBJECT + "\n\n[skip ci]"}},
+        ]
+
+    monkeypatch.setattr(cs, "_paginate_objects", commits)
+    assert cs.marker_baseline("https://api.github.com", "cs50", "r", "tok") == (None, True)
+
+    def accept(page_url, api_url, token, label, **kwargs):
+        return [{"sha": "accept", "commit": {"message": "Initialize .classroom50.yaml and autograde workflow (gh student accept)"}}]
+
+    monkeypatch.setattr(cs, "_paginate_objects", accept)
+    assert cs.marker_baseline("https://api.github.com", "cs50", "r", "tok") == ("accept", False)
+    monkeypatch.setattr(cs, "_paginate_objects", lambda *a, **k: [])
+    assert cs.marker_baseline("https://api.github.com", "cs50", "r", "tok") == (None, False)
+
+
+def test_detect_repo_submissions_backfilled_marker_uses_root_even_when_flag_is_off(monkeypatch):
+    # After enable-autograder the assignment is no longer no_autograder, yet the
+    # backfilled repo's baseline must stay the root: pre-backfill pushes still
+    # count and the seed still does not.
+    monkeypatch.setattr(cs, "get_repo", lambda *a, **k: {"default_branch": "main"})
+    monkeypatch.setattr(cs, "marker_baseline", lambda *a, **k: (None, True))
+    monkeypatch.setattr(
+        cs,
+        "list_default_branch_commits",
+        lambda *a, **k: [
+            {"sha": sha, "commit": {"message": msg, "committer": {"date": "2026-06-01T10:00:00Z"}}}
+            for sha, msg in (
+                ("backfill", cs.SHIM_BACKFILL_COMMIT_SUBJECT),
+                ("early-work", "first push"),
+                ("seed", "Initial commit"),
+            )
+        ],
+    )
+    got = cs.detect_repo_submissions(
+        "https://api.github.com", "cs50", "cs-hw1-alice", "tok", "every-push", [],
+        root_is_baseline=False,
+    )
+    assert [d["sha"] for d in got] == ["early-work"]
 
 
 def test_no_autograder_detection_records_no_score(monkeypatch):
@@ -3779,7 +3897,7 @@ def test_no_autograder_detection_records_no_score(monkeypatch):
 def test_no_autograder_detection_omits_non_submitters(monkeypatch):
     # A repo with nothing detected is OMITTED rather than recorded as 0, so the
     # record list is exactly the submitter set (what the progress bar counts).
-    def per_user(api_url, org, repo_name, token, mode, tags, facts=None):
+    def per_user(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}] if "alice" in repo_name else []
 
     monkeypatch.setattr(cs, "detect_repo_submissions", per_user)
@@ -3831,7 +3949,7 @@ def test_no_autograder_detection_tag_mode_reads_tags(monkeypatch):
     # detectTagSubmissions mirrors.
     seen = {}
 
-    def capture(api_url, org, repo_name, token, mode, tags, facts=None):
+    def capture(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
         seen["mode"] = mode
         seen["tags"] = tags
         return [{"count": 2, "datetime": "2026-06-02T10:00:00Z"}]
@@ -3866,7 +3984,7 @@ def test_no_autograder_detection_tag_mode_reads_tags(monkeypatch):
 
 def test_no_autograder_detection_skips_unreadable_repo(monkeypatch, capsys):
     # One unreadable repo warns and is skipped; it must not void the assignment.
-    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
         if "bob" in repo_name:
             raise http_error(500, "Server Error")
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}]
@@ -3955,7 +4073,7 @@ def test_no_autograder_detection_tag_mode_does_not_trust_tag_times(monkeypatch):
 def test_no_autograder_detection_reports_visited_owners(monkeypatch):
     # `visited` names owners whose repo was actually read, so main() can tell a
     # failed read apart from "nothing detected" and preserve the prior record.
-    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
         if "bob" in repo_name:
             raise http_error(500, "Server Error")
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}]
@@ -3998,7 +4116,7 @@ def test_autograded_assignment_detects_pushes_with_no_release(monkeypatch, capsy
     # not, and no graded entry is invented for either.
     monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
 
-    def per_user(api_url, org, repo_name, token, mode, tags, facts=None):
+    def per_user(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
         assert mode == "every-push"
         return (
             [
@@ -4132,7 +4250,7 @@ def test_autograded_detection_respects_tag_mode(monkeypatch):
     monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
     seen: dict[str, object] = {}
 
-    def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None):
+    def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
         seen["mode"], seen["tags"] = mode, tags
         return [{"count": 1, "datetime": "2026-06-01T10:00:00Z"}]
 
@@ -4160,7 +4278,7 @@ def test_autograded_detection_failure_keeps_prior_record(monkeypatch, capsys):
     # record from the last run instead of deleting a submitter over a 500.
     monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
 
-    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None, root_is_baseline=False):
         raise http_error(500, "Server Error")
 
     monkeypatch.setattr(cs, "detect_repo_submissions", flaky)

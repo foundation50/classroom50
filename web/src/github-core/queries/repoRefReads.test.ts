@@ -2,18 +2,22 @@ import { describe, it, expect, vi } from "vitest"
 
 import {
   getAssignmentRepos,
-  getOldestCommitShaForPath,
+  getMarkerBaseline,
+  baselineSource,
   getOrgRepos,
+  getRootCommitSha,
 } from "./repoRefReads"
 import type { GitHubClient, GitHubRequestOptions } from "../client"
 import { GitHubAPIError } from "../errors"
+import { SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
 
 // The Feedback-PR base must be frozen at the commit the autograde runner's
 // baseline_sha() resolves — the OLDEST commit touching the accept marker. A
 // wrong SHA makes the runner refuse to maintain the PR for the repo's whole
 // life, so these pin the resolution rule and its pagination.
-describe("getOldestCommitShaForPath", () => {
-  function fakeClient(pages: Array<Array<{ sha: string }>>) {
+describe("getMarkerBaseline", () => {
+  type Commit = { sha: string; commit?: { message: string } }
+  function fakeClient(pages: Array<Array<Commit>>) {
     const urls: string[] = []
     const request = vi.fn(async (url: string) => {
       urls.push(url)
@@ -25,26 +29,115 @@ describe("getOldestCommitShaForPath", () => {
 
   it("returns the oldest commit from a newest-first single page", async () => {
     const { client, urls } = fakeClient([[{ sha: "newer" }, { sha: "accept" }]])
-    await expect(
-      getOldestCommitShaForPath(client, "o", "r", ".classroom50.yaml"),
-    ).resolves.toBe("accept")
+    await expect(getMarkerBaseline(client, "o", "r")).resolves.toEqual({
+      sha: "accept",
+      backfilled: false,
+    })
     expect(urls[0]).toContain("path=.classroom50.yaml")
   })
 
   it("paginates past a full page instead of returning a newer commit", async () => {
     const full = Array.from({ length: 100 }, () => ({ sha: "newer" }))
     const { client, urls } = fakeClient([full, [{ sha: "accept" }]])
-    await expect(
-      getOldestCommitShaForPath(client, "o", "r", ".classroom50.yaml"),
-    ).resolves.toBe("accept")
+    await expect(getMarkerBaseline(client, "o", "r")).resolves.toMatchObject({
+      sha: "accept",
+    })
     expect(urls).toHaveLength(2)
   })
 
-  it("resolves null when nothing touches the path", async () => {
+  it("resolves null when nothing touches the marker", async () => {
     const { client } = fakeClient([[]])
-    await expect(
-      getOldestCommitShaForPath(client, "o", "r", ".classroom50.yaml"),
-    ).resolves.toBeNull()
+    await expect(getMarkerBaseline(client, "o", "r")).resolves.toBeNull()
+  })
+
+  // A marker the enable-autograder backfill introduced belongs to a repo
+  // accepted without one (no_autograder), whose baseline is the root commit.
+  // Anchoring on the backfill would strand a Feedback PR frozen at the root.
+  it("flags a marker the shim backfill introduced", async () => {
+    const { client } = fakeClient([
+      [
+        { sha: "edit", commit: { message: "tweak" } },
+        { sha: "backfill", commit: { message: SHIM_BACKFILL_COMMIT_MESSAGE } },
+      ],
+    ])
+    await expect(getMarkerBaseline(client, "o", "r")).resolves.toEqual({
+      sha: "backfill",
+      backfilled: true,
+    })
+  })
+})
+
+// The one place the marker -> backfilled -> root rule lives; every reader
+// decides through it, so these cases pin the table for all of them.
+describe("baselineSource", () => {
+  it("prefers a real marker commit whatever the shape says", () => {
+    const marker = { sha: "accept", backfilled: false }
+    expect(baselineSource(marker)).toBe("marker")
+    expect(baselineSource(marker, { rootIsBaseline: true })).toBe("marker")
+  })
+
+  it("moves a backfilled marker to the root, even for a built-in shape", () => {
+    const marker = { sha: "backfill", backfilled: true }
+    expect(baselineSource(marker)).toBe("root")
+    expect(baselineSource(marker, { rootIsBaseline: false })).toBe("root")
+  })
+
+  it("uses the root with no marker only when the shape says the root is the seed", () => {
+    expect(baselineSource(null, { rootIsBaseline: true })).toBe("root")
+    expect(baselineSource(null)).toBe("none")
+    expect(baselineSource(null, { rootIsBaseline: false })).toBe("none")
+  })
+})
+
+// Only the oldest commit matters, so the walk reads page 1 for the page count
+// and jumps straight to the last page.
+describe("getRootCommitSha", () => {
+  function pagedClient(pages: Array<Array<{ sha: string }>>) {
+    const urls: string[] = []
+    const request = vi.fn(
+      async (url: string, options?: GitHubRequestOptions) => {
+        urls.push(url)
+        const page = Number(new URL(url, "https://x").searchParams.get("page"))
+        if (page === 1 && pages.length > 1) {
+          const base = `https://api.github.com${url.replace(/&page=\d+/, "")}`
+          options?.onHeaders?.(
+            new Headers({
+              link: `<${base}&page=2>; rel="next", <${base}&page=${pages.length}>; rel="last"`,
+            }),
+          )
+        }
+        return pages[page - 1] ?? []
+      },
+    )
+    return { client: { request } as unknown as GitHubClient, urls }
+  }
+
+  it("jumps to the last page and returns its last commit", async () => {
+    const full = Array.from({ length: 100 }, () => ({ sha: "newer" }))
+    const { client, urls } = pagedClient([
+      full,
+      full,
+      [{ sha: "c" }, { sha: "root" }],
+    ])
+    await expect(getRootCommitSha(client, "o", "r", "main")).resolves.toBe(
+      "root",
+    )
+    expect(
+      urls.map((u) => new URL(u, "https://x").searchParams.get("page")),
+    ).toEqual(["1", "3"])
+  })
+
+  it("returns the last commit of a single page", async () => {
+    const { client, urls } = pagedClient([[{ sha: "work" }, { sha: "root" }]])
+    await expect(getRootCommitSha(client, "o", "r", "main")).resolves.toBe(
+      "root",
+    )
+    expect(urls).toHaveLength(1)
+  })
+
+  it("resolves null on a commitless branch", async () => {
+    const { client } = pagedClient([[]])
+    await expect(getRootCommitSha(client, "o", "r", "main")).resolves.toBeNull()
   })
 })
 

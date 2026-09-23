@@ -82,3 +82,23 @@ func RenderDefaultShim(org, branch, configBranch, submissionMode string, submiss
 func ShimBackfillCommitMessage() string {
 	return PrefixCommit("Add autograde workflow (enable-autograder)") + "\n\n[skip ci]"
 }
+
+// ShimBackfillCommitSubject is ShimBackfillCommitMessage's first line. Every
+// baseline reader compares the marker's introducing commit against it: a
+// marker the backfill added belongs to a repo accepted without one
+// (no_autograder), whose baseline is the ROOT commit, and moving the baseline
+// onto the backfill would strand a Feedback PR frozen at the root behind the
+// runner's base check for the repo's whole life. Hand-mirrored in runner.py
+// and collect_scores.py (SHIM_BACKFILL_COMMIT_SUBJECT) and the web
+// (getMarkerBaseline).
+func ShimBackfillCommitSubject() string {
+	return CommitSubject(ShimBackfillCommitMessage())
+}
+
+// CommitSubject is a commit message's first line, trimmed: the part the tool's
+// bookkeeping commits are matched on, since their `[skip ci]` marker lives in
+// the body.
+func CommitSubject(message string) string {
+	subject, _, _ := strings.Cut(message, "\n")
+	return strings.TrimSpace(subject)
+}

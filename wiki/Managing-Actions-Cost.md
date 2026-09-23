@@ -59,10 +59,11 @@ Beyond choosing [when commits grade](Autograding-Basics#which-commits-grade),
 you can turn the pipeline off entirely:
 
 - **Per assignment, in the assignment form.** Pick **Do not use the built-in
-  autograder** (`no_autograder` in `assignments.json`). Accept installs no
-  autograding workflow at all; a template's own CI workflows run instead, a
-  README repository simply has no autograder, and score collection records who
-  submitted but no scores. You can
+  autograder** (`no_autograder` in `assignments.json`). Accept adds no
+  Classroom 50 files at all (no autograding workflow, no `.classroom50.yaml`),
+  so each student repository is an exact copy of the template; a template's
+  own CI workflows run instead, a README repository simply has no autograder,
+  and score collection records who submitted but no scores. You can
   change it later, but the change only affects repositories accepted from
   then on (existing ones keep their setup). See
   [`gh teacher` reference](gh-teacher#assignment-add).

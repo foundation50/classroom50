@@ -61,6 +61,7 @@ describe("useMySubmissions", () => {
       undefined,
       undefined,
       undefined,
+      { rootIsBaseline: undefined },
     )
   })
 
@@ -70,7 +71,9 @@ describe("useMySubmissions", () => {
         mode: "every-push",
       }),
     )
-    expect(pushSpy).toHaveBeenCalledWith("acme", "cs101", "hw1", "alice")
+    expect(pushSpy).toHaveBeenCalledWith("acme", "cs101", "hw1", "alice", {
+      rootIsBaseline: undefined,
+    })
     expect(taggedSpy).toHaveBeenCalledWith(
       undefined,
       undefined,

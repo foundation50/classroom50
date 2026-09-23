@@ -14,6 +14,7 @@ import {
   getRepoTreeRecursive,
   enableRepoPages,
   type PagesEnableReason,
+  type RepoHead,
 } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
 import type { GitHubRepo } from "@/github-core/types"
@@ -88,6 +89,13 @@ const ACCEPT_SETUP_RETRY = {
 // hang.
 const SETUP_WAITING_AFTER_RETRIES = 2
 
+const setupRetryOptions = (onStillInitializing?: () => void) => ({
+  ...ACCEPT_SETUP_RETRY,
+  onRetry: (attempt: number) => {
+    if (attempt === SETUP_WAITING_AFTER_RETRIES) onStillInitializing?.()
+  },
+})
+
 async function commitAcceptFilesWithFreshRepoRetry(params: {
   client: GitHubClient
   owner: string
@@ -128,72 +136,61 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
     onStillInitializing,
   } = params
 
-  return await withFreshRepoRetry(
-    async () => {
-      // A freshly template-generated repo's real branch (copied from the template,
-      // e.g., `master`) only materializes after GitHub finishes the async copy —
-      // until then `default_branch` transiently reports the org default (`main`)
-      // and no ref exists. Re-resolve the live default branch each attempt so we
-      // commit to the branch that actually appears, not a pre-guessed `main` that
-      // may never exist. Fall back to the caller's branch while it's still empty.
-      const live = await getRepo(client, owner, repo)
-      const targetBranch = live?.default_branch || branch
-      const head = await readRepoHead(
+  return await withFreshRepoRetry(async () => {
+    // A freshly template-generated repo's real branch (copied from the template,
+    // e.g., `master`) only materializes after GitHub finishes the async copy —
+    // until then `default_branch` transiently reports the org default (`main`)
+    // and no ref exists. Re-resolve the live default branch each attempt so we
+    // commit to the branch that actually appears, not a pre-guessed `main` that
+    // may never exist. Fall back to the caller's branch while it's still empty.
+    const live = await getRepo(client, owner, repo)
+    const targetBranch = live?.default_branch || branch
+    const head = await readRepoHead(client, { owner, repo }, targetBranch, () =>
+      freshRepoNotReadyError(owner, repo),
+    )
+
+    // Re-render the default shim's push trigger for the branch that actually
+    // materialized (targetBranch), so autograde fires on the repo's real
+    // default branch rather than a transiently-reported `main`.
+    const shim = rerenderShimForBranch
+      ? rerenderShimForBranch(targetBranch)
+      : autogradeYaml
+
+    let deletePaths: string[] = []
+    const atSeedCommit = (head.commit.parents?.length ?? 0) === 0
+    if (removeSeededReadme && atSeedCommit) {
+      const baseTree = await getRepoTreeRecursive({
         client,
-        { owner, repo },
-        targetBranch,
-        () => freshRepoNotReadyError(owner, repo),
-      )
+        owner,
+        repo,
+        treeSha: head.baseTreeSha,
+      })
+      deletePaths = baseTree.tree.some((e) => e.path === "README.md")
+        ? ["README.md"]
+        : []
+    }
 
-      // Re-render the default shim's push trigger for the branch that actually
-      // materialized (targetBranch), so autograde fires on the repo's real
-      // default branch rather than a transiently-reported `main`.
-      const shim = rerenderShimForBranch
-        ? rerenderShimForBranch(targetBranch)
-        : autogradeYaml
+    await beforeCommit?.(targetBranch)
 
-      let deletePaths: string[] = []
-      const atSeedCommit = (head.commit.parents?.length ?? 0) === 0
-      if (removeSeededReadme && atSeedCommit) {
-        const baseTree = await getRepoTreeRecursive({
-          client,
-          owner,
-          repo,
-          treeSha: head.baseTreeSha,
-        })
-        deletePaths = baseTree.tree.some((e) => e.path === "README.md")
-          ? ["README.md"]
-          : []
-      }
+    // The accept commit that lands `.classroom50.yaml`, the marker the runner
+    // uses to resolve the Feedback-PR baseline (see the constant).
+    const { commitSha } = await commitRepoFiles(
+      client,
+      { owner, repo },
+      head,
+      assignmentAcceptTree({
+        metadataYaml,
+        autogradeYaml: shim,
+        deletePaths,
+      }),
+      ACCEPT_COMMIT_SUBJECT,
+    )
 
-      await beforeCommit?.(targetBranch)
-
-      // The accept commit that lands `.classroom50.yaml`, the marker the runner
-      // uses to resolve the Feedback-PR baseline (see the constant).
-      const { commitSha } = await commitRepoFiles(
-        client,
-        { owner, repo },
-        head,
-        assignmentAcceptTree({
-          metadataYaml,
-          autogradeYaml: shim,
-          deletePaths,
-        }),
-        ACCEPT_COMMIT_SUBJECT,
-      )
-
-      // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
-      // branch it actually landed on — the caller's pre-guessed branch may be a
-      // transient `main` on a `master` template.
-      return { commitSha, branch: targetBranch }
-    },
-    {
-      ...ACCEPT_SETUP_RETRY,
-      onRetry: (attempt) => {
-        if (attempt === SETUP_WAITING_AFTER_RETRIES) onStillInitializing?.()
-      },
-    },
-  )
+    // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
+    // branch it actually landed on — the caller's pre-guessed branch may be a
+    // transient `main` on a `master` template.
+    return { commitSha, branch: targetBranch }
+  }, setupRetryOptions(onStillInitializing))
 }
 
 type AcceptAssignmentResult = {
@@ -217,10 +214,68 @@ const PAGES_SKIPPED_MESSAGE_KEYS: Record<PagesEnableReason, string> = {
   unknown: "accept.stepDone.pagesSkipped.unknown",
 }
 
+// Enable the assignment's Pages site on a fresh repo. Best-effort: returns the
+// refusal reason for the setup step's done message and never throws (a rate
+// limit enableRepoPages rethrows for the bulk fan-out's sake included).
+// Idempotent, so a retrying caller may invoke it again.
+async function enablePagesBestEffort(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+  pages: AssignmentPages,
+  branch: string,
+): Promise<PagesEnableReason | null> {
+  const body = pagesCreateBody(pages, branch)
+  if (!body) {
+    log.warn("pages: unknown source, skipped (non-fatal)", {
+      org,
+      repo,
+      source: pages.source,
+    })
+    return "unknown"
+  }
+  try {
+    const result = await enableRepoPages(client, org, repo, body)
+    if (result.enabled) return null
+    log.warn("pages: enable refused (non-fatal)", {
+      org,
+      repo,
+      reason: result.reason,
+      error: result.error,
+    })
+    return result.reason
+  } catch (err) {
+    log.warn("pages: enable failed (non-fatal)", { org, repo, error: err })
+    return "unknown"
+  }
+}
+
+// Wait for a just-created repo's default branch to become readable, resolving
+// the branch that actually materialized (GitHub's async template copy can
+// briefly report the org default instead) and its head. The no-setup-commit
+// accept path needs it before enabling Pages or anchoring the Feedback PR; the
+// committing path does the same inside commitAcceptFilesWithFreshRepoRetry.
+async function settleFreshRepoBranch(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  fallbackBranch: string,
+  onStillInitializing?: () => void,
+): Promise<{ branch: string; head: RepoHead }> {
+  return withFreshRepoRetry(async () => {
+    const live = await getRepo(client, owner, repo)
+    const branch = live?.default_branch || fallbackBranch
+    const head = await readRepoHead(client, { owner, repo }, branch, () =>
+      freshRepoNotReadyError(owner, repo),
+    )
+    return { branch, head }
+  }, setupRetryOptions(onStillInitializing))
+}
+
 // The tracked "access" step: patch the repo surface + grant the founder role
 // (both idempotent upserts). Throws on failure so the checklist surfaces the
-// recovery guidance — shared by the templated setup path and the bare-accept
-// fresh-create path so that recovery copy lives in one place.
+// recovery guidance — shared by the templated setup path and the
+// no-setup-commit fresh-create path so that recovery copy lives in one place.
 function grantFounderAccessStep(params: {
   client: GitHubClient
   org: string
@@ -318,8 +373,6 @@ async function provisionAcceptedRepo(params: {
   removeSeededReadme?: boolean
   // Open the accept-time Feedback PR after setup succeeds (issue #228).
   feedbackPr?: boolean
-  // !skipsShim; false drops the Feedback PR body's autograding lines.
-  autograded: boolean
   // When set, the Feedback PR body is read from this template's
   // pull_request_template.md (feedback_pr_template opt-in), best-effort.
   feedbackPrTemplate?: FeedbackPrTemplateRef
@@ -342,7 +395,6 @@ async function provisionAcceptedRepo(params: {
     autogradeYaml,
     removeSeededReadme = false,
     feedbackPr = false,
-    autograded,
     feedbackPrTemplate,
     rerenderShimForBranch,
     onStepUpdate,
@@ -356,37 +408,13 @@ async function provisionAcceptedRepo(params: {
   let pagesRefusal: PagesEnableReason | null = null
   const configurePages = pages
     ? async (settledBranch: string) => {
-        const body = pagesCreateBody(pages, settledBranch)
-        if (!body) {
-          pagesRefusal = "unknown"
-          log.warn("pages: unknown source, skipped (non-fatal)", {
-            org,
-            repo: repo.name,
-            source: pages.source,
-          })
-          return
-        }
-        try {
-          const result = await enableRepoPages(client, org, repo.name, body)
-          if (result.enabled) {
-            pagesRefusal = null
-            return
-          }
-          pagesRefusal = result.reason
-          log.warn("pages: enable refused (non-fatal)", {
-            org,
-            repo: repo.name,
-            reason: result.reason,
-            error: result.error,
-          })
-        } catch (err) {
-          pagesRefusal = "unknown"
-          log.warn("pages: enable failed (non-fatal)", {
-            org,
-            repo: repo.name,
-            error: err,
-          })
-        }
+        pagesRefusal = await enablePagesBestEffort(
+          client,
+          org,
+          repo.name,
+          pages,
+          settledBranch,
+        )
       }
     : undefined
 
@@ -447,10 +475,13 @@ async function provisionAcceptedRepo(params: {
         org,
         repo: repo.name,
         committedSha: committed.commitSha,
+        branch: committed.branch,
       }),
     mode,
     feedbackPr,
-    autograded,
+    // Every accept reaching this path commits the shim (the no-shim shapes
+    // never provision), so the PR body keeps its autograding lines.
+    autograded: true,
     feedbackPrTemplate,
     onStepUpdate,
   })
@@ -488,9 +519,18 @@ async function resolveFeedbackBaseSha(params: {
   org: string
   repo: string
   committedSha: string | null
+  // The repo's default branch, for the root-commit cases (a backfilled marker,
+  // or no marker on a no_autograder repo); see resolveFeedbackBaselineSha.
+  branch: string
+  // no_autograder: no marker is ever written, so the root commit is the
+  // baseline even with an empty marker history.
+  rootIsBaseline?: boolean
 }): Promise<string | null> {
-  const { client, org, repo, committedSha } = params
-  const oldest = await resolveFeedbackBaselineSha(client, org, repo)
+  const { client, org, repo, committedSha, branch, rootIsBaseline } = params
+  const oldest = await resolveFeedbackBaselineSha(client, org, repo, {
+    branch,
+    rootIsBaseline,
+  })
   return oldest ?? committedSha
 }
 
@@ -796,15 +836,17 @@ export async function acceptAssignment(params: {
 
   // empty_repo assignment: the repo is created bare (no commits) and NO
   // control files are ever committed, so the autograder resolution and the
-  // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
+  // whole setup step are skipped. Mirrors the CLI's acceptWithoutSetupCommit.
   const isEmptyRepo = assignment.empty_repo === true
 
   // no_autograder assignment: an initialized repo (template or README) that
-  // commits the marker + starter content but NO autograde shim of either kind
-  // (neither the default shim nor a Pages-fetched workflow), so a template's
-  // own .github/ CI runs, or nothing does. Unlike empty_repo it keeps the
-  // starter content and permits the Feedback PR. Mirrors the CLI student accept
-  // gate (entry.CommitsShim()).
+  // is left exactly as GitHub created it. Accept commits NOTHING: no autograde
+  // shim of either kind (neither the default shim nor a Pages-fetched
+  // workflow) and no .classroom50.yaml marker, so a template's own .github/
+  // CI runs, or nothing does, and a grader importing the repo sees only the
+  // student's files (discussion #1045). Unlike empty_repo it keeps the starter
+  // content and permits the Feedback PR, whose baseline is then the repo's
+  // root commit. Mirrors the CLI student accept gate (entry.CommitsShim()).
   const isNoAutograder = assignment.no_autograder === true
 
   // init_shim assignment: a TEMPLATE-LESS repo initialized with only the marker
@@ -813,17 +855,15 @@ export async function acceptAssignment(params: {
   // commits the shim — no special-casing beyond the fail-closed guards below.
   const isInitShim = assignment.init_shim === true
 
-  // Whether accept commits an autograde shim at all. Both no-shim states
-  // suppress it; the inverse of the CLI's entry.CommitsShim(). empty_repo also
-  // skips the whole setup/commit path (it commits nothing); no_autograder still
-  // commits the marker + template content, only the shim is omitted.
-  const skipsShim = isEmptyRepo || isNoAutograder
+  // Whether accept commits anything at all. Both no-shim states skip the whole
+  // setup commit (marker + shim); the inverse of the CLI's entry.CommitsShim().
+  const skipsSetupCommit = isEmptyRepo || isNoAutograder
 
   // feedback_pr opts into the accept-time Feedback PR (issue #228). Never
   // set together with empty_repo (the teacher CLI enforces the exclusivity;
-  // the bare path below skips the step regardless). no_autograder PERMITS the
-  // Feedback PR (a templated repo has a baseline commit), so it is not gated
-  // out here — only empty_repo is.
+  // a false here makes openFeedbackPrStep record the skip). no_autograder
+  // PERMITS the Feedback PR (an initialized repo has a root commit to freeze
+  // the base at), so it is not gated out here — only empty_repo is.
   const wantsFeedbackPr = assignment.feedback_pr === true && !isEmptyRepo
 
   // feedback_pr_template opts the Feedback PR body into the template repo's
@@ -889,7 +929,7 @@ export async function acceptAssignment(params: {
   // A no-shim accept (empty_repo bare repo, or no_autograder teacher-supplied
   // CI) carries no autograde workflow — mark the step complete (as skipped) so
   // the checklist doesn't look stuck, and never fetch the shim.
-  let autogradeYaml = skipsShim
+  let autogradeYaml = skipsSetupCommit
     ? ""
     : await withAcceptStep(
         {
@@ -916,7 +956,7 @@ export async function acceptAssignment(params: {
             submissionTags: assignment.submission_tags,
           }),
       )
-  if (skipsShim) {
+  if (skipsSetupCommit) {
     onStepUpdate?.({
       id: "autograder",
       status: "complete",
@@ -1038,54 +1078,95 @@ export async function acceptAssignment(params: {
     })
   }
 
-  // Bare (empty_repo) path: no control files exist or are ever committed, so
-  // the marker probe below is meaningless — an existing repo IS an accepted
-  // repo. The only provisioning is the surface patch + founder grant (both
-  // idempotent upserts — same least-privilege rule as the normal path), re-run
-  // unconditionally to heal a prior accept that died between create and grant.
-  // The "setup" step is marked complete (as skipped) so the checklist doesn't
-  // look stuck.
-  if (isEmptyRepo) {
+  // The branch the created repo reports. For a generated repo this can still
+  // be the org default while GitHub's async template copy settles; the paths
+  // below re-resolve the live branch before writing against it.
+  const createdBranch =
+    created.kind === "fallback-empty"
+      ? created.branch
+      : created.repo.default_branch || sourceBranch || "main"
+
+  // No-setup-commit path (empty_repo bare repo, or no_autograder): no control
+  // files exist or are ever committed, so the marker probe below is
+  // meaningless — an existing repo IS an accepted repo. The provisioning is the
+  // surface patch + founder grant (both idempotent upserts — same
+  // least-privilege rule as the normal path), re-run unconditionally to heal a
+  // prior accept that died between create and grant. The "setup" step is
+  // marked complete (as skipped) so the checklist doesn't look stuck.
+  //
+  // no_autograder keeps two things the bare path has nothing to hang on: the
+  // Pages site (fresh create only) and the Feedback PR, both anchored on the
+  // repo's real default branch once GitHub's async template copy settles.
+  if (skipsSetupCommit) {
     const alreadyAccepted = created.kind === "already-accepted"
+    const repoName = created.repo.name
+
+    // Open the Feedback PR against the root commit (no marker to resolve; an
+    // older marker still wins inside resolveFeedbackBaseSha). A fresh create
+    // whose settled head IS the root commit passes it as `knownBaseSha` and
+    // skips the history walks. Best-effort and always resolves complete, like
+    // every feedback step.
+    const feedbackStep = (branch: string, knownBaseSha?: string) =>
+      openFeedbackPrStep({
+        client,
+        org,
+        repo: repoName,
+        branch,
+        resolveAcceptCommitSha: () =>
+          knownBaseSha
+            ? Promise.resolve(knownBaseSha)
+            : resolveFeedbackBaseSha({
+                client,
+                org,
+                repo: repoName,
+                committedSha: null,
+                branch,
+                rootIsBaseline: true,
+              }),
+        mode: assignment.mode,
+        feedbackPr: wantsFeedbackPr,
+        autograded: false,
+        feedbackPrTemplate,
+        onStepUpdate,
+      })
+
     if (alreadyAccepted) {
-      // Healthy already-accepted bare repo: reconcile the founder role
-      // best-effort, matching the templated already-accepted path. A bare
-      // repo's only provisioning IS this grant, so a transient failure must
-      // not fail a re-run that previously succeeded.
+      // Healthy already-accepted repo: reconcile the founder role best-effort,
+      // matching the templated already-accepted path. This repo's only
+      // provisioning IS this grant, so a transient failure must not fail a
+      // re-run that previously succeeded.
       onStepUpdate?.({
         id: "repo",
         status: "complete",
         message: {
           key: "accept.stepDone.repoExists",
-          params: { org, repo: created.repo.name },
+          params: { org, repo: repoName },
         },
       })
-      // setup + feedback are structurally skipped for a bare repo; mark them
-      // complete before the (last) access reconcile so the checklist order is
-      // consistent with the templated path.
+      // setup is structurally skipped; mark it complete before feedback and
+      // the (last) access reconcile so the checklist order is consistent with
+      // the templated path.
       onStepUpdate?.({
         id: "setup",
         status: "complete",
-        message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
+        message: { key: "accept.stepDone.setupSkipped" },
       })
-      skipFeedbackPrStep(onStepUpdate)
-      // Re-accept of an already-created bare repo: reconcile ONLY the founder
-      // role (best-effort). Repo features are accept-time-only (written at fresh
+      // Repos accepted before the accept-time-PR feature get their PR by
+      // re-accepting — the only Actions-free route. Existing PRs
+      // short-circuit inside, keeping repeat re-accepts read-only.
+      await feedbackStep(createdBranch)
+      // Re-accept of an already-created repo: reconcile ONLY the founder role
+      // (best-effort). Repo features are accept-time-only (written at fresh
       // create), so we deliberately do NOT re-PATCH them here — re-asserting
       // would silently revert a student's own later toggle.
       try {
         if (groupTeam) {
-          await attachRepoToGroupTeam(
-            client,
-            org,
-            groupTeam.slug,
-            created.repo.name,
-          )
+          await attachRepoToGroupTeam(client, org, groupTeam.slug, repoName)
         }
         await addFounderCollaborator({
           client,
           owner: org,
-          repo: created.repo.name,
+          repo: repoName,
           username,
           permission: founderPermission(
             assignment.mode,
@@ -1095,28 +1176,104 @@ export async function acceptAssignment(params: {
       } catch (err) {
         log.debug("accept: best-effort role reconcile failed (non-fatal)", {
           org,
-          repo: created.repo.name,
+          repo: repoName,
           err,
         })
       }
       onStepUpdate?.({ id: "access", status: "complete" })
     } else {
-      // Fresh create: setup + feedback are structurally skipped for a bare repo
-      // (no control files, no Feedback PR), so mark them complete first and run
-      // the founder grant LAST — consistent with the templated path's ordering.
-      // The grant hard-fails (an un-granted repo is a broken accept the student
-      // can't push to), inside the throwing step so the checklist surfaces the
-      // error and its recovery guidance.
-      onStepUpdate?.({
-        id: "setup",
-        status: "complete",
-        message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
-      })
-      skipFeedbackPrStep(onStepUpdate)
+      // Fresh create. Setup is structurally skipped (no control files), so the
+      // step only waits for the branch when something needs it (Pages or the
+      // Feedback PR), then the founder grant runs LAST — consistent with the
+      // templated path's ordering. The grant hard-fails (an un-granted repo is
+      // a broken accept the student can't push to), inside the throwing step
+      // so the checklist surfaces the error and its recovery guidance. The
+      // branch wait itself is best-effort, like the CLI: Pages and the
+      // Feedback PR are deferred to a re-run, never at the cost of the grant.
+      let settledBranch = createdBranch
+      // The settled head, when it is the repo's root commit (the generate or
+      // auto_init seed): then it is also the Feedback PR baseline, and the
+      // feedback step can skip its history walks.
+      let rootSha: string | undefined
+      let branchReady = false
+      let pagesRefusal: PagesEnableReason | null = null
+      const needsBranch =
+        isNoAutograder && (wantsFeedbackPr || assignment.pages !== undefined)
+      if (needsBranch) {
+        onStepUpdate?.({
+          id: "setup",
+          status: "running",
+          message: { key: "accept.steps.setup" },
+        })
+        try {
+          const { branch, head } = await settleFreshRepoBranch(
+            client,
+            org,
+            repoName,
+            createdBranch,
+            () =>
+              onStepUpdate?.({
+                id: "setup",
+                status: "running",
+                message: { key: "accept.steps.setupWaiting" },
+              }),
+          )
+          settledBranch = branch
+          branchReady = true
+          if ((head.commit.parents?.length ?? 0) === 0) {
+            rootSha = head.headSha
+          }
+        } catch (err) {
+          log.warn("accept: fresh repo branch never settled (non-fatal)", {
+            org,
+            repo: repoName,
+            err,
+          })
+        }
+        if (branchReady && assignment.pages) {
+          pagesRefusal = await enablePagesBestEffort(
+            client,
+            org,
+            repoName,
+            assignment.pages,
+            settledBranch,
+          )
+        }
+        onStepUpdate?.({
+          id: "setup",
+          status: "complete",
+          message: {
+            // The feedback step reports its own deferral below, so the setup
+            // message speaks only for Pages, and only when Pages was asked for.
+            key:
+              !branchReady && assignment.pages
+                ? "accept.stepDone.setupBranchUnsettled"
+                : pagesRefusal
+                  ? PAGES_SKIPPED_MESSAGE_KEYS[pagesRefusal]
+                  : "accept.stepDone.setupSkipped",
+          },
+        })
+      } else {
+        onStepUpdate?.({
+          id: "setup",
+          status: "complete",
+          message: { key: "accept.stepDone.setupSkipped" },
+        })
+      }
+      if (needsBranch && !branchReady && wantsFeedbackPr) {
+        // Nothing to anchor the PR on yet; the re-run heals it.
+        onStepUpdate?.({
+          id: "feedback",
+          status: "complete",
+          message: { key: "accept.stepDone.feedbackDeferred" },
+        })
+      } else {
+        await feedbackStep(settledBranch, rootSha)
+      }
       await grantFounderAccessStep({
         client,
         org,
-        repo: created.repo.name,
+        repo: repoName,
         username,
         mode: assignment.mode,
         studentPermission: assignment.student_permission,
@@ -1127,6 +1284,12 @@ export async function acceptAssignment(params: {
       })
     }
 
+    log.info("accept assignment: completed", {
+      org,
+      classroom,
+      assignmentSlug,
+      status: alreadyAccepted ? "already-accepted" : "created",
+    })
     return {
       status: alreadyAccepted ? "already-accepted" : "created",
       repo: created.repo,
@@ -1144,19 +1307,15 @@ export async function acceptAssignment(params: {
   // branch resolved here may still be the transient `main`. rerenderShim lets
   // the commit step rebuild the shim once the true branch materializes.
   let rerenderShim: ((branch: string) => string) | undefined
-  if (!skipsShim && isDefaultAutograder(assignment.autograder)) {
-    const resolvedBranch =
-      created.kind === "fallback-empty"
-        ? created.branch
-        : created.repo.default_branch || sourceBranch || "main"
+  if (isDefaultAutograder(assignment.autograder)) {
     const configBranch = await resolveConfigRepoDefaultBranch(
       client,
       org,
-      resolvedBranch,
+      createdBranch,
     )
     autogradeYaml = defaultAutograderWorkflow(
       org,
-      resolvedBranch,
+      createdBranch,
       configBranch,
       assignment.submission_mode,
       assignment.submission_tags,
@@ -1177,11 +1336,8 @@ export async function acceptAssignment(params: {
     // leaving a repo that looks accepted but never autogrades. A repo is only
     // "genuinely accepted" when BOTH the metadata and workflow landed (one
     // commit, so a missing workflow means the prior accept failed mid-flow). If
-    // either is missing, re-run the idempotent provisioning.
-    //
-    // A no_autograder accept commits NO workflow by design, so the workflow
-    // probe would always report "missing" and wrongly re-provision a healthy
-    // repo forever — for it, the marker alone proves a completed accept.
+    // either is missing, re-run the idempotent provisioning. (The no-commit
+    // shapes returned above; every accept reaching here writes both files.)
     const [hasMetadata, hasWorkflow] = await Promise.all([
       repoContentsPathExists(
         client,
@@ -1196,7 +1352,7 @@ export async function acceptAssignment(params: {
         ".github/workflows/autograde.yaml",
       ),
     ])
-    const provisioned = hasMetadata && (isNoAutograder || hasWorkflow)
+    const provisioned = hasMetadata && hasWorkflow
 
     if (provisioned) {
       onStepUpdate?.({
@@ -1225,10 +1381,11 @@ export async function acceptAssignment(params: {
             org,
             repo: created.repo.name,
             committedSha: null,
+            branch: created.repo.default_branch || sourceBranch,
           }),
         mode: assignment.mode,
         feedbackPr: wantsFeedbackPr,
-        autograded: !skipsShim,
+        autograded: true,
         feedbackPrTemplate,
         onStepUpdate,
       })
@@ -1314,7 +1471,6 @@ export async function acceptAssignment(params: {
       autogradeYaml,
       removeSeededReadme: isInitShim,
       feedbackPr: wantsFeedbackPr,
-      autograded: !skipsShim,
       feedbackPrTemplate,
       rerenderShimForBranch: rerenderShim,
       onStepUpdate,
@@ -1358,7 +1514,6 @@ export async function acceptAssignment(params: {
     autogradeYaml,
     removeSeededReadme: isInitShim,
     feedbackPr: wantsFeedbackPr,
-    autograded: !skipsShim,
     feedbackPrTemplate,
     rerenderShimForBranch: rerenderShim,
     onStepUpdate,

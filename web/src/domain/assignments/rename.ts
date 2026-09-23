@@ -45,6 +45,7 @@ import {
   type LocalizedParam,
 } from "@/types/localizedMessage"
 import { log } from "./accessPrimitives"
+import { isNoAutograderAssignment } from "./autogradingState"
 import {
   commitConfigRepoFiles,
   jsonFileEntry,
@@ -400,6 +401,11 @@ async function setRenamedEntryLocked(
 // over-match a sibling slug — a proper sibling repo carries a marker naming
 // ITS slug and is skipped untouched.
 //
+// A no_autograder assignment's repos carry no marker by design (`markerless`),
+// so for them a missing marker is not a half-finished accept: ownership falls
+// back to the prefix, with `siblingPrefixes` (the classroom's longer slugs)
+// ruling out the over-match a marker would have caught.
+//
 // Marker before rename, on purpose: the config already carries the new slug,
 // so a marker pointing at it grades correctly even while the repo still has
 // its old name; the reverse order leaves a window where the runner hard-fails
@@ -413,9 +419,21 @@ async function renameOneRepo(params: {
   oldSlug: string
   newSlug: string
   healing: boolean
+  markerless: boolean
+  siblingPrefixes: readonly { slug: string; prefix: string }[]
 }): Promise<RepoRenameResult> {
-  const { client, org, repo, newName, branch, oldSlug, newSlug, healing } =
-    params
+  const {
+    client,
+    org,
+    repo,
+    newName,
+    branch,
+    oldSlug,
+    newSlug,
+    healing,
+    markerless,
+    siblingPrefixes,
+  } = params
   const result: RepoRenameResult = { repo, newName, outcome: "failed" }
 
   // The marker rewrite reads at the same head the commit is built on, inside
@@ -436,11 +454,24 @@ async function renameOneRepo(params: {
         ref: head.headSha,
       })
       if (raw === null) {
-        return {
-          kind: "skip",
-          outcome: "skippedNoMarker",
-          reason: reason("assignments.rename.reason.noMarker"),
+        if (!markerless) {
+          return {
+            kind: "skip",
+            outcome: "skippedNoMarker",
+            reason: reason("assignments.rename.reason.noMarker"),
+          }
         }
+        const sibling = siblingPrefixes.find((s) => repo.startsWith(s.prefix))
+        if (sibling) {
+          return {
+            kind: "skip",
+            outcome: "skippedForeign",
+            reason: reason("assignments.rename.reason.foreignSibling", {
+              slug: sibling.slug,
+            }),
+          }
+        }
+        return { kind: "done", rewroteMarker: false }
       }
       let rewrite
       try {
@@ -649,6 +680,24 @@ export async function renameAssignment(
   }
   const oldPrefix = assignmentRepoPrefix(classroom, oldSlug)
   const newPrefix = assignmentRepoPrefix(classroom, newSlug)
+  // A no_autograder assignment's repos carry no marker, so the fan-out falls
+  // back to prefix ownership. The classroom's other slugs whose repo prefix
+  // extends this one ("hw" vs "hw-extra") are the over-match a marker would
+  // have caught; their repos are skipped as foreign. A sibling's previous slug
+  // counts too: repos a partially completed sibling rename left behind still
+  // carry the old prefix.
+  const entry = oldEntry ?? newEntry
+  const markerless = entry ? isNoAutograderAssignment(entry) : false
+  const siblingPrefixes = preFile.assignments
+    .flatMap((a) => [a.slug, a.renamed_from ?? ""])
+    .filter((slug) => slug !== "" && slug !== oldSlug && slug !== newSlug)
+    .map((slug) => ({
+      slug,
+      prefix: assignmentRepoPrefix(classroom, slug),
+    }))
+    .filter(
+      (s) => s.prefix.startsWith(oldPrefix) || s.prefix.startsWith(newPrefix),
+    )
   const toRename: { repo: string; branch: string }[] = []
   const toHeal: { repo: string; branch: string }[] = []
   for (const repo of orgRepos) {
@@ -699,6 +748,8 @@ export async function renameAssignment(
       oldSlug,
       newSlug,
       healing,
+      markerless,
+      siblingPrefixes,
     })
     if (result.rateLimited) rateLimitHit = true
     results.push(result)

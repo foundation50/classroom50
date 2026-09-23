@@ -66,7 +66,8 @@ can view the site even when the repository is private.
    refuses (for example, the plan doesn't allow Pages on a private
    repository), accept warns and carries on; your teacher can enable it later.
 6. Commits the setup files (`.classroom50.yaml` and the autograding workflow)
-   and verifies they're in place.
+   and verifies they're in place. Skipped when the assignment doesn't use the
+   built-in autograder: your repository gets no Classroom 50 files.
 7. Opens the feedback pull request, when the assignment enables it.
 8. Sets your repository role: `push` for an individual assignment, or `admin`
    for a legacy group assignment (so its founder can invite teammates). On a

@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/repoconfig"
 	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/membership"
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
@@ -42,6 +45,9 @@ func assignmentEnableAutograderCmd() *cobra.Command {
 			"  - Adds the default autograde workflow to each existing repo that\n" +
 			"    lacks one, rendered for the assignment's current submission type\n" +
 			"    and tags. Repos that already have the file are left untouched.\n" +
+			"  - Adds the `.classroom50.yaml` marker in the same commit when the\n" +
+			"    repo has none (accept writes no marker while the autograder is\n" +
+			"    off), since the autograder reads it to find the assignment.\n" +
 			"  - Commits with `[skip ci]`, so adding the workflow never grades the\n" +
 			"    commit itself.\n\n" +
 			"Afterward:\n\n" +
@@ -207,10 +213,30 @@ func runEnableAutograder(client githubapi.Client, out, errOut io.Writer, p enabl
 		return nil
 	}
 
+	// A no_autograder accept writes no `.classroom50.yaml`, and the runner the
+	// shim calls refuses a repo without one, so a missing marker is rebuilt in
+	// the same commit. The secret comes from classroom.json (a protected
+	// classroom's Pages path); the template source from the entry, its owner
+	// id resolved once for the whole run.
+	marker := backfillMarker{classroom: p.classroom, slug: p.slug}
+	if cls, ok, err := configrepo.LoadClassroom(client, p.org, p.classroom, branch); err != nil {
+		return err
+	} else if ok {
+		marker.secret = cls.Secret
+	}
+	if t := preEntry.Template; t != nil {
+		marker.source = &repoconfig.Source{
+			Owner:   t.Owner,
+			OwnerID: lookupUserID(client, t.Owner),
+			Repo:    t.Repo,
+			Branch:  t.Branch,
+		}
+	}
+
 	var results []shimResult
 	notAccepted := 0
 	for _, repo := range repos {
-		res := backfillShim(client, p.org, repo, branch, preEntry.SubmissionMode, preEntry.SubmissionTags, p.dryRun)
+		res := backfillShim(client, p.org, repo, branch, preEntry.SubmissionMode, preEntry.SubmissionTags, p.dryRun, marker)
 		if res.outcome == shimNotAccepted {
 			notAccepted++
 			report.notAccepted(repo)
@@ -223,13 +249,53 @@ func runEnableAutograder(client githubapi.Client, out, errOut io.Writer, p enabl
 	return report.summarize(p.org, results, notAccepted)
 }
 
-// backfillShim adds the default shim to one repo that lacks it. A repo that
-// already carries a default shim is reported current and never rewritten (the
-// submission-mode retrofit owns reconciling its trigger); any other file at
-// the reserved path is reported unrecognized and left alone, since calling it
-// "present" would hide that nothing grades. The check runs inside the commit
-// build against the parent SHA, like retrofitShim, so it's rebase-safe.
-func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMode string, submissionTags []string, dryRun bool) shimResult {
+// backfillMarker is what a repo's missing `.classroom50.yaml` is rebuilt from.
+// The student login is recovered from the repo name (the backfill is
+// individual-only, so the suffix after `<classroom>-<slug>-` is the login).
+type backfillMarker struct {
+	classroom, slug, secret string
+	// source is the template block, resolved once per run (nil = template-less).
+	source *repoconfig.Source
+}
+
+// render builds the marker accept would have written for repo, minus
+// accepted_at (this is not the accept). The student's numeric id is a
+// best-effort lookup, null when unresolved, the same rule accept applies.
+func (m backfillMarker) render(client githubapi.Client, org, repo string) (string, error) {
+	login := strings.TrimPrefix(repo, contract.AssignmentRepoPrefix(m.classroom, m.slug))
+	out, err := repoconfig.Render(repoconfig.Config{
+		Schema:     repoconfig.SchemaV1,
+		Classroom:  m.classroom,
+		Assignment: m.slug,
+		Secret:     m.secret,
+		Owner:      &repoconfig.Identity{Username: login, ID: lookupUserID(client, login)},
+		Source:     m.source,
+	})
+	if err != nil {
+		return "", fmt.Errorf("render %s for %s/%s: %w", contract.MetadataPath, org, repo, err)
+	}
+	return string(out), nil
+}
+
+// lookupUserID resolves a login's immutable numeric id best-effort: any failure
+// (404, transient 5xx, rate limit) yields nil so the marker records null rather
+// than the backfill failing over a lookup. Mirrors gh-student's accept.
+func lookupUserID(client githubapi.Client, login string) *int64 {
+	_, id, err := membership.LookupUser(client, login)
+	if err != nil {
+		return nil
+	}
+	return &id
+}
+
+// backfillShim adds the default shim to one repo that lacks it, plus the
+// marker when that is missing too. A repo that already carries a default shim
+// is reported current and never rewritten (the submission-mode retrofit owns
+// reconciling its trigger); any other file at the reserved path is reported
+// unrecognized and left alone, since calling it "present" would hide that
+// nothing grades. The check runs inside the commit build against the parent
+// SHA, like retrofitShim, so it's rebase-safe.
+func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMode string, submissionTags []string, dryRun bool, marker backfillMarker) shimResult {
 	branch, notFound, err := studentRepoDefaultBranch(client, org, repo)
 	if err != nil {
 		return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
@@ -238,21 +304,61 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 		return shimResult{repo: repo, outcome: shimNotAccepted}
 	}
 
+	// The marker render (one user lookup) runs at most once per repo: the
+	// build closure re-runs on a rebase retry, and nothing in it depends on the
+	// parent SHA.
+	renderMarker := sync.OnceValues(func() (string, error) {
+		return marker.render(client, org, repo)
+	})
+
 	var unrecognized error
+	// markerOnly records that the last build found the default shim already in
+	// place and wrote just the marker (a template that ships the shim, or a
+	// backfill by a release that wrote the shim alone). Without the marker the
+	// runner refuses the repo and the only remedy left is a heal re-accept,
+	// whose marker commit would move the baseline off the root.
+	markerOnly := false
 	build := func(parentSHA string) (map[string]string, error) {
 		unrecognized = nil
+		markerOnly = false
 		current, exists, err := configrepo.ReadFileContents(client, org, repo, autogradeShimPath, parentSHA)
 		if err != nil {
 			return nil, err
 		}
-		if exists {
-			if !isDefaultShim(string(current)) {
-				unrecognized = errors.New("a workflow already exists at " + autogradeShimPath + " but is not the default autograde shim; left untouched")
-			}
+		if exists && !isDefaultShim(string(current)) {
+			unrecognized = errors.New("a workflow already exists at " + autogradeShimPath + " but is not the default autograde shim; left untouched")
 			return nil, nil
 		}
-		shim := contract.RenderDefaultShim(org, branch, configBranch, submissionMode, submissionTags)
-		return map[string]string{autogradeShimPath: shim}, nil
+		files := map[string]string{}
+		if !exists {
+			files[autogradeShimPath] = contract.RenderDefaultShim(org, branch, configBranch, submissionMode, submissionTags)
+		}
+		_, hasMarker, err := configrepo.ReadFileContents(client, org, repo, contract.MetadataPath, parentSHA)
+		if err != nil {
+			return nil, err
+		}
+		if !hasMarker {
+			// Landing the marker here does not move the repo's baseline: every
+			// reader (runner.py, collect_scores.py, both CLIs, the web) recognizes
+			// ShimBackfillCommitSubject and keeps the root commit, so a Feedback
+			// PR the no_autograder accept froze there stays valid.
+			rendered, err := renderMarker()
+			if err != nil {
+				return nil, err
+			}
+			files[contract.MetadataPath] = rendered
+			markerOnly = exists
+		}
+		if len(files) == 0 {
+			return nil, nil
+		}
+		return files, nil
+	}
+	written := func() shimResult {
+		if markerOnly {
+			return shimResult{repo: repo, outcome: shimMarkerAdded}
+		}
+		return shimResult{repo: repo, outcome: shimUpdated}
 	}
 
 	if dryRun {
@@ -265,7 +371,7 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 		case files == nil:
 			return shimResult{repo: repo, outcome: shimCurrent}
 		default:
-			return shimResult{repo: repo, outcome: shimUpdated}
+			return written()
 		}
 	}
 
@@ -282,7 +388,7 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 	if commitSHA == "" {
 		return shimResult{repo: repo, outcome: shimCurrent}
 	}
-	return shimResult{repo: repo, outcome: shimUpdated}
+	return written()
 }
 
 // isDefaultShim recognizes a default autograde shim from either accept client:

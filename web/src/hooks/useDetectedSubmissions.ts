@@ -56,6 +56,9 @@ export type UseDetectedSubmissionsArgs = {
   submissionTags?: string[]
   // Page-scoped repo-name owner segments (mirror useLiveSubmissions).
   repoOwners: string[]
+  // Branch mode on a no_autograder assignment: no marker, so the root commit
+  // (the template seed) is the baseline. See BranchSubmissionLogOptions.
+  rootIsBaseline?: boolean
   // Off switch, e.g. until the assignment entry has resolved its mode.
   enabled?: boolean
 }
@@ -74,6 +77,7 @@ export function useDetectedSubmissions({
   mode,
   submissionTags,
   repoOwners,
+  rootIsBaseline = false,
   enabled = true,
 }: UseDetectedSubmissionsArgs): UseDetectedSubmissionsResult {
   const client = useGitHubClient()
@@ -107,6 +111,7 @@ export function useDetectedSubmissions({
       assignment ?? "",
       resolvedMode,
       tagsKey,
+      rootIsBaseline,
       ownersKey,
     ] as const,
     queryFn: async ({ signal }) => {
@@ -142,6 +147,7 @@ export function useDetectedSubmissions({
                   org!,
                   repo,
                   branch,
+                  { rootIsBaseline },
                 )
                 return detectBranchSubmissions(commits, baselineSha)
               }),

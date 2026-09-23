@@ -35,6 +35,7 @@ import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
 import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
+import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
 import {
   localizedMessageOf,
   resolveLocalizedMessage,
@@ -1064,13 +1065,13 @@ const AcceptAssignmentPage = () => {
   // can die between repo creation and the setup commit, leaving a repo that
   // clones fine but never autogrades. Probe the marker so the page can lead
   // with "Re-run setup" instead of a success-looking "Open repository". Wait
-  // for the assignment to resolve first: an empty_repo assignment never writes
-  // the marker, and the repo read can settle before the manifest does.
+  // for the assignment to resolve first: an empty_repo or no_autograder
+  // assignment never writes the marker, and the repo read can settle before
+  // the manifest does.
+  const writesMarker =
+    assignmentData !== undefined && !assignmentSkipsGrading(assignmentData)
   const repoSetup = useAssignmentRepoSetup(org, repoLookupName, {
-    enabled:
-      repoExistsAlready &&
-      assignmentData !== undefined &&
-      assignmentData.empty_repo !== true,
+    enabled: repoExistsAlready && writesMarker,
   })
 
   const [steps, setSteps] = useState<StepState>(initialStepState)
@@ -1125,11 +1126,11 @@ const AcceptAssignmentPage = () => {
 
   // The repo exists but the accept never finished. Cleared once a re-run
   // succeeds in this session (the mutation's data is the authoritative signal
-  // until the marker probe refetches). Never raised for an empty_repo
-  // assignment, whose repos legitimately carry no marker.
+  // until the marker probe refetches). Never raised for an assignment whose
+  // repos legitimately carry no marker.
   const setupIncomplete =
     repoExistsAlready &&
-    assignmentData?.empty_repo !== true &&
+    writesMarker &&
     repoSetup.state === "incomplete" &&
     !acceptMutation.isSuccess
 

@@ -10,7 +10,10 @@ import {
 import { is422NoCommitsBetween } from "@/github-core/errors"
 import {
   getBranchRefRepo,
-  getOldestCommitShaForPath,
+  baselineSource,
+  getMarkerBaseline,
+  type MarkerBaseline,
+  getRootCommitSha,
   isFreshRepoLagError,
   listPullRequestsByBaseHead,
   withFreshRepoRetry,
@@ -449,17 +452,36 @@ async function pushEmptyCommit(params: {
 // path, which has a just-committed-SHA fallback. The teacher repair reads the
 // marker directly instead, because there a read failure and an empty history
 // call for different remedies.
+//
+// `branch` names the repo's default branch for the two root-commit cases: a
+// marker the enable-autograder backfill introduced (that repo was accepted
+// without one, so the root is its baseline), and, only when `rootIsBaseline`
+// is set (the no_autograder shape), no marker at all. Only a DEFINITIVE empty
+// history falls through to the root: a transient marker read failure resolves
+// null, so a marker-carrying repo is never frozen at the wrong commit.
 export async function resolveFeedbackBaselineSha(
   client: GitHubClient,
   org: string,
   repo: string,
+  options: { branch?: string; rootIsBaseline?: boolean } = {},
 ): Promise<string | null> {
-  return getOldestCommitShaForPath(
-    client,
-    org,
-    repo,
-    ".classroom50.yaml",
-  ).catch(() => null)
+  let marker: MarkerBaseline | null
+  try {
+    marker = await getMarkerBaseline(client, org, repo)
+  } catch {
+    return null
+  }
+  switch (baselineSource(marker, options)) {
+    case "marker":
+      return marker!.sha
+    case "root":
+      if (!options.branch) return null
+      return getRootCommitSha(client, org, repo, options.branch).catch(
+        () => null,
+      )
+    case "none":
+      return null
+  }
 }
 
 // A teacher-initiated repair returns the ensure result, plus an "unsupported"
@@ -502,14 +524,25 @@ export async function repairFeedbackPullRequest(params: {
   // student back to re-run setup, so it must mean a genuinely empty marker
   // history, never a 5xx or rate limit. A read failure is a transient result
   // the bulk summary routes to the retryable bucket.
+  //
+  // `autograded === false` is the no_autograder shape here (empty_repo is
+  // gated out upstream): accept writes no marker, so an empty marker history
+  // is the norm and the root commit is the baseline, not a half-finished
+  // accept. A marker the enable-autograder backfill introduced means the same
+  // thing whatever the flag says today.
   let acceptCommitSha: string | null
   try {
-    acceptCommitSha = await getOldestCommitShaForPath(
-      client,
-      org,
-      repo,
-      ".classroom50.yaml",
-    )
+    const marker = await getMarkerBaseline(client, org, repo)
+    switch (baselineSource(marker, { rootIsBaseline: !autograded })) {
+      case "marker":
+        acceptCommitSha = marker!.sha
+        break
+      case "root":
+        acceptCommitSha = await getRootCommitSha(client, org, repo, branch)
+        break
+      case "none":
+        acceptCommitSha = null
+    }
   } catch (err) {
     return {
       ok: false,
@@ -522,7 +555,8 @@ export async function repairFeedbackPullRequest(params: {
     // against. For the repos the teacher UI offers this on (never empty_repo,
     // which is gated out upstream) that means the student's accept stopped
     // before the setup commit (issue #502); the student's "Re-run setup" is
-    // the repair. The runner refuses the same case.
+    // the repair. The runner refuses the same case. A no_autograder repo only
+    // lands here when it is commitless, which the same remedy covers.
     return { ok: false, reason: "no-baseline", unsupported: true }
   }
 

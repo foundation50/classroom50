@@ -102,6 +102,15 @@ vi.mock("@/hooks/mutations/useDownloadSubmission", () => ({
 vi.mock("@/hooks/mutations/useSetRepoVisibility", () => ({
   default: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
+// The shim row actions need a GitHub client; only their presence is under test.
+vi.mock("./ShimRowActions", () => ({
+  UpdateTriggerButton: () => (
+    <button type="button" aria-label="submissions.rowTrigger.aria" />
+  ),
+  AddShimButton: () => (
+    <button type="button" aria-label="submissions.rowShim.aria" />
+  ),
+}))
 
 const notifyMock = vi.fn()
 // Configurable so tests can drive the download row's onError into the hub
@@ -273,6 +282,34 @@ describe("ManageSubmissionModal", () => {
     )
   })
 
+  // A no_autograder accept commits nothing, so a healthy repo has no marker
+  // and the probe would misreport it as incomplete.
+  it("does not probe the setup marker for a no_autograder assignment", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{
+          ...individualAction,
+          skipsGrading: true,
+          emptyRepoAssignment: false,
+        }}
+      />,
+    )
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101-hw1-alice",
+      expect.objectContaining({ enabled: false }),
+    )
+  })
+
   it("shows the autograding status when the assignment autogrades", () => {
     repoData.mockReturnValue({
       data: { created_at: "2026-06-01T09:00:00Z" },
@@ -321,6 +358,52 @@ describe("ManageSubmissionModal", () => {
     )
     expect(
       screen.getByText("submissions.manageModal.autogradingPaused"),
+    ).toBeTruthy()
+  })
+
+  // A marker written before classroom.json resolves would omit the secret and
+  // send the runner to the unprotected path on a protected classroom, for the
+  // repo's whole life. The action waits for the classroom read instead.
+  it("hides Add autograding workflow until the marker source is known", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    const withoutSource = render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction, submissionMode: "every-push" as const }}
+      />,
+    )
+    expect(
+      screen.getByRole("button", { name: "submissions.rowTrigger.aria" }),
+    ).toBeTruthy()
+    expect(
+      screen.queryByRole("button", { name: "submissions.rowShim.aria" }),
+    ).toBeNull()
+    withoutSource.unmount()
+
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{
+          ...individualAction,
+          submissionMode: "every-push" as const,
+          markerSource: { secret: "abcd1234" },
+        }}
+      />,
+    )
+    expect(
+      screen.getByRole("button", { name: "submissions.rowShim.aria" }),
     ).toBeTruthy()
   })
 

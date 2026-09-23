@@ -350,7 +350,8 @@ section. Most assignments never need them:
 > change does have a follow-up action: after turning **on** the built-in
 > autograder, use **Add autograding workflow** on the submissions page (or
 > [`gh teacher assignment enable-autograder`](gh-teacher#assignment-enable-autograder))
-> to add the workflow to the repositories students already accepted. The
+> to add the workflow, and the `.classroom50.yaml` marker it needs, to the
+> repositories students already accepted. The
 > **Assignment type** (Individual, Group, or Group (legacy)) is the exception:
 > it stays locked on edit, because switching it would invalidate every existing
 > submission.

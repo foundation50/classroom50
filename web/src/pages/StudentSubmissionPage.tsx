@@ -34,6 +34,7 @@ import {
   latestDetectedAt,
   latestPushSubmittedAt,
 } from "@/domain/assignments/submissionDetection"
+import { isEmptyRepoAssignment } from "@/domain/assignments/autogradingState"
 import type {
   Assignment,
   AssignmentMode,
@@ -164,6 +165,7 @@ const SubmissionBody = ({
   mode,
   submissionMode,
   submissionTags,
+  rootIsBaseline,
 }: {
   org: string
   classroom: string
@@ -176,6 +178,8 @@ const SubmissionBody = ({
   mode?: AssignmentMode
   submissionMode?: SubmissionMode
   submissionTags?: string[]
+  // no_autograder assignment: the push list's baseline is the root commit.
+  rootIsBaseline?: boolean
 }) => {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
@@ -210,6 +214,7 @@ const SubmissionBody = ({
   } = useMySubmissions(org, classroom, assignment, repoOwnerSegment, {
     mode: submissionMode,
     submissionTags,
+    rootIsBaseline,
   })
   // Distinguish "never accepted" (no repo) from "accepted but not yet graded".
   // getRepo returns null only on a true 404; a 403/5xx throws, so read the repo
@@ -662,6 +667,9 @@ const StudentSubmissionPage = () => {
             mode={assignmentData?.mode}
             submissionMode={submissionMode}
             submissionTags={submissionTags}
+            rootIsBaseline={
+              assignmentData ? !isEmptyRepoAssignment(assignmentData) : false
+            }
           />
         )
       ) : (

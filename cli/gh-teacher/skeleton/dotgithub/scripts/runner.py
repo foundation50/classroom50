@@ -193,13 +193,26 @@ ACCEPT_COMMIT_DELETED_PATHS = frozenset({"README.md"})
 # lockstep with classroomcfg.AutogradeWorkflowPath.
 SHIM_UPDATE_COMMIT_PATHS = frozenset({".github/workflows/autograde.yaml"})
 
+# The subject of the teacher-side backfill that adds the shim (and, for a repo
+# accepted without one, the marker) after the built-in autograder is turned on.
+# Such a repo was accepted without a marker, so its baseline is the ROOT
+# commit, and a marker this commit introduced must not move it: a Feedback PR
+# frozen at the root would otherwise mismatch the runner's baseline for the
+# repo's whole life. Hand-mirrored with contract.ShimBackfillCommitMessage, the
+# web SHIM_BACKFILL_COMMIT_MESSAGE, and regrade_repos.py; keep byte-identical.
+SHIM_BACKFILL_COMMIT_SUBJECT = "[Classroom 50] Add autograde workflow (enable-autograder)"
+
 # `_baseline_scan` source discriminator. SOURCE_OPENABLE yields a usable
 # Feedback PR base (accept commit or root fallback); the others skip.
 SOURCE_ACCEPT = "accept"
 SOURCE_ROOT = "root"
+# The root commit of a repo accepted without a marker (no_autograder) whose
+# marker the enable-autograder backfill later added: a trusted baseline, unlike
+# SOURCE_ROOT, so it must not raise the untrusted-baseline warning.
+SOURCE_ROOT_BACKFILL = "root-backfill"
 SOURCE_GIT_ERROR = "git-error"
 SOURCE_NONE = "none"
-SOURCE_OPENABLE = (SOURCE_ACCEPT, SOURCE_ROOT)
+SOURCE_OPENABLE = (SOURCE_ACCEPT, SOURCE_ROOT, SOURCE_ROOT_BACKFILL)
 
 # Control paths allowed_files enforcement never removes, even under a bare `*`.
 # Lockstep with submit.go's isControlPath, pinned from both sides by the shared
@@ -596,11 +609,14 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
         (ACCEPT_MARKER_PATH). A trusted baseline.
       - SOURCE_ROOT:      the repo's root commit (no commit added the marker)
         -- a best-effort baseline.
+      - SOURCE_ROOT_BACKFILL: the root commit of a repo whose only marker
+        commit is the enable-autograder backfill (accepted as no_autograder).
+        Trusted: the root IS that shape's baseline.
       - SOURCE_GIT_ERROR: git ran but failed (e.g., "dubious ownership" in a
         container, or an un-deepenable shallow clone). History might exist; we
         couldn't read it. Distinct from SOURCE_NONE so the caller warns right.
       - SOURCE_NONE:      no history to resolve -- git unavailable or not a repo.
-    sha is None for everything except SOURCE_ACCEPT / SOURCE_ROOT.
+    sha is None for everything except the SOURCE_OPENABLE sources.
     """
 
     def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -638,27 +654,35 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
         # then restore) can't move the baseline forward and hide work from the
         # review diff. --diff-filter=A selects additions, --reverse oldest-first,
         # --first-parent stays on mainline. Run before the root-commit fallback.
+        # %s (the subject) rides along so a marker the enable-autograder
+        # backfill introduced is recognized: that repo was accepted without one,
+        # so it keeps the root baseline below.
         added = git(
             "log", "--reverse", "--first-parent", "--diff-filter=A",
-            "--format=%H", "HEAD", "--", ACCEPT_MARKER_PATH,
+            "--format=%H%x00%s", "HEAD", "--", ACCEPT_MARKER_PATH,
         )
         # A failed marker query is history-unreadable, not "marker absent" --
         # SOURCE_GIT_ERROR so a transient git error doesn't degrade to root.
         if added.returncode != 0:
             return None, SOURCE_GIT_ERROR
+        backfilled = False
         for line in added.stdout.splitlines():
-            sha = line.strip()
-            if sha:
-                return sha, SOURCE_ACCEPT
-        # No commit added the marker (hand-created repo): fall back to the root
-        # commit for the best-effort review link.
+            sha, _, subject = line.strip().partition("\x00")
+            if not sha:
+                continue
+            if subject == SHIM_BACKFILL_COMMIT_SUBJECT:
+                backfilled = True
+                break
+            return sha, SOURCE_ACCEPT
+        # No commit added the marker (hand-created repo, or a no_autograder
+        # accept later backfilled): fall back to the root commit.
         log = git("log", "--reverse", "--first-parent", "--format=%H", "HEAD")
         if log.returncode != 0:
             return None, SOURCE_GIT_ERROR
         for line in log.stdout.splitlines():
             sha = line.strip()
             if sha:
-                return sha, SOURCE_ROOT
+                return sha, SOURCE_ROOT_BACKFILL if backfilled else SOURCE_ROOT
         return None, SOURCE_NONE
     except (OSError, subprocess.SubprocessError):
         return None, SOURCE_NONE

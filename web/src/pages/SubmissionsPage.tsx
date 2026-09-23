@@ -454,6 +454,15 @@ const SubmissionsPageContent = () => {
   // must carry the key as `?k=<secret>`, else students hit "not found".
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = classroomMeta?.secret
+  // What "Add autograding workflow" rebuilds a missing .classroom50.yaml from
+  // (a no_autograder accept writes none); see shimBackfill.ts. Undefined until
+  // classroom.json has loaded: a marker written without the secret would send
+  // the runner to the unprotected path on a protected classroom, permanently,
+  // so the action stays hidden rather than guessing "no secret".
+  const markerSource =
+    assignmentResolved && classroomMeta !== undefined
+      ? { secret, template: assignmentInfo.template }
+      : undefined
   // An archived classroom refuses config-repo writes, so delete hides.
   const classroomArchived = isClassroomArchived(classroomMeta ?? {})
 
@@ -789,6 +798,7 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
+    rootIsBaseline: assignmentResolved && !isEmptyRepoAssignment,
     enabled: detectionCapable,
   })
 
@@ -1610,7 +1620,9 @@ const SubmissionsPageContent = () => {
                   canBulkShimAction ? () => setBulkTriggerOpen(true) : undefined
                 }
                 onBulkAddShim={
-                  canBulkShimAction ? () => setBulkAddShimOpen(true) : undefined
+                  canBulkShimAction && markerSource
+                    ? () => setBulkAddShimOpen(true)
+                    : undefined
                 }
                 onBulkPause={
                   canBulkShimAction ? () => setBulkPauseOpen(true) : undefined
@@ -1706,6 +1718,7 @@ const SubmissionsPageContent = () => {
               : undefined
           }
           submissionTags={assignmentInfo?.submission_tags}
+          markerSource={markerSource}
           // The assignment's real submission_mode (independent of the autograder
           // gate above) — drives the type-aware submission-details modal and the
           // count wording, which apply regardless of who authored the shim.
@@ -1968,7 +1981,7 @@ const SubmissionsPageContent = () => {
           students={students}
         />
       )}
-      {assignmentResolved && (
+      {assignmentResolved && markerSource && (
         <BulkAutogradeShimModal
           open={bulkAddShimOpen}
           onClose={() => setBulkAddShimOpen(false)}
@@ -1977,6 +1990,7 @@ const SubmissionsPageContent = () => {
           assignment={assignment}
           submissionMode={resolveSubmissionMode(assignmentInfo.submission_mode)}
           submissionTags={assignmentInfo.submission_tags}
+          markerSource={markerSource}
           owners={acceptedOwners}
           students={students}
         />

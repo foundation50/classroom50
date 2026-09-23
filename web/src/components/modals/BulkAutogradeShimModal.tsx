@@ -16,6 +16,7 @@ import {
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import {
   addAutogradeShim,
+  type BackfillMarkerSource,
   type ShimBackfillOutcome,
 } from "@/domain/assignments/shimBackfill"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -35,6 +36,9 @@ type BulkAutogradeShimModalProps = {
   // rendered with the same trigger accept would produce today.
   submissionMode: SubmissionMode
   submissionTags?: string[]
+  // What a repo's missing `.classroom50.yaml` is rebuilt from (see
+  // shimBackfill.ts); each owner supplies their own login.
+  markerSource: BackfillMarkerSource
   // Accepted students; each login is the owner segment of their own repo.
   owners: string[]
   students?: Student[]
@@ -56,6 +60,7 @@ export function BulkAutogradeShimModal({
   assignment,
   submissionMode,
   submissionTags,
+  markerSource,
   owners,
   students = [],
 }: BulkAutogradeShimModalProps) {
@@ -113,6 +118,7 @@ export function BulkAutogradeShimModal({
           configBranch,
           submissionMode,
           submissionTags,
+          marker: { classroom, assignment, owner, ...markerSource },
         })
         if (outcome.status === "missingWorkflowScope") missingScope = true
         return {
@@ -125,7 +131,11 @@ export function BulkAutogradeShimModal({
     })
     if (!bulk.isMounted()) return
 
-    const added = outcomes.filter((o) => o.status === "added")
+    // A marker-only write is still a commit the student must pull, so it counts
+    // with the additions rather than the untouched repos.
+    const added = outcomes.filter(
+      (o) => o.status === "added" || o.status === "markerAdded",
+    )
     const present = outcomes.filter((o) => o.status === "present")
     const unrecognized = outcomes.filter((o) => o.status === "unrecognized")
     const notAccepted = outcomes.filter((o) => o.status === "notAccepted")

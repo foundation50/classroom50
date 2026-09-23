@@ -59,7 +59,10 @@ func acceptCmd() *cobra.Command {
 			"  - Writes the classroom marker file (.classroom50.yaml) and the\n" +
 			"    autograding workflow in a single commit, then verifies both are\n" +
 			"    in place before reporting success, so an accepted repository\n" +
-			"    always autogrades.\n\n" +
+			"    always autogrades.\n" +
+			"  - Adds nothing when the assignment doesn't use the built-in\n" +
+			"    autograder: your repository is an exact copy of the starter code\n" +
+			"    (or a README alone), with no Classroom 50 files.\n\n" +
 			"Visibility and access:\n\n" +
 			"  - The repository is private unless the assignment opts into public\n" +
 			"    repositories (for peer review or showcase work). You are warned\n" +
@@ -595,6 +598,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		shim:              shim,
 		autograderName:    autograderName,
 		emptyRepo:         entry.EmptyRepo,
+		noAutograder:      entry.NoAutograder,
 		initShim:          entry.InitShim,
 		feedbackPR:        entry.FeedbackPR,
 		feedbackPRBody:    resolveFeedbackBodySpec(entry),
@@ -635,6 +639,11 @@ type acceptRepoParams struct {
 	// emptyRepo selects the bare path: no control files are committed and no
 	// marker probe runs — the only provisioning is the idempotent admin grant.
 	emptyRepo bool
+	// noAutograder also commits no control files (no marker, no shim), so it
+	// shares the bare path's "repo exists = accepted" rule, but the repo is
+	// initialized (template or README): Pages and the Feedback PR still apply,
+	// the latter anchored on the root commit.
+	noAutograder bool
 	// initShim marks a template-less assignment whose teacher turned the
 	// README off: the repo is still created with auto_init (GitHub needs an
 	// initial commit to write against), so the accept commit removes the
@@ -647,9 +656,10 @@ type acceptRepoParams struct {
 	// feedbackPRBody selects the built-in body or the template repo's
 	// pull_request_template.md (feedback_pr_template opt-in, fail-open).
 	feedbackPRBody feedbackBodySpec
-	// pages, when set, configures a GitHub Pages site before the control-files
-	// commit; see enablePagesStep. Fresh create only: acceptIntoRepo clears it
-	// on the heal path.
+	// pages, when set, configures a GitHub Pages site once the branch is
+	// readable (before the control-files commit, where there is one); see
+	// enablePagesStep. Fresh create only: acceptIntoRepo clears it on the heal
+	// path.
 	pages             *assignments.Pages
 	fullName, htmlURL string
 	alreadyExisted    bool
@@ -667,13 +677,14 @@ type acceptRepoParams struct {
 //     the idempotent provisioning to repair it.
 //   - freshly created → provision normally.
 func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
-	// The bare (empty_repo) path never commits control files, so the marker
-	// probe below is meaningless: an existing repo IS an accepted repo. The
-	// only provisioning is the founder grant — an idempotent upsert, so re-run
-	// it unconditionally to heal a prior accept that died between create and
-	// grant.
-	if p.emptyRepo {
-		return acceptIntoBareRepo(client, u, verbose, out, p)
+	// The no-setup-commit paths (empty_repo, no_autograder) never commit
+	// control files, so the marker probe below is meaningless: an existing
+	// repo IS an accepted repo. Their provisioning is the founder grant (an
+	// idempotent upsert, re-run unconditionally to heal a prior accept that
+	// died between create and grant) plus, for no_autograder, Pages and the
+	// Feedback PR.
+	if p.emptyRepo || p.noAutograder {
+		return acceptWithoutSetupCommit(client, u, verbose, out, p)
 	}
 	if p.alreadyExisted {
 		provisioned, perr := repoFileExists(client, p.org, p.repoName, classroomcfg.MetadataPath)
@@ -703,7 +714,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			// inside, keeping repeat re-accepts read-only.
 			if p.feedbackPR {
 				openFeedbackPRStep(client, u, verbose, p, func() (string, error) {
-					return acceptCommitSHA(client, p.org, p.repoName)
+					return acceptCommitSHA(client, p.org, p.repoName, p.branch)
 				})
 			}
 			return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
@@ -749,25 +760,40 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 	return reportAccepted(u, out, p.fullName, p.htmlURL)
 }
 
-// acceptIntoBareRepo is acceptIntoRepo's empty_repo twin: no control files, no
-// marker probe, no read-back of a marker. The repo has no commits (auto_init
-// false), so the sole provisioning step is the founder role grant — the same
-// least-privilege rule as the normal path (`push` for individual, `admin` for
-// group). It splits on alreadyExisted like the templated path: a healthy
-// already-accepted repo reconciles the grant best-effort (a transient failure
-// must not fail a re-run), while a fresh create hard-fails the grant and first
-// asserts mode/size coherence.
-func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
+// acceptWithoutSetupCommit is acceptIntoRepo's twin for the shapes that commit
+// no control files: empty_repo (a bare repo with no commits) and no_autograder
+// (an initialized repo left exactly as GitHub created it). No marker probe, no
+// read-back of a marker. The sole provisioning both share is the founder role
+// grant — the same least-privilege rule as the normal path (`push` for
+// individual, `admin` for group). It splits on alreadyExisted like the
+// templated path: a healthy already-accepted repo reconciles the grant
+// best-effort (a transient failure must not fail a re-run), while a fresh
+// create hard-fails the grant and first asserts mode/size coherence.
+//
+// no_autograder additionally keeps Pages (fresh create only) and the Feedback
+// PR, whose baseline is the repo's root commit since no marker commit exists
+// (an older marker, from before accept stopped writing one, still wins).
+func acceptWithoutSetupCommit(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
+	resolveBase := func() (string, error) {
+		return feedbackBaseSHAOrRoot(client, p.org, p.repoName, p.branch)
+	}
 	if p.alreadyExisted {
 		p.createSp.Stop(fmt.Sprintf("Repository already exists: %s", p.fullName))
 
 		// Already accepted: reconcile the role best-effort, matching the
-		// templated already-accepted path. The bare repo is already healthy
-		// (its only provisioning is this grant), so a transient/SSO-403/
-		// left-org failure must not fail a re-run that previously succeeded.
+		// templated already-accepted path. The repo is already healthy (its
+		// provisioning is this grant plus the best-effort PR below), so a
+		// transient/SSO-403/left-org failure must not fail a re-run that
+		// previously succeeded.
 		attachTeamBestEffort(client, u, verbose, p)
 		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
 			u.Detail("could not update %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
+		}
+		// Repos accepted before the accept-time-PR feature get their PR by
+		// re-accepting — the only Actions-free route. Existing PRs
+		// short-circuit inside, keeping repeat re-accepts read-only.
+		if p.noAutograder && p.feedbackPR {
+			openFeedbackPRStep(client, u, verbose, p, resolveBase)
 		}
 		return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
 	}
@@ -780,17 +806,43 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 		return err
 	}
 
-	// A fresh team-mode bare repo still needs its team attached — that is the
-	// only thing giving teammates access to a repo with no collaborators.
+	// Pages and the Feedback PR both need the branch readable first (the
+	// generated repo's git data can lag the create): wait once for both. A
+	// failed wait is not fatal to the accept, so the steps that needed it are
+	// skipped with the same deferral hint DropFiles' consumers use.
+	branchReady := false
+	if p.noAutograder && (p.pages != nil || p.feedbackPR) {
+		if err := waitForStableBranch(client, p.org, p.repoName, p.branch); err != nil {
+			u.Warn("could not read %s/%s's default branch (%v); %s", p.org, p.repoName, err, branchUnsettledRemedies(p))
+		} else {
+			branchReady = true
+		}
+	}
+	if branchReady && p.pages != nil {
+		enablePagesOnReadyBranch(client, u, verbose, p)
+	}
+
+	// A fresh team-mode repo still needs its team attached — that is the only
+	// thing giving teammates access to a repo with no collaborators.
 	if err := attachTeamStep(client, p); err != nil {
 		return err
+	}
+
+	// Feedback PR is best-effort (a failure only defers to a re-run). Before
+	// the founder grant so the repo is fully set up before we (possibly)
+	// narrow the student's own access.
+	if branchReady && p.feedbackPR {
+		openFeedbackPRStep(client, u, verbose, p, resolveBase)
 	}
 
 	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil {
 		return err
 	}
 
-	return reportBareAccepted(u, out, p.fullName, p.htmlURL)
+	if p.emptyRepo {
+		return reportBareAccepted(u, out, p.fullName, p.htmlURL)
+	}
+	return reportAccepted(u, out, p.fullName, p.htmlURL)
 }
 
 // attachTeamStep grants the group team push on the just-created repo — the
@@ -806,8 +858,8 @@ func attachTeamStep(client githubapi.Client, p acceptRepoParams) error {
 }
 
 // enablePagesStep configures the assignment's GitHub Pages site once the branch
-// is readable and before the control-files commit, so a branch source exists
-// and that commit's push is a workflow site's first deploy (a deploy workflow's
+// is readable and, on the committing path, before the control-files commit so
+// that commit's push is a workflow site's first deploy (a deploy workflow's
 // first run would otherwise fail with no site). Fresh create only, never
 // re-asserted on heal, so a student's own later Pages change survives.
 // Best-effort: a refusal warns with the next step and never fails accept; 409
@@ -819,11 +871,25 @@ func enablePagesStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRe
 	const msg = "Enabling GitHub Pages"
 	sp := u.Spinner(msg)
 	sp.Start()
-	if err := classroomcfg.WaitForStableBranch(client, p.org, p.repoName, p.branch); err != nil {
+	if err := waitForStableBranch(client, p.org, p.repoName, p.branch); err != nil {
 		sp.Fail(msg)
 		u.Warn("could not enable GitHub Pages on %s/%s (%v); your teacher can enable it from the submissions page", p.org, p.repoName, err)
 		return
 	}
+	enablePagesWithSpinner(client, u, verbose, p, sp, msg)
+}
+
+// enablePagesOnReadyBranch is enablePagesStep for a caller that has already
+// waited for the branch (the no-setup-commit path waits once for Pages and
+// the Feedback PR together).
+func enablePagesOnReadyBranch(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams) {
+	const msg = "Enabling GitHub Pages"
+	sp := u.Spinner(msg)
+	sp.Start()
+	enablePagesWithSpinner(client, u, verbose, p, sp, msg)
+}
+
+func enablePagesWithSpinner(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, sp *ghui.Spinner, msg string) {
 	body, ok := ghutil.PagesBodyForAssignment(p.pages.Source, p.pages.Branch, p.pages.Path, p.branch)
 	if !ok {
 		sp.Fail(msg)
@@ -948,7 +1014,7 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	// narrow the student's own access.
 	if p.feedbackPR {
 		openFeedbackPRStep(client, u, verbose, p, func() (string, error) {
-			return feedbackBaseSHA(client, p.org, p.repoName, acceptSHA), nil
+			return feedbackBaseSHA(client, p.org, p.repoName, p.branch, acceptSHA), nil
 		})
 	}
 
@@ -972,8 +1038,8 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 // runner resolves — freezing there would make the runner refuse to maintain the
 // PR for the repo's whole life. On a fresh accept the lookup returns the commit
 // just written (or fails on read lag), so falling back to it is correct.
-func feedbackBaseSHA(client githubapi.Client, org, repoName, committedSHA string) string {
-	if sha, err := acceptCommitSHA(client, org, repoName); err == nil && sha != "" {
+func feedbackBaseSHA(client githubapi.Client, org, repoName, branch, committedSHA string) string {
+	if sha, err := acceptCommitSHA(client, org, repoName, branch); err == nil && sha != "" {
 		return sha
 	}
 	return committedSHA
@@ -1005,6 +1071,24 @@ func verifyProvisioned(client githubapi.Client, org, repoName string) error {
 		}
 	}
 	return lastErr
+}
+
+// waitForStableBranch is classroomcfg.WaitForStableBranch behind a var so tests
+// can short-circuit its ~50s failure budget.
+var waitForStableBranch = classroomcfg.WaitForStableBranch
+
+// branchUnsettledRemedies names only the steps the assignment configured that a
+// failed branch wait skipped, each with its remedy, so a pages-only or
+// feedback-only accept is not told about a step it never requested.
+func branchUnsettledRemedies(p acceptRepoParams) string {
+	var parts []string
+	if p.feedbackPR {
+		parts = append(parts, "the feedback pull request is skipped, run accept again to retry it")
+	}
+	if p.pages != nil {
+		parts = append(parts, "GitHub Pages was not enabled; your teacher can enable it from the submissions page")
+	}
+	return strings.Join(parts, ". ")
 }
 
 // verifyProvisionAttempts / verifyProvisionBackoff bound the read-back poll

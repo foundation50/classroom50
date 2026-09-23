@@ -3,11 +3,13 @@ import { describe, expect, it, vi } from "vitest"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
-import { addAutogradeShim } from "./shimBackfill"
+import { parseClassroom50Yaml } from "@/util/yaml"
+import { addAutogradeShim, type BackfillMarker } from "./shimBackfill"
 import { defaultAutograderWorkflow } from "./autograderYaml"
 import { AUTOGRADE_SHIM_PATH } from "./submissionTrigger"
 
 type Call = { url: string; method: string; body?: unknown }
+type TreeEntry = { path: string; content: string }
 
 function apiError(status: number, oauthScopes?: string): GitHubAPIError {
   return new GitHubAPIError({
@@ -27,15 +29,21 @@ function apiError(status: number, oauthScopes?: string): GitHubAPIError {
   })
 }
 
-// A minimal fake GitHub: one student repo `o/r` on `main` whose shim is
-// present or absent, plus the git-data write endpoints.
+// A minimal fake GitHub: one student repo `o/r` on `main` whose shim and
+// marker are present or absent, plus the git-data write endpoints and the
+// user lookups the marker rebuild makes.
 function fakeClient(opts: {
   repoExists?: boolean
   shimExists?: boolean
   // Body served at the shim path when shimExists; defaults to a default shim.
   shimContent?: string
+  // Whether `.classroom50.yaml` already exists at HEAD (defaults to present,
+  // the shape of a repo accepted while the marker was still written).
+  markerExists?: boolean
   contentsStatus?: number
   workflowScope404?: boolean
+  // Users the id lookups resolve; anyone else 404s (recorded as null).
+  users?: Record<string, number>
 }) {
   const calls: Call[] = []
   const request = vi.fn(
@@ -63,6 +71,22 @@ function fakeClient(opts: {
           encoding: "base64",
         }
       }
+      if (url === "/repos/o/r/contents/.classroom50.yaml?ref=head-sha") {
+        if (opts.markerExists === false) throw apiError(404)
+        return {
+          type: "file",
+          encoding: "base64",
+          content: Buffer.from("classroom: c\nassignment: a\n").toString(
+            "base64",
+          ),
+        }
+      }
+      const user = url.match(/^\/users\/([^/]+)$/)
+      if (user) {
+        const id = opts.users?.[user[1]]
+        if (id === undefined) throw apiError(404)
+        return { login: user[1], id }
+      }
       if (url === "/repos/o/r/git/trees" && method === "POST") {
         if (opts.workflowScope404) throw apiError(404, "repo, read:org")
         return { sha: "new-tree" }
@@ -80,6 +104,20 @@ function fakeClient(opts: {
 }
 
 const writes = (calls: Call[]) => calls.filter((c) => c.method !== "GET")
+const treeEntries = (calls: Call[]): TreeEntry[] =>
+  (
+    writes(calls).find((c) => c.url === "/repos/o/r/git/trees")?.body as {
+      tree: TreeEntry[]
+    }
+  ).tree
+
+const marker: BackfillMarker = {
+  classroom: "cs101",
+  assignment: "hw1",
+  owner: "alice",
+  secret: "abcd1234",
+  template: { owner: "acme", repo: "hw1-template", branch: "main" },
+}
 
 describe("addAutogradeShim", () => {
   it("adds the default shim rendered for the assignment's mode and tags", async () => {
@@ -91,25 +129,89 @@ describe("addAutogradeShim", () => {
       configBranch: "master",
       submissionMode: "tag",
       submissionTags: ["phase1"],
+      marker,
     })
     expect(outcome).toEqual({ status: "added" })
 
-    const tree = writes(calls).find((c) => c.url === "/repos/o/r/git/trees")
-    const entry = (
-      tree?.body as { tree: Array<{ path: string; content: string }> }
-    ).tree[0]
-    expect(entry.path).toBe(AUTOGRADE_SHIM_PATH)
+    const entries = treeEntries(calls)
+    expect(entries.map((e) => e.path)).toEqual([AUTOGRADE_SHIM_PATH])
     // The repo's live default branch and the config repo's branch both flow
     // into the render.
-    expect(entry.content).toBe(
+    expect(entries[0].content).toBe(
       defaultAutograderWorkflow("o", "main", "master", "tag", ["phase1"]),
     )
-    expect(entry.content).toContain("autograde-runner.yaml@master")
+    expect(entries[0].content).toContain("autograde-runner.yaml@master")
 
     const commit = writes(calls).find((c) => c.url === "/repos/o/r/git/commits")
     expect((commit?.body as { message: string }).message).toBe(
       SHIM_BACKFILL_COMMIT_MESSAGE,
     )
+  })
+
+  // A no_autograder accept writes no marker, and the runner the shim calls
+  // refuses a repo without one, so the backfill lands both in one commit.
+  it("adds the marker alongside the shim when the repo has none", async () => {
+    const { client, calls } = fakeClient({
+      shimExists: false,
+      markerExists: false,
+      users: { alice: 42, acme: 7 },
+    })
+    const outcome = await addAutogradeShim({
+      client,
+      org: "o",
+      repo: "r",
+      configBranch: "main",
+      submissionMode: "every-push",
+      marker,
+    })
+    expect(outcome).toEqual({ status: "added" })
+
+    const entries = treeEntries(calls)
+    expect(entries.map((e) => e.path).toSorted()).toEqual([
+      ".classroom50.yaml",
+      AUTOGRADE_SHIM_PATH,
+    ])
+    const yaml = entries.find((e) => e.path === ".classroom50.yaml")!.content
+    expect(parseClassroom50Yaml(yaml)).toEqual({
+      schema: "classroom50/repo-config/v1",
+      classroom: "cs101",
+      assignment: "hw1",
+      secret: "abcd1234",
+      owner: { username: "alice", id: 42 },
+      source: {
+        owner: "acme",
+        owner_id: 7,
+        repo: "hw1-template",
+        branch: "main",
+      },
+    })
+    // One commit: the runner's baseline walk must find the marker and the
+    // shim introduced together.
+    expect(
+      writes(calls).filter((c) => c.url === "/repos/o/r/git/commits"),
+    ).toHaveLength(1)
+  })
+
+  it("records unresolved ids as null and omits the source for a template-less entry", async () => {
+    const { client, calls } = fakeClient({
+      shimExists: false,
+      markerExists: false,
+    })
+    await addAutogradeShim({
+      client,
+      org: "o",
+      repo: "r",
+      configBranch: "main",
+      submissionMode: "every-push",
+      marker: { classroom: "cs101", assignment: "hw1", owner: "alice" },
+    })
+    const yaml = treeEntries(calls).find(
+      (e) => e.path === ".classroom50.yaml",
+    )!.content
+    const parsed = parseClassroom50Yaml(yaml)
+    expect(parsed.owner).toEqual({ username: "alice", id: null })
+    expect(parsed.secret).toBeUndefined()
+    expect(parsed.source).toBeUndefined()
   })
 
   it("leaves an existing shim untouched", async () => {
@@ -120,9 +222,36 @@ describe("addAutogradeShim", () => {
       repo: "r",
       configBranch: "main",
       submissionMode: "every-push",
+      marker,
     })
     expect(outcome).toEqual({ status: "present" })
     expect(writes(calls)).toEqual([])
+  })
+
+  // A template that ships the default shim, or a backfill by a release that
+  // wrote the shim alone, leaves a repo the runner refuses (no marker). Adding
+  // the marker under the backfill subject keeps the root baseline; the only
+  // other remedy, a heal re-accept, would move it.
+  it("adds only the marker when the default shim is already present", async () => {
+    const { client, calls } = fakeClient({
+      shimExists: true,
+      markerExists: false,
+      users: { alice: 42, acme: 7 },
+    })
+    const outcome = await addAutogradeShim({
+      client,
+      org: "o",
+      repo: "r",
+      configBranch: "main",
+      submissionMode: "every-push",
+      marker,
+    })
+    expect(outcome).toEqual({ status: "markerAdded" })
+    expect(treeEntries(calls).map((e) => e.path)).toEqual([".classroom50.yaml"])
+    const commit = writes(calls).find((c) => c.url === "/repos/o/r/git/commits")
+    expect((commit?.body as { message: string }).message).toBe(
+      SHIM_BACKFILL_COMMIT_MESSAGE,
+    )
   })
 
   it("reports a foreign file at the shim path as unrecognized, untouched", async () => {
@@ -136,6 +265,7 @@ describe("addAutogradeShim", () => {
       repo: "r",
       configBranch: "main",
       submissionMode: "every-push",
+      marker,
     })
     expect(outcome.status).toBe("unrecognized")
     expect(writes(calls)).toEqual([])
@@ -150,6 +280,7 @@ describe("addAutogradeShim", () => {
         repo: "r",
         configBranch: "main",
         submissionMode: "every-push",
+        marker,
       }),
     ).rejects.toBeInstanceOf(GitHubAPIError)
     expect(writes(calls)).toEqual([])
@@ -163,6 +294,7 @@ describe("addAutogradeShim", () => {
       repo: "r",
       configBranch: "main",
       submissionMode: "every-push",
+      marker,
     })
     expect(outcome).toEqual({ status: "notAccepted" })
     expect(writes(calls)).toEqual([])
@@ -176,6 +308,7 @@ describe("addAutogradeShim", () => {
       repo: "r",
       configBranch: "main",
       submissionMode: "every-push",
+      marker,
     })
     expect(outcome).toEqual({ status: "missingWorkflowScope" })
   })

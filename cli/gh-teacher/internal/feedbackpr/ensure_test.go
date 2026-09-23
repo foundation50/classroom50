@@ -20,26 +20,29 @@ import (
 // branch) is served, and the ref PATCH goes through the same endpoint. Knobs
 // select the scenario; the counters let tests assert idempotency.
 type ensureServer struct {
-	existingPRState string // non-empty -> the base+head PR list returns one PR in that state
-	refExists       bool   // POST /git/refs 422 "Reference already exists"
-	existingBaseSHA string // GET /git/ref/heads/feedback SHA when refExists ("" -> read 404s)
-	refReadStatus   int    // when refExists and non-zero, GET /git/ref/heads/feedback returns this status (overrides existingBaseSHA)
-	headHasDiff     bool   // first pulls POST succeeds immediately (no zero-diff 422)
-	failPRCreate    bool   // every pulls POST 403
-	prCreateRace    bool   // pulls POST 422 "already exists" and the NEXT list reports one
-	failLabelAdd    bool   // POST /issues/{n}/labels fails
-	failRefPatch    bool   // PATCH /git/refs/heads/main 422 (lost the fast-forward race)
-	retryablePRList int    // fail the first N GET /pulls with a retryable 502, then behave normally
+	existingPRState  string // non-empty -> the base+head PR list returns one PR in that state
+	refExists        bool   // POST /git/refs 422 "Reference already exists"
+	existingBaseSHA  string // GET /git/ref/heads/feedback SHA when refExists ("" -> read 404s)
+	refReadStatus    int    // when refExists and non-zero, GET /git/ref/heads/feedback returns this status (overrides existingBaseSHA)
+	headHasDiff      bool   // first pulls POST succeeds immediately (no zero-diff 422)
+	failPRCreate     bool   // every pulls POST 403
+	prCreateRace     bool   // pulls POST 422 "already exists" and the NEXT list reports one
+	failLabelAdd     bool   // POST /issues/{n}/labels fails
+	failRefPatch     bool   // PATCH /git/refs/heads/main 422 (lost the fast-forward race)
+	retryablePRList  int    // fail the first N GET /pulls with a retryable 502, then behave normally
+	noMarker         bool   // the marker commit history is empty (a no_autograder repo)
+	backfilledMarker bool   // the oldest marker commit is the enable-autograder backfill
 
 	prListStates []string
 
-	refCreates    int
-	refReads      int
-	commitCreates int
-	refPatches    int
-	prCreates     int
-	labelAdds     int
-	prListCalls   int
+	refCreates     int
+	refReads       int
+	commitCreates  int
+	refPatches     int
+	prCreates      int
+	labelAdds      int
+	prListCalls    int
+	branchLogReads int
 
 	lastCommitMessage string
 	lastCommitTree    string
@@ -181,9 +184,25 @@ func (s *ensureServer) mux(t *testing.T) *http.ServeMux {
 		_, _ = io.WriteString(w, `[]`)
 	})
 
-	// Commit-history read for the accept SHA (oldest-first-touching-marker).
-	mux.HandleFunc("/repos/o/r/commits", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]string{{"sha": "newer"}, {"sha": "accept-sha"}})
+	// Commit-history read for the accept SHA (oldest-first-touching-marker),
+	// and the branch log the markerless (no_autograder) root fallback walks.
+	mux.HandleFunc("/repos/o/r/commits", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("path") == metadataPath {
+			if s.noMarker {
+				_ = json.NewEncoder(w).Encode([]map[string]string{})
+				return
+			}
+			if s.backfilledMarker {
+				_ = json.NewEncoder(w).Encode([]map[string]any{
+					{"sha": "backfill", "commit": map[string]string{"message": contract.ShimBackfillCommitMessage()}},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"sha": "newer"}, {"sha": "accept-sha"}})
+			return
+		}
+		s.branchLogReads++
+		_ = json.NewEncoder(w).Encode([]map[string]string{{"sha": "work"}, {"sha": "accept-sha"}})
 	})
 
 	return mux
@@ -197,10 +216,15 @@ func write422or403(w http.ResponseWriter, status int, body string) {
 
 func runEnsure(t *testing.T, s *ensureServer, mode string) error {
 	t.Helper()
+	return runEnsureMarkerless(t, s, mode, false)
+}
+
+func runEnsureMarkerless(t *testing.T, s *ensureServer, mode string, markerless bool) error {
+	t.Helper()
 	server := httptest.NewServer(s.mux(t))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
-	return ensureFeedbackPullRequest(client, "o", "r", "main", mode, builtInBody)
+	return ensureFeedbackPullRequest(client, "o", "r", "main", mode, builtInBody, markerless)
 }
 
 // The ordinary autograded assignment: no teacher template.
@@ -210,6 +234,61 @@ var builtInBody = feedbackBodySpec{autograded: true}
 // base at the accept commit, hit the zero-diff 422, land ONE empty commit (the
 // head's own tree, [skip ci] in the message), fast-forward, retry the create,
 // label it. Returns nil (a fresh open).
+// A no_autograder accept writes no marker: the markerless ensure freezes the
+// base at the branch's root commit instead of reporting the repo incomplete.
+func TestEnsure_MarkerlessFallsBackToRootCommit(t *testing.T) {
+	s := &ensureServer{noMarker: true, headHasDiff: true}
+	if err := runEnsureMarkerless(t, s, contract.ModeIndividual, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.branchLogReads != 1 {
+		t.Errorf("branch log read %d times, want 1 (the root fallback)", s.branchLogReads)
+	}
+	if s.lastRefBody["sha"] != "accept-sha" {
+		t.Errorf("feedback base frozen at %q, want the root commit accept-sha", s.lastRefBody["sha"])
+	}
+}
+
+func TestEnsure_MarkerlessPrefersAnExistingMarker(t *testing.T) {
+	s := &ensureServer{headHasDiff: true}
+	if err := runEnsureMarkerless(t, s, contract.ModeIndividual, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.branchLogReads != 0 {
+		t.Errorf("branch log read %d times, want 0: a marker-carrying repo keeps its marker baseline", s.branchLogReads)
+	}
+}
+
+// Without the markerless opt-in an empty marker history is still the
+// half-finished accept the "incomplete" bucket exists for.
+func TestEnsure_NoMarkerStaysIncompleteForMarkerAssignments(t *testing.T) {
+	s := &ensureServer{noMarker: true, headHasDiff: true}
+	err := runEnsure(t, s, contract.ModeIndividual)
+	if !isNoAcceptMarker(err) {
+		t.Fatalf("err = %v, want errNoAcceptMarker", err)
+	}
+	if s.branchLogReads != 0 || s.refCreates != 0 {
+		t.Errorf("branch log reads %d / ref creates %d, want 0/0", s.branchLogReads, s.refCreates)
+	}
+}
+
+// A marker the enable-autograder backfill introduced belongs to a repo
+// accepted without one: its baseline is the root, whatever the assignment's
+// flag says today (the flag was just cleared), so the base frozen here still
+// matches a Feedback PR the no_autograder accept opened.
+func TestEnsure_BackfilledMarkerAnchorsOnRootEvenWhenNotMarkerless(t *testing.T) {
+	s := &ensureServer{backfilledMarker: true, headHasDiff: true}
+	if err := runEnsure(t, s, contract.ModeIndividual); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if s.branchLogReads != 1 {
+		t.Errorf("branch log read %d times, want 1 (the root fallback)", s.branchLogReads)
+	}
+	if s.lastRefBody["sha"] != "accept-sha" {
+		t.Errorf("feedback base frozen at %q, want the root commit accept-sha, not the backfill", s.lastRefBody["sha"])
+	}
+}
+
 func TestEnsure_FreshOpen(t *testing.T) {
 	s := &ensureServer{}
 	if err := runEnsure(t, s, contract.ModeIndividual); err != nil {
