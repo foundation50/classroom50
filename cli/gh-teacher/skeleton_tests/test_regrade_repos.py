@@ -367,6 +367,44 @@ def test_first_gradeable_commit_fails_when_only_pre_backfill_work_exists(monkeyp
     assert "cs50/repo" in str(ei.value)
 
 
+def test_first_gradeable_commit_fails_when_backfill_introduced_the_marker(monkeypatch):
+    # The 1.56 no_autograder shape: accept wrote no marker, so the backfill
+    # commit is the ONLY commit touching .classroom50.yaml. It is not the
+    # acceptance commit and must not stop the walk as one; the student's work
+    # under it has no workflow, so the answer is the same red remedy as above,
+    # not a green "no submission to grade".
+    fake_get, _ = _fake_commits_get(
+        commits=[
+            ("backfill", "[Classroom 50] Add autograde workflow (enable-autograder)\n\n[skip ci]"),
+            ("work", "Finish problem set"),
+            ("seed", "Initial commit"),
+        ],
+        marker_commits=[("backfill", "[Classroom 50] Add autograde workflow (enable-autograder)\n\n[skip ci]")],
+    )
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    with pytest.raises(rr._RepoFailed) as ei:
+        rr.first_gradeable_commit("https://api", "cs50", "repo", "tok")
+    assert "next push" in str(ei.value)
+
+
+def test_acceptance_commit_sha_ignores_backfill_introduced_marker(monkeypatch):
+    fake_get, _ = _fake_commits_get(
+        marker_commits=[("backfill", rr.SHIM_BACKFILL_COMMIT_SUBJECT + "\n\n[skip ci]")],
+    )
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    assert rr.acceptance_commit_sha("https://api", "cs50", "repo", "tok", "main") is None
+    # A real accept marker that the backfill later re-added still wins: the
+    # oldest adder decides, as in every other reader.
+    fake_get, _ = _fake_commits_get(
+        marker_commits=[
+            ("backfill", rr.SHIM_BACKFILL_COMMIT_SUBJECT + "\n\n[skip ci]"),
+            ("accept", "[Classroom 50] Initialize ..."),
+        ],
+    )
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    assert rr.acceptance_commit_sha("https://api", "cs50", "repo", "tok", "main") == "accept"
+
+
 def test_first_gradeable_commit_grades_work_pushed_after_backfill(monkeypatch):
     # A push after the backfill carries the workflow: the walk returns it
     # before ever reaching the backfill commit.

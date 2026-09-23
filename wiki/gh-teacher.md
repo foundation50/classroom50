@@ -698,7 +698,12 @@ of every shape is in
   these repositories (it reads the marker), so students push directly.
   Mutually exclusive with `empty_repo`, `init_shim`, a non-default
   `--autograder`, and the grading-adjacent fields (tests/allowed-files/
-  release-assets/pass-threshold).
+  release-assets/pass-threshold). **Before students accept**, make sure the
+  org's setup is current (`gh teacher init <org>`, or the web app's update
+  banner): the collection and autograding scripts in an org set up before
+  1.56 don't know about marker-less repositories, and would count the starter
+  commit as a submission (and, once the autograder is turned on later, would
+  anchor grading at that commit instead of the first commit).
 - **`init_shim: true`** (web: **No template**, **Add a README** off, built-in
   autograder on). An initialized but README-less repo carrying only the
   control files, which autogrades and is collected like any built-in
@@ -878,7 +883,10 @@ those repos have no workflow and never grade until it's added. A repo without a
 gets it in the same commit, since the autograder reads it to find the
 assignment. That commit doesn't change the repo's baseline: submissions and
 the Feedback PR keep measuring from the root commit, so pushes made before the
-backfill still count and an existing Feedback PR stays valid. The web app's
+backfill still count and an existing Feedback PR stays valid. That holds only
+when the org's scripts are current: refresh the org (`gh teacher init <org>`)
+before turning the autograder on for repositories accepted without a marker,
+or an older `runner.py` treats the backfill commit as the baseline. The web app's
 **Add autograding workflow** action on the submissions page does the same
 thing.
 

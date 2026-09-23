@@ -72,7 +72,10 @@ Two related, optional settings:
 - **Do not use the built-in autograder** (`no_autograder`). Accept adds no
   Classroom 50 files at all (no autograding workflow, no `.classroom50.yaml`);
   a template's own CI runs instead, a README repository simply has no
-  autograder, and score collection records who submitted but no scores. See
+  autograder, and score collection records who submitted but no scores. Update
+  the org's setup first if it was set up before 1.56 (the web app shows an
+  update banner; the CLI is `gh teacher init <org>`), or the older collection
+  script counts the starter commit as a submission. See
   [Turning autograding off or pausing it](Managing-Actions-Cost#turning-autograding-off-or-pausing-it).
 
 ### Declarative tests

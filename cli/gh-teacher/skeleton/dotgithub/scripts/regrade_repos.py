@@ -866,13 +866,22 @@ def acceptance_commit_sha(
 ) -> str | None:
     """The acceptance commit: the oldest commit on `branch` touching the accept
     marker (nothing touches it before accept creates it). None when the marker
-    has no history on the branch, so the caller doesn't stop the walk. One page
-    deep: more than 100 marker rewrites on one repo is out of scope."""
+    has no history on the branch, so the caller doesn't stop the walk. Also
+    None when the enable-autograder backfill introduced the marker: that repo
+    was accepted without one (no_autograder), so the backfill is not an accept
+    sentinel; the walk in first_gradeable_commit must reach it and fail red
+    instead of reporting "no submission". Mirrors collect_scores.marker_baseline.
+    One page deep: more than 100 marker rewrites on one repo is out of scope."""
     commits = list_branch_commits(api_url, org, repo, token, branch, path=ACCEPT_MARKER_PATH)
     for commit in reversed(commits):
         sha = commit.get("sha") if isinstance(commit, dict) else None
-        if isinstance(sha, str) and sha:
-            return sha
+        if not isinstance(sha, str) or not sha:
+            continue
+        meta = commit.get("commit")
+        message = meta.get("message") if isinstance(meta, dict) else None
+        if isinstance(message, str) and _commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT:
+            return None
+        return sha
     return None
 
 

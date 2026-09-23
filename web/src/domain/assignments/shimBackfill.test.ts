@@ -4,7 +4,11 @@ import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
 import { parseClassroom50Yaml } from "@/util/yaml"
-import { addAutogradeShim, type BackfillMarker } from "./shimBackfill"
+import {
+  addAutogradeShim,
+  resolveBackfillMarkerSource,
+  type BackfillMarker,
+} from "./shimBackfill"
 import { defaultAutograderWorkflow } from "./autograderYaml"
 import { AUTOGRADE_SHIM_PATH } from "./submissionTrigger"
 
@@ -212,6 +216,61 @@ describe("addAutogradeShim", () => {
     expect(parsed.owner).toEqual({ username: "alice", id: null })
     expect(parsed.secret).toBeUndefined()
     expect(parsed.source).toBeUndefined()
+  })
+
+  // A bulk run resolves the template owner once; each repo's marker then
+  // costs one user read (the student), not two.
+  it("uses a pre-resolved template owner id instead of looking it up per repo", async () => {
+    const { client, calls } = fakeClient({
+      shimExists: false,
+      markerExists: false,
+      users: { alice: 42, acme: 7 },
+    })
+    const source = await resolveBackfillMarkerSource(client, {
+      secret: marker.secret,
+      template: marker.template,
+    })
+    expect(source.template?.ownerId).toBe(7)
+    const userReadsBefore = calls.filter((c) => c.url.startsWith("/users/"))
+    expect(userReadsBefore.map((c) => c.url)).toEqual(["/users/acme"])
+
+    await addAutogradeShim({
+      client,
+      org: "o",
+      repo: "r",
+      configBranch: "main",
+      submissionMode: "every-push",
+      marker: {
+        classroom: "cs101",
+        assignment: "hw1",
+        owner: "alice",
+        ...source,
+      },
+    })
+    const userReads = calls
+      .filter((c) => c.url.startsWith("/users/"))
+      .map((c) => c.url)
+    expect(userReads).toEqual(["/users/acme", "/users/alice"])
+    const yaml = treeEntries(calls).find(
+      (e) => e.path === ".classroom50.yaml",
+    )!.content
+    expect(parseClassroom50Yaml(yaml).source).toEqual({
+      owner: "acme",
+      owner_id: 7,
+      repo: "hw1-template",
+      branch: "main",
+    })
+    // An unresolved id is carried as null, still without a second lookup.
+    const unresolved = await resolveBackfillMarkerSource(
+      fakeClient({}).client,
+      {
+        template: { owner: "ghost", repo: "t" },
+      },
+    )
+    expect(unresolved.template?.ownerId).toBeNull()
+    expect(await resolveBackfillMarkerSource(client, unresolved)).toBe(
+      unresolved,
+    )
   })
 
   it("leaves an existing shim untouched", async () => {

@@ -652,13 +652,16 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
                 return None, SOURCE_GIT_ERROR
         # Earliest commit that ADDED the marker wins, so a later re-add (delete
         # then restore) can't move the baseline forward and hide work from the
-        # review diff. --diff-filter=A selects additions, --reverse oldest-first,
-        # --first-parent stays on mainline. Run before the root-commit fallback.
-        # %s (the subject) rides along so a marker the enable-autograder
-        # backfill introduced is recognized: that repo was accepted without one,
-        # so it keeps the root baseline below.
+        # review diff. --diff-filter=A selects additions, --reverse oldest-first.
+        # Run before the root-commit fallback. %s (the subject) rides along so a
+        # marker the enable-autograder backfill introduced is recognized: that
+        # repo was accepted without one, so it keeps the root baseline below.
+        # Deliberately NOT --first-parent: when a student merge-pulls the
+        # teacher's backfill over unpushed work, first-parent attributes the
+        # addition to the merge commit, whose subject hides the backfill and
+        # would turn the merge into a bogus accept baseline.
         added = git(
-            "log", "--reverse", "--first-parent", "--diff-filter=A",
+            "log", "--reverse", "--diff-filter=A",
             "--format=%H%x00%s", "HEAD", "--", ACCEPT_MARKER_PATH,
         )
         # A failed marker query is history-unreadable, not "marker absent" --
