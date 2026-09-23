@@ -810,7 +810,7 @@ def first_gradeable_commit(
             return None
         meta = commit.get("commit")
         message = meta.get("message") if isinstance(meta, dict) else None
-        if isinstance(message, str) and _commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT:
+        if isinstance(message, str) and is_shim_backfill_commit(message):
             raise _RepoFailed(
                 f"{org}/{repo}: can't grade the work pushed before commit {sha[:7]}: "
                 f"the autograde workflow was added to this repository after it "
@@ -829,6 +829,13 @@ def _commit_subject(message: str) -> str:
     """A commit message's first line, trimmed (mirrors collect_scores.py)."""
     newline = message.find("\n")
     return (message if newline == -1 else message[:newline]).strip()
+
+
+def is_shim_backfill_commit(message: str) -> bool:
+    """Whether a commit is the enable-autograder backfill's: subject compared
+    exactly after trimming, body ignored. Mirrors collect_scores.py and
+    contract.IsShimBackfillCommit; pinned by baseline_source_cases.json."""
+    return _commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT
 
 
 def has_ci_skip_marker(message: str) -> bool:
@@ -879,7 +886,7 @@ def acceptance_commit_sha(
             continue
         meta = commit.get("commit")
         message = meta.get("message") if isinstance(meta, dict) else None
-        if isinstance(message, str) and _commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT:
+        if isinstance(message, str) and is_shim_backfill_commit(message):
             return None
         return sha
     return None

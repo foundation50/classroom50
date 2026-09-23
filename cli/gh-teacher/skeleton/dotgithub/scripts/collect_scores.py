@@ -3079,6 +3079,28 @@ def commit_subject(message: Any) -> str:
     return message.split("\n", 1)[0].strip()
 
 
+def is_shim_backfill_commit(message: Any) -> bool:
+    """Whether a commit is the enable-autograder backfill's: subject compared
+    exactly after trimming, body ignored. Mirrors contract.IsShimBackfillCommit
+    and the web isShimBackfillCommit."""
+    return commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT
+
+
+def resolve_baseline_source(marker: tuple[str | None, bool], root_is_baseline: bool) -> str:
+    """Which commit anchors a repo's baseline, from marker_baseline's verdict:
+    "marker" (the oldest commit touching .classroom50.yaml), "root" (the
+    branch's root commit: the marker was backfilled, or there is none and the
+    shape says the root is the seed), or "none". The one rule every reader
+    shares; pinned across Go, the web and these scripts by
+    cli/shared/testdata/baseline_source_cases.json."""
+    sha, backfilled = marker
+    if sha is not None:
+        return "marker"
+    if backfilled or root_is_baseline:
+        return "root"
+    return "none"
+
+
 def submit_tag_datetime(tag_name: str) -> str | None:
     """The instant encoded in a canonical `submit/<UTC-ts>-<short-sha>` tag name
     (buildSubmitTag replaces the timestamp's colons with dashes to keep the ref
@@ -3288,7 +3310,7 @@ def marker_baseline(
     if not isinstance(sha, str) or not sha:
         return None, False
     message = (oldest.get("commit") or {}).get("message")
-    if commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT:
+    if is_shim_backfill_commit(message):
         return None, True
     return sha, False
 
@@ -3344,11 +3366,12 @@ def detect_repo_submissions(
             branch = (info or {}).get("default_branch")
         if not isinstance(branch, str) or not branch:
             return []  # not accepted
-        baseline, backfilled = marker_baseline(api_url, org, repo_name, token)
+        marker = marker_baseline(api_url, org, repo_name, token)
+        baseline = marker[0]
         commits = list_default_branch_commits(
             api_url, org, repo_name, branch, token, stop_at_sha=baseline
         )
-        if baseline is None and (root_is_baseline or backfilled) and commits:
+        if resolve_baseline_source(marker, root_is_baseline) == "root" and commits:
             # Newest first, so the walk (unbounded without a marker) ends on
             # the root commit.
             baseline = commits[-1].get("sha")

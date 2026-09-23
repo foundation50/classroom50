@@ -905,6 +905,42 @@ class TestBaselineScanSource:
         monkeypatch.setattr(ag, "_commit_changed_paths", lambda workspace, sha: None)
         assert ag._baseline_scan(tmp_path / "repo") == (None, "git-error")
 
+    def test_shared_fixture_parity(self, tmp_path):
+        # The git-backed half of the baseline lockstep: every fixture case is
+        # built as a real repo (seed commit, then a marker-only commit carrying
+        # the case's message) and _baseline_scan must land where Go, the web
+        # and the other scripts do. The runner has no shape flag: with no
+        # marker it always falls back to the root, so the "none" cases (a
+        # bare empty_repo, which has no commits to scan) are not repos here.
+        fixture = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "shared"
+            / "testdata"
+            / "baseline_source_cases.json"
+        )
+        doc = json.loads(fixture.read_text())
+        assert doc["backfill_subject"] == ag.SHIM_BACKFILL_COMMIT_SUBJECT
+        source_for = {"marker": "accept", "root": "root-backfill"}
+        cases = [c for c in doc["cases"] if c["marker_message"] is not None]
+        assert cases, "shared fixture has no marker cases; did the file move?"
+        for i, case in enumerate(cases):
+            path = tmp_path / f"repo{i}"
+            shas = _make_repo(path, ["Initial commit"])
+            (path / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+            _git(path, "add", "-A")
+            subprocess.run(
+                ["git", "-C", str(path), "commit", "-q", "--cleanup=verbatim", "-F", "-"],
+                input=case["marker_message"], text=True, check=True, capture_output=True,
+            )
+            marker = _git(path, "rev-parse", "HEAD").stdout.strip()
+            want = source_for[case["expected"]]
+            want_sha = marker if want == "accept" else shas[0]
+            assert ag._baseline_scan(path) == (want_sha, want), case["name"]
+        rootless = [c for c in doc["cases"] if c["marker_message"] is None and c["root_is_baseline"]]
+        assert rootless, "fixture lost its no-marker root case"
+        shas = _make_repo(tmp_path / "no-marker", ["Initial commit", "Submit hello"])
+        assert ag._baseline_scan(tmp_path / "no-marker") == (shas[0], "root")
+
     def test_backfill_subject_matches_the_shared_contract(self):
         assert ag.SHIM_BACKFILL_COMMIT_SUBJECT == "[Classroom 50] Add autograde workflow (enable-autograder)"
 

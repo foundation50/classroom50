@@ -8,7 +8,7 @@ import type {
   GitHubRepo,
 } from "../types"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
-import { commitSubject, SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
+import { isShimBackfillCommit } from "@/util/commit"
 import { tolerateGitHubError } from "../errors"
 import {
   PAGE_FETCH_CONCURRENCY,
@@ -84,10 +84,9 @@ export async function getMarkerBaseline(
   // Newest-first, so the last entry is the commit that introduced the marker.
   const oldest = commits.at(-1)
   if (!oldest) return null
-  const subject = commitSubject(oldest.commit?.message ?? "")
   return {
     sha: oldest.sha,
-    backfilled: subject === commitSubject(SHIM_BACKFILL_COMMIT_MESSAGE),
+    backfilled: isShimBackfillCommit(oldest.commit?.message ?? ""),
   }
 }
 
