@@ -844,9 +844,12 @@ Both accept and the runner resolve the baseline as **the commit that introduced
 on where the base is frozen. The runner refuses to open or update the PR when
 the `feedback` branch sits at any other commit, since a student can create that
 branch themselves; an organization administrator deleting it lets the next
-submission re-freeze it correctly. If no marker commit is found, the runner
-opens the PR against the root commit and **warns** that the baseline is
-untrusted; if no baseline resolves at all, it **skips** with a warning.
+submission re-freeze it correctly. If no marker commit is found, or the commit
+that added the marker also carried other files (a student can add their own
+`.classroom50.yaml` to a repository accepted without one), the runner opens the
+PR against the root commit and **warns** that the baseline is untrusted; if no
+baseline resolves at all, it **skips** with a warning. A marker the teacher's
+**enable-autograder** backfill added keeps the root as a trusted baseline.
 
 **Prerequisites (handled by `gh teacher init`):** the organization setting
 "Allow GitHub Actions to create and approve pull requests" must be on, and two

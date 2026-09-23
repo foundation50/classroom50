@@ -606,9 +606,11 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
 
     Returns (sha, source) where source is one of the SOURCE_* constants:
       - SOURCE_ACCEPT:    the commit that introduced `.classroom50.yaml`
-        (ACCEPT_MARKER_PATH). A trusted baseline.
-      - SOURCE_ROOT:      the repo's root commit (no commit added the marker)
-        -- a best-effort baseline.
+        (ACCEPT_MARKER_PATH) and touched only the accept setup paths. A
+        trusted baseline.
+      - SOURCE_ROOT:      the repo's root commit (no commit added the marker,
+        or the one that did also carried non-setup work) -- a best-effort
+        baseline.
       - SOURCE_ROOT_BACKFILL: the root commit of a repo whose only marker
         commit is the enable-autograder backfill (accepted as no_autograder).
         Trusted: the root IS that shape's baseline.
@@ -676,9 +678,22 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
             if subject == SHIM_BACKFILL_COMMIT_SUBJECT:
                 backfilled = True
                 break
-            return sha, SOURCE_ACCEPT
+            # Trust the marker's adder only when it is a bare setup commit,
+            # the same path guard is_acceptance_commit applies. On a repo
+            # accepted without a marker (no_autograder) a student can commit
+            # their own .classroom50.yaml; when that commit also carries work
+            # it is not an accept, so the root stays the baseline and the
+            # untrusted warning tells the teacher. A marker-only student commit
+            # is indistinguishable by paths and stays the accepted residual.
+            entries = _commit_changed_paths(workspace, sha)
+            if entries is None:
+                return None, SOURCE_GIT_ERROR
+            if _paths_within(entries, ACCEPT_COMMIT_PATHS, ACCEPT_COMMIT_DELETED_PATHS):
+                return sha, SOURCE_ACCEPT
+            break
         # No commit added the marker (hand-created repo, or a no_autograder
-        # accept later backfilled): fall back to the root commit.
+        # accept later backfilled), or the one that did is not an accept: fall
+        # back to the root commit.
         log = git("log", "--reverse", "--first-parent", "--format=%H", "HEAD")
         if log.returncode != 0:
             return None, SOURCE_GIT_ERROR
@@ -773,6 +788,29 @@ def _commit_touches_only(
     any git error or an empty path list, so a commit we can't fully inspect is
     treated as a submission rather than silently skipped.
     """
+    entries = _commit_changed_paths(workspace, head_sha)
+    if not entries:
+        return False
+    return _paths_within(entries, allowed, allowed_deletions)
+
+
+def _paths_within(
+    entries: list[tuple[str, str]],
+    allowed: frozenset[str],
+    allowed_deletions: frozenset[str],
+) -> bool:
+    return all(
+        path in allowed or (status == "D" and path in allowed_deletions)
+        for status, path in entries
+    )
+
+
+def _commit_changed_paths(
+    workspace: pathlib.Path, sha: str
+) -> list[tuple[str, str]] | None:
+    """(status, path) for every path `sha` changed vs its parent (root commit:
+    vs the empty tree). None when git failed or its output was malformed, so
+    callers can tell "couldn't inspect" from "touched nothing"."""
 
     def git(*args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -781,36 +819,29 @@ def _commit_touches_only(
         )
 
     try:
-        # Status + name of every path the commit changed vs its parent (root
-        # commit: vs the empty tree). -r recurses, --no-renames keeps paths
-        # literal (and statuses to A/M/D/T), -z NUL-delimits so unusual
-        # filenames survive: the stream alternates status, path, status, path.
+        # -r recurses, --no-renames keeps paths literal (and statuses to
+        # A/M/D/T), -z NUL-delimits so unusual filenames survive: the stream
+        # alternates status, path, status, path.
         changed = git(
             "show", "--no-renames", "--name-status", "--format=", "-r", "-z",
-            head_sha,
+            sha,
         )
         if changed.returncode != 0:
-            return False
+            return None
         fields = changed.stdout.split("\0")
         # Well-formed output is status/path pairs plus a trailing empty field,
         # so an even length means a dangling status. zip would silently drop
         # it, and a dropped entry errs toward a false skip, so treat it as
         # uninspectable instead.
         if len(fields) % 2 == 0:
-            return False
-        entries = [
+            return None
+        return [
             (status, path)
             for status, path in zip(fields[0::2], fields[1::2])
             if path
         ]
-        if not entries:
-            return False
-        return all(
-            path in allowed or (status == "D" and path in allowed_deletions)
-            for status, path in entries
-        )
     except (OSError, subprocess.SubprocessError):
-        return False
+        return None
 
 
 def feedback_base_outcome(
