@@ -107,6 +107,12 @@ RATE_LIMIT_BODY_MARKERS = (
     "rate limit exceeded",
     "abuse",
 )
+# Rerun-endpoint 403 bodies, lower-cased substrings. Run-side: "This workflow
+# is already running", "Unable to retry this workflow run because it was
+# created over a month ago". Token-side: "Resource not accessible by personal
+# access token" (or "by integration"), "Must have admin rights to Repository".
+RERUN_REFUSED_FOR_RUN_MARKERS = ("already running", "created over a month ago")
+RERUN_REFUSED_FOR_TOKEN_MARKERS = ("not accessible", "must have", "permission", "bad credentials")
 MAX_RETRY_SLEEP_SECONDS = 60
 TRANSIENT_RETRY_CAP_SECONDS = 30
 MAX_TOTAL_THROTTLE_SLEEP_SECONDS = 300
@@ -713,25 +719,30 @@ def rerun_workflow_run(
     """Re-run a completed workflow run via the Actions rerun API. Replays at
     the same commit; runtime-fetched resources (runner.py and the autograder
     bundle, both from Pages at grade time) are re-fetched, so a teacher's updated
-    autograder takes effect. A 403 (not re-runnable, e.g., still in progress) is
-    surfaced as a per-repo skip by the caller, not a hard auth failure, so one
-    un-rerunnable repo doesn't abort the run."""
+    autograder takes effect."""
     url = f"{_repo_url(api_url, org, repo)}/actions/runs/{run_id}/rerun"
     try:
         _http_request("POST", url, token, body=b"{}", accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
-        # A plain 403 here means "this run can't be re-run right now" (in
-        # progress, or too old), a benign per-repo skip. The throttle check
-        # comes FIRST: GitHub returns a rate limit as 403 too, and swallowing
-        # that one as "not re-runnable" would exit green on an incomplete
-        # regrade while the fan-out keeps hammering an active limiter.
-        if exc.code == 403 and classify(exc) is not THROTTLED:
+        if exc.code != 403 or classify(exc) is THROTTLED:
+            raise
+        # One status, three causes; only the body tells them apart. A token that
+        # can list runs but not re-run them must not pass as a run that merely
+        # can't be re-run right now (#1051).
+        body = error_body_snippet(exc).lower()
+        if any(marker in body for marker in RERUN_REFUSED_FOR_RUN_MARKERS):
             emit_warning(
                 f"{org}/{repo}: latest autograde run {run_id} can't be re-run "
-                f"right now (in progress or expired); skipping"
+                f"right now{body_note(exc)}; skipping"
             )
             raise _SkipRepo() from exc
-        raise
+        if any(marker in body for marker in RERUN_REFUSED_FOR_TOKEN_MARKERS):
+            raise  # main() classifies it FATAL and prints the rotate-token advice
+        raise _RepoFailed(
+            f"{org}/{repo}: GitHub refused to re-run autograde run {run_id} "
+            f"(HTTP 403){body_note(exc)}. Open the run on GitHub to see why, "
+            f"then regrade again."
+        ) from exc
 
 
 class _SkipRepo(Exception):

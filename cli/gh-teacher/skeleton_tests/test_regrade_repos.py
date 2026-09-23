@@ -215,25 +215,86 @@ def test_rerun_workflow_run_posts_to_rerun_endpoint(monkeypatch):
     assert seen["url"].endswith("/actions/runs/77/rerun")
 
 
-def test_rerun_workflow_run_403_raises_skiprepo(monkeypatch):
+def _rerun_refused_with(monkeypatch, exc):
+    """Make every _http_request raise `exc`, then call rerun_workflow_run."""
     def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(403)
+        raise exc
 
     monkeypatch.setattr(rr, "_http_request", fake_request)
+    return lambda: rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+
+
+def test_rerun_workflow_run_already_running_403_raises_skiprepo(monkeypatch):
+    rerun = _rerun_refused_with(
+        monkeypatch, _http_error(403, body={"message": "This workflow is already running"})
+    )
     with pytest.raises(rr._SkipRepo):
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
+
+
+def test_rerun_workflow_run_expired_403_raises_skiprepo(monkeypatch, capsys):
+    rerun = _rerun_refused_with(
+        monkeypatch,
+        _http_error(
+            403,
+            body={"message": "Unable to retry this workflow run because it was created over a month ago"},
+        ),
+    )
+    with pytest.raises(rr._SkipRepo):
+        rerun()
+    # The warning carries GitHub's reason so the run log says WHY it was skipped.
+    assert "created over a month ago" in capsys.readouterr().err
+
+
+def test_rerun_workflow_run_permission_403_is_fatal_not_a_skip(monkeypatch):
+    # Same 403 status as an expired run; must reach main()'s FATAL handling.
+    rerun = _rerun_refused_with(
+        monkeypatch,
+        _http_error(403, body={"message": "Resource not accessible by personal access token"}),
+    )
+    with pytest.raises(rr.urllib.error.HTTPError) as ei:
+        rerun()
+    assert rr.classify(ei.value) is rr.FATAL
+
+
+def test_rerun_workflow_run_unrecognized_403_fails_this_repo_only(monkeypatch):
+    # No body at all (or a body we don't recognize) is a per-repo failure: the
+    # run goes red with GitHub's reason, but the rest of the roster still
+    # regrades and nobody is told to rotate a healthy token.
+    rerun = _rerun_refused_with(monkeypatch, _http_error(403))
+    with pytest.raises(rr._RepoFailed) as ei:
+        rerun()
+    assert "refused to re-run autograde run 5" in str(ei.value)
+
+
+@pytest.mark.parametrize("marker", rr.RERUN_REFUSED_FOR_RUN_MARKERS)
+def test_rerun_workflow_run_each_run_marker_is_a_skip_case_insensitively(monkeypatch, marker):
+    rerun = _rerun_refused_with(
+        monkeypatch, _http_error(403, body={"message": f"GitHub says: {marker.upper()} here"})
+    )
+    with pytest.raises(rr._SkipRepo):
+        rerun()
+
+
+@pytest.mark.parametrize("marker", rr.RERUN_REFUSED_FOR_TOKEN_MARKERS)
+def test_rerun_workflow_run_each_token_marker_propagates_as_fatal(monkeypatch, marker):
+    rerun = _rerun_refused_with(
+        monkeypatch, _http_error(403, body={"message": f"GitHub says: {marker.upper()} here"})
+    )
+    with pytest.raises(rr.urllib.error.HTTPError) as ei:
+        rerun()
+    assert rr.classify(ei.value) is rr.FATAL
 
 
 def test_rerun_workflow_run_throttled_403_is_not_a_benign_skip(monkeypatch):
     # A throttle also arrives as 403. Swallowing it as "not re-runnable" would
     # count the repo as skipped and exit green on an incomplete regrade, while
     # the fan-out keeps hammering an active limiter.
-    def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
-
-    monkeypatch.setattr(rr, "_http_request", fake_request)
+    rerun = _rerun_refused_with(
+        monkeypatch, github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+    )
     with pytest.raises(rr.urllib.error.HTTPError) as ei:
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
     assert rr.classify(ei.value) is rr.THROTTLED
 
 
@@ -593,6 +654,48 @@ def test_main_hard_http_error_aborts_immediately(monkeypatch):
     assert rr.main() == 1
     # Aborts on the FIRST repo — does not continue iterating the roster.
     assert seen == ["cs50-hello-alice"]
+
+
+def test_main_rerun_permission_403_aborts_red_and_names_permissions(monkeypatch, capsys):
+    # End to end: a permission 403 from the rerun endpoint aborts red with the
+    # rotate-token advice instead of counting as a benign skip.
+    _set_main_env(monkeypatch)
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
+    monkeypatch.setattr(rr, "latest_autograde_run_id", lambda *a, **k: 77)
+
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        assert url.endswith("/actions/runs/77/rerun")
+        raise _http_error(403, body={"message": "Resource not accessible by personal access token"})
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    assert rr.main() == 1
+    err = capsys.readouterr().err
+    assert "service token rejected" in err
+    assert "Actions: Read and write" in err
+    assert "Resource not accessible" in err
+
+
+def test_main_rerun_unrecognized_403_fails_that_repo_and_continues(monkeypatch, capsys):
+    # A 403 body that blames neither the run nor the token (e.g. a wording
+    # GitHub introduces later) must not abort the roster or blame the token:
+    # repo 1 fails red with GitHub's message, repo 2 is still regraded.
+    _set_main_env(monkeypatch)
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
+    monkeypatch.setattr(rr, "latest_autograde_run_id", lambda *a, **k: 77)
+    seen: list[str] = []
+
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        seen.append(url)
+        if "cs50-hello-alice" in url:
+            raise _http_error(403, body={"message": "Some new refusal wording"})
+        return b""
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    assert rr.main() == 1
+    assert any("cs50-hello-bob" in url for url in seen)
+    err = capsys.readouterr().err
+    assert "Some new refusal wording" in err
+    assert "Re-scope the PAT" not in err
 
 
 def test_main_soft_http_error_skips_and_exits_1(monkeypatch):

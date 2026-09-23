@@ -3088,7 +3088,7 @@
       "statusFailedHint": "Check the workflow on GitHub, then try again.",
       "statusTimeout": "The regrade is taking a while to register. Check its progress on GitHub.",
       "confirmTitle": "Regrade all submissions for \"{{name}}\"?",
-      "confirmBody1": "This re-runs the autograder on every submitted repository's latest commit. It's useful after fixing a test or updating the autograder. Submission times don't change.",
+      "confirmBody1": "This re-runs the autograder on each repository's last graded submission, not on newer commits the student hasn't submitted. A repository with pushed work but no graded submission is graded at its latest commit, which becomes its first submission. It's useful after fixing a test or updating the autograder. Existing submission times don't change.",
       "confirmBody2": "Grading runs in the background and can take several minutes; use <collectLabel>{{collectLabel}}</collectLabel> afterward to pull the new scores."
     },
     "accept": {
@@ -3634,8 +3634,8 @@
       "titleFailed": "Regrade failed to start. Try again.",
       "aria": "Regrade {{owner}}'s submission",
       "confirmTitle": "Regrade {{name}}'s submission?",
-      "confirmBody1": "This re-runs the autograder on <name>{{name}}</name>'s latest commit for this assignment. Their submission time doesn't change.",
-      "confirmBody1WithLogin": "This re-runs the autograder on <name>{{name}}</name> (<owner>{{owner}}</owner>)'s latest commit for this assignment. Their submission time doesn't change.",
+      "confirmBody1": "This re-runs the autograder on <name>{{name}}</name>'s last graded submission for this assignment, not on newer commits they haven't submitted. If nothing has been graded yet, their latest commit is graded and becomes their submission. An existing submission time doesn't change.",
+      "confirmBody1WithLogin": "This re-runs the autograder on <name>{{name}}</name> (<owner>{{owner}}</owner>)'s last graded submission for this assignment, not on newer commits they haven't submitted. If nothing has been graded yet, their latest commit is graded and becomes their submission. An existing submission time doesn't change.",
       "confirmBody2": "Grading runs in the background and can take a few minutes; use <collectLabel>{{collectLabel}}</collectLabel> afterward to pull the new score.",
       "confirmLabel": "Regrade"
     },
@@ -3670,7 +3670,7 @@
       "reviewDescription": "Open the feedback pull request",
       "accessDescription": "Edit the student's role and collaborators",
       "detailsDescription": "Open the autograder result on GitHub",
-      "regradeDescription": "Re-run the autograder on the latest commit",
+      "regradeDescription": "Re-run the autograder on the last graded submission",
       "downloadDescription": "Save the submission as a zip archive",
       "manageGroup": "Manage group",
       "membersDescription": "View and manage the group's members"
