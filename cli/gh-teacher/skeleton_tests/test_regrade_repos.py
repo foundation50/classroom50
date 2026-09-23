@@ -217,10 +217,49 @@ def test_rerun_workflow_run_posts_to_rerun_endpoint(monkeypatch):
 
 def test_rerun_workflow_run_403_raises_skiprepo(monkeypatch):
     def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(403)
+        raise _http_error(403, body={"message": "This workflow is already running"})
 
     monkeypatch.setattr(rr, "_http_request", fake_request)
     with pytest.raises(rr._SkipRepo):
+        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+
+
+def test_rerun_workflow_run_expired_403_raises_skiprepo(monkeypatch, capsys):
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        raise _http_error(
+            403,
+            body={"message": "Unable to retry this workflow run because it was created over a month ago"},
+        )
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    with pytest.raises(rr._SkipRepo):
+        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+    # The warning carries GitHub's reason so the run log says WHY it was skipped.
+    assert "created over a month ago" in capsys.readouterr().err
+
+
+def test_rerun_workflow_run_permission_403_is_fatal_not_a_skip(monkeypatch):
+    # A token that can list runs but not re-run them gets the same 403 status
+    # as an expired run. Swallowing it as a skip exited green with nothing
+    # regraded (the "Regrade started" toast, then the old report forever). It
+    # must propagate so main() classifies it FATAL and names the permissions.
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        raise _http_error(403, body={"message": "Resource not accessible by personal access token"})
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    with pytest.raises(rr.urllib.error.HTTPError) as ei:
+        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+    assert rr.classify(ei.value) is rr.FATAL
+
+
+def test_rerun_workflow_run_unrecognized_403_propagates(monkeypatch):
+    # No body at all (or a body we don't recognize) fails toward surfacing the
+    # failure rather than toward a silent skip.
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        raise _http_error(403)
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    with pytest.raises(rr.urllib.error.HTTPError):
         rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
 
 
@@ -593,6 +632,26 @@ def test_main_hard_http_error_aborts_immediately(monkeypatch):
     assert rr.main() == 1
     # Aborts on the FIRST repo — does not continue iterating the roster.
     assert seen == ["cs50-hello-alice"]
+
+
+def test_main_rerun_permission_403_aborts_red_and_names_permissions(monkeypatch, capsys):
+    # End to end: the rerun endpoint refuses with a permission 403 (the token
+    # can list runs but not re-run them). Before, this was a benign skip and
+    # main() returned 0. It must now abort red with the rotate-token advice.
+    _set_main_env(monkeypatch)
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
+    monkeypatch.setattr(rr, "latest_autograde_run_id", lambda *a, **k: 77)
+
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        assert url.endswith("/actions/runs/77/rerun")
+        raise _http_error(403, body={"message": "Resource not accessible by personal access token"})
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    assert rr.main() == 1
+    err = capsys.readouterr().err
+    assert "service token rejected" in err
+    assert "Actions: Read and write" in err
+    assert "Resource not accessible" in err
 
 
 def test_main_soft_http_error_skips_and_exits_1(monkeypatch):
