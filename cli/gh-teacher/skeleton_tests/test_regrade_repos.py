@@ -252,15 +252,38 @@ def test_rerun_workflow_run_permission_403_is_fatal_not_a_skip(monkeypatch):
     assert rr.classify(ei.value) is rr.FATAL
 
 
-def test_rerun_workflow_run_unrecognized_403_propagates(monkeypatch):
-    # No body at all (or a body we don't recognize) fails toward surfacing the
-    # failure rather than toward a silent skip.
+def test_rerun_workflow_run_unrecognized_403_fails_this_repo_only(monkeypatch):
+    # No body at all (or a body we don't recognize) is a per-repo failure: the
+    # run goes red with GitHub's reason, but the rest of the roster still
+    # regrades and nobody is told to rotate a healthy token.
     def fake_request(method, url, token, *, accept, body=None, _retries=3):
         raise _http_error(403)
 
     monkeypatch.setattr(rr, "_http_request", fake_request)
-    with pytest.raises(rr.urllib.error.HTTPError):
+    with pytest.raises(rr._RepoFailed) as ei:
         rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+    assert "refused to re-run autograde run 5" in str(ei.value)
+
+
+@pytest.mark.parametrize("phrase", rr.RERUN_REFUSED_FOR_RUN_PHRASES)
+def test_rerun_workflow_run_each_run_phrase_is_a_skip_case_insensitively(monkeypatch, phrase):
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        raise _http_error(403, body={"message": f"GitHub says: {phrase.upper()} here"})
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    with pytest.raises(rr._SkipRepo):
+        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+
+
+@pytest.mark.parametrize("phrase", rr.RERUN_REFUSED_FOR_TOKEN_PHRASES)
+def test_rerun_workflow_run_each_token_phrase_propagates_as_fatal(monkeypatch, phrase):
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        raise _http_error(403, body={"message": f"GitHub says: {phrase.upper()} here"})
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    with pytest.raises(rr.urllib.error.HTTPError) as ei:
+        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+    assert rr.classify(ei.value) is rr.FATAL
 
 
 def test_rerun_workflow_run_throttled_403_is_not_a_benign_skip(monkeypatch):
@@ -652,6 +675,29 @@ def test_main_rerun_permission_403_aborts_red_and_names_permissions(monkeypatch,
     assert "service token rejected" in err
     assert "Actions: Read and write" in err
     assert "Resource not accessible" in err
+
+
+def test_main_rerun_unrecognized_403_fails_that_repo_and_continues(monkeypatch, capsys):
+    # A 403 body that blames neither the run nor the token (e.g. a wording
+    # GitHub introduces later) must not abort the roster or blame the token:
+    # repo 1 fails red with GitHub's message, repo 2 is still regraded.
+    _set_main_env(monkeypatch)
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
+    monkeypatch.setattr(rr, "latest_autograde_run_id", lambda *a, **k: 77)
+    seen: list[str] = []
+
+    def fake_request(method, url, token, *, accept, body=None, _retries=3):
+        seen.append(url)
+        if "cs50-hello-alice" in url:
+            raise _http_error(403, body={"message": "Some new refusal wording"})
+        return b""
+
+    monkeypatch.setattr(rr, "_http_request", fake_request)
+    assert rr.main() == 1
+    assert any("cs50-hello-bob" in url for url in seen)
+    err = capsys.readouterr().err
+    assert "Some new refusal wording" in err
+    assert "Re-scope the PAT" not in err
 
 
 def test_main_soft_http_error_skips_and_exits_1(monkeypatch):

@@ -713,48 +713,48 @@ def rerun_workflow_run(
     """Re-run a completed workflow run via the Actions rerun API. Replays at
     the same commit; runtime-fetched resources (runner.py and the autograder
     bundle, both from Pages at grade time) are re-fetched, so a teacher's updated
-    autograder takes effect. A 403 that says the run itself can't be re-run
-    (still in progress, or past GitHub's rerun window) is surfaced as a per-repo
-    skip by the caller, so one un-rerunnable repo doesn't abort the run. Any
-    other 403 propagates as a hard failure."""
+    autograder takes effect."""
     url = f"{_repo_url(api_url, org, repo)}/actions/runs/{run_id}/rerun"
     try:
         _http_request("POST", url, token, body=b"{}", accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
-        # The rerun endpoint answers 403 for three unrelated reasons and only
-        # the body tells them apart: a rate limit (checked FIRST, as elsewhere),
-        # a run that can't be re-run right now (benign, skip this repo), and a
-        # token that may read runs but not re-run them. That last one used to
-        # be swallowed with the benign case, so an under-scoped service token
-        # exited green with nothing regraded; it must reach main()'s FATAL
-        # handling instead.
-        if exc.code == 403 and classify(exc) is not THROTTLED and _rerun_refused_for_run(exc):
+        if exc.code != 403 or classify(exc) is THROTTLED:
+            raise
+        # One status, three causes, and only the body tells them apart. A token
+        # that can list runs but not re-run them used to be swallowed with the
+        # benign case, so an under-scoped service token exited green with
+        # nothing regraded (#1051).
+        body = error_body_snippet(exc).lower()
+        if any(phrase in body for phrase in RERUN_REFUSED_FOR_RUN_PHRASES):
             emit_warning(
                 f"{org}/{repo}: latest autograde run {run_id} can't be re-run "
                 f"right now (in progress or expired){body_note(exc)}; skipping"
             )
             raise _SkipRepo() from exc
-        raise
+        if any(phrase in body for phrase in RERUN_REFUSED_FOR_TOKEN_PHRASES):
+            raise  # main() classifies it FATAL and prints the rotate-token advice
+        raise _RepoFailed(
+            f"{org}/{repo}: GitHub refused to re-run autograde run {run_id} "
+            f"(HTTP 403){body_note(exc)}. Open the run on GitHub to see why, "
+            f"then regrade again."
+        ) from exc
 
 
-# Phrases GitHub uses when the RUN is the reason a rerun is refused (as opposed
-# to the token): "This workflow is already running" and "Unable to retry this
-# workflow run because it was created over a month ago". Matched against the
-# whole body snippet, case-insensitively.
+# GitHub's rerun 403 bodies, lower-cased substrings. The run is the reason:
+# "This workflow is already running", "Unable to retry this workflow run
+# because it was created over a month ago".
 RERUN_REFUSED_FOR_RUN_PHRASES = (
     "already running",
-    "in progress",
     "created over a month ago",
 )
-
-
-def _rerun_refused_for_run(exc: urllib.error.HTTPError) -> bool:
-    """Whether a rerun 403's body blames the run rather than the token. An
-    unreadable or unrecognized body reports False, failing toward surfacing
-    the failure: a red regrade with GitHub's message beats a green one that
-    silently re-ran nothing."""
-    body = error_body_snippet(exc).lower()
-    return any(phrase in body for phrase in RERUN_REFUSED_FOR_RUN_PHRASES)
+# The token is the reason: "Resource not accessible by personal access token"
+# (or "by integration"), "Must have admin rights to Repository".
+RERUN_REFUSED_FOR_TOKEN_PHRASES = (
+    "not accessible",
+    "must have",
+    "permission",
+    "bad credentials",
+)
 
 
 class _SkipRepo(Exception):
