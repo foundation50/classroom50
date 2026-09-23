@@ -215,40 +215,45 @@ def test_rerun_workflow_run_posts_to_rerun_endpoint(monkeypatch):
     assert seen["url"].endswith("/actions/runs/77/rerun")
 
 
-def test_rerun_workflow_run_403_raises_skiprepo(monkeypatch):
+def _rerun_refused_with(monkeypatch, exc):
+    """Make every _http_request raise `exc`, then call rerun_workflow_run."""
     def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(403, body={"message": "This workflow is already running"})
+        raise exc
 
     monkeypatch.setattr(rr, "_http_request", fake_request)
+    return lambda: rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+
+
+def test_rerun_workflow_run_already_running_403_raises_skiprepo(monkeypatch):
+    rerun = _rerun_refused_with(
+        monkeypatch, _http_error(403, body={"message": "This workflow is already running"})
+    )
     with pytest.raises(rr._SkipRepo):
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
 
 
 def test_rerun_workflow_run_expired_403_raises_skiprepo(monkeypatch, capsys):
-    def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(
+    rerun = _rerun_refused_with(
+        monkeypatch,
+        _http_error(
             403,
             body={"message": "Unable to retry this workflow run because it was created over a month ago"},
-        )
-
-    monkeypatch.setattr(rr, "_http_request", fake_request)
+        ),
+    )
     with pytest.raises(rr._SkipRepo):
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
     # The warning carries GitHub's reason so the run log says WHY it was skipped.
     assert "created over a month ago" in capsys.readouterr().err
 
 
 def test_rerun_workflow_run_permission_403_is_fatal_not_a_skip(monkeypatch):
-    # A token that can list runs but not re-run them gets the same 403 status
-    # as an expired run. Swallowing it as a skip exited green with nothing
-    # regraded (the "Regrade started" toast, then the old report forever). It
-    # must propagate so main() classifies it FATAL and names the permissions.
-    def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(403, body={"message": "Resource not accessible by personal access token"})
-
-    monkeypatch.setattr(rr, "_http_request", fake_request)
+    # Same 403 status as an expired run; must reach main()'s FATAL handling.
+    rerun = _rerun_refused_with(
+        monkeypatch,
+        _http_error(403, body={"message": "Resource not accessible by personal access token"}),
+    )
     with pytest.raises(rr.urllib.error.HTTPError) as ei:
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
     assert rr.classify(ei.value) is rr.FATAL
 
 
@@ -256,33 +261,28 @@ def test_rerun_workflow_run_unrecognized_403_fails_this_repo_only(monkeypatch):
     # No body at all (or a body we don't recognize) is a per-repo failure: the
     # run goes red with GitHub's reason, but the rest of the roster still
     # regrades and nobody is told to rotate a healthy token.
-    def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(403)
-
-    monkeypatch.setattr(rr, "_http_request", fake_request)
+    rerun = _rerun_refused_with(monkeypatch, _http_error(403))
     with pytest.raises(rr._RepoFailed) as ei:
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
     assert "refused to re-run autograde run 5" in str(ei.value)
 
 
-@pytest.mark.parametrize("phrase", rr.RERUN_REFUSED_FOR_RUN_PHRASES)
-def test_rerun_workflow_run_each_run_phrase_is_a_skip_case_insensitively(monkeypatch, phrase):
-    def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(403, body={"message": f"GitHub says: {phrase.upper()} here"})
-
-    monkeypatch.setattr(rr, "_http_request", fake_request)
+@pytest.mark.parametrize("marker", rr.RERUN_REFUSED_FOR_RUN_MARKERS)
+def test_rerun_workflow_run_each_run_marker_is_a_skip_case_insensitively(monkeypatch, marker):
+    rerun = _rerun_refused_with(
+        monkeypatch, _http_error(403, body={"message": f"GitHub says: {marker.upper()} here"})
+    )
     with pytest.raises(rr._SkipRepo):
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
 
 
-@pytest.mark.parametrize("phrase", rr.RERUN_REFUSED_FOR_TOKEN_PHRASES)
-def test_rerun_workflow_run_each_token_phrase_propagates_as_fatal(monkeypatch, phrase):
-    def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise _http_error(403, body={"message": f"GitHub says: {phrase.upper()} here"})
-
-    monkeypatch.setattr(rr, "_http_request", fake_request)
+@pytest.mark.parametrize("marker", rr.RERUN_REFUSED_FOR_TOKEN_MARKERS)
+def test_rerun_workflow_run_each_token_marker_propagates_as_fatal(monkeypatch, marker):
+    rerun = _rerun_refused_with(
+        monkeypatch, _http_error(403, body={"message": f"GitHub says: {marker.upper()} here"})
+    )
     with pytest.raises(rr.urllib.error.HTTPError) as ei:
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
     assert rr.classify(ei.value) is rr.FATAL
 
 
@@ -290,12 +290,11 @@ def test_rerun_workflow_run_throttled_403_is_not_a_benign_skip(monkeypatch):
     # A throttle also arrives as 403. Swallowing it as "not re-runnable" would
     # count the repo as skipped and exit green on an incomplete regrade, while
     # the fan-out keeps hammering an active limiter.
-    def fake_request(method, url, token, *, accept, body=None, _retries=3):
-        raise github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
-
-    monkeypatch.setattr(rr, "_http_request", fake_request)
+    rerun = _rerun_refused_with(
+        monkeypatch, github_http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+    )
     with pytest.raises(rr.urllib.error.HTTPError) as ei:
-        rr.rerun_workflow_run("https://api", "cs50", "repo", "tok", 5)
+        rerun()
     assert rr.classify(ei.value) is rr.THROTTLED
 
 
@@ -658,9 +657,8 @@ def test_main_hard_http_error_aborts_immediately(monkeypatch):
 
 
 def test_main_rerun_permission_403_aborts_red_and_names_permissions(monkeypatch, capsys):
-    # End to end: the rerun endpoint refuses with a permission 403 (the token
-    # can list runs but not re-run them). Before, this was a benign skip and
-    # main() returned 0. It must now abort red with the rotate-token advice.
+    # End to end: a permission 403 from the rerun endpoint aborts red with the
+    # rotate-token advice instead of counting as a benign skip.
     _set_main_env(monkeypatch)
     monkeypatch.setattr(rr, "load_roster", lambda *a, **k: (["alice", "bob"], {"slug": "hello"}))
     monkeypatch.setattr(rr, "latest_autograde_run_id", lambda *a, **k: 77)
