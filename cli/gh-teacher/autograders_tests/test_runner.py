@@ -202,12 +202,12 @@ class TestUrlConstruction:
 # ---------------------------------------------------------------------------
 
 
-def _git(repo, *args):
+def _git(repo, *args, input=None):
     return subprocess.run(
         ["git", "-C", str(repo),
          "-c", "user.name=t", "-c", "user.email=t@example.com",
          *args],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, check=True, input=input,
     )
 
 
@@ -928,10 +928,9 @@ class TestBaselineScanSource:
             shas = _make_repo(path, ["Initial commit"])
             (path / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
             _git(path, "add", "-A")
-            subprocess.run(
-                ["git", "-C", str(path), "commit", "-q", "--cleanup=verbatim", "-F", "-"],
-                input=case["marker_message"], text=True, check=True, capture_output=True,
-            )
+            # --cleanup=verbatim so the case's whitespace and CRLF reach git
+            # untouched; -F - keeps them out of argv.
+            _git(path, "commit", "-q", "--cleanup=verbatim", "-F", "-", input=case["marker_message"])
             marker = _git(path, "rev-parse", "HEAD").stdout.strip()
             want = source_for[case["expected"]]
             want_sha = marker if want == "accept" else shas[0]
