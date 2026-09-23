@@ -6,6 +6,7 @@ import {
   deriveAutogradingState,
   isEmptyRepoAssignment,
   isNoAutograderAssignment,
+  rootIsBaseline,
 } from "./autogradingState"
 
 const base: Assignment = {
@@ -40,6 +41,15 @@ describe("autogradingState predicates", () => {
     expect(assignmentSkipsGrading({ ...base, empty_repo: true })).toBe(true)
     expect(assignmentSkipsGrading({ ...base, no_autograder: true })).toBe(true)
     expect(assignmentSkipsGrading(base)).toBe(false)
+  })
+
+  it("rootIsBaseline is false only for a bare empty_repo", () => {
+    expect(rootIsBaseline({ ...base, empty_repo: true })).toBe(false)
+    // The flag-flip window: a repo can be markerless and no longer
+    // no_autograder, yet its seed commit is still not a submission.
+    expect(rootIsBaseline({ ...base, no_autograder: true })).toBe(true)
+    expect(rootIsBaseline({ ...base, init_shim: true })).toBe(true)
+    expect(rootIsBaseline(base)).toBe(true)
   })
 })
 
