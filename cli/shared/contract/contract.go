@@ -348,13 +348,15 @@ const (
 	FeedbackPRTitle = "Feedback"
 
 	// MetadataPath is the in-repo accept marker (`.classroom50.yaml`) every
-	// accept client writes in its accept commit. It doubles as the Feedback-PR
-	// baseline anchor: the runner and the checkout-less API clients resolve the
-	// frozen `feedback` base as "the (oldest) commit touching this path", so the
-	// commit subject carries no contract — only the path does. Hand-mirrored with
-	// NO compile-time link in runner.py (ACCEPT_MARKER_PATH), the web GUI, and
-	// schemas/repo-config-v1.schema.json — keep byte-identical; contract_test.go
-	// pins the Go half.
+	// accept client writes in its accept commit, except a no_autograder accept,
+	// which writes nothing. It doubles as the Feedback-PR baseline anchor: the
+	// runner and the checkout-less API clients resolve the frozen `feedback`
+	// base as "the oldest commit touching this path", falling back to the root
+	// commit when none does or when that commit's subject is
+	// ShimBackfillCommitSubject (the teacher's backfill, on a repo accepted
+	// without a marker). Hand-mirrored with NO compile-time link in runner.py
+	// (ACCEPT_MARKER_PATH), the web GUI, and schemas/repo-config-v1.schema.json;
+	// keep byte-identical. contract_test.go pins the Go half.
 	MetadataPath = ".classroom50.yaml"
 
 	// FeedbackTemplateMaxBytes caps the teacher-supplied pull_request_template.md

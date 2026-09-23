@@ -52,12 +52,35 @@ export type BackfillMarker = {
   owner: string
   // The classroom's capability-URL secret, when protected.
   secret?: string
-  template?: { owner: string; repo: string; branch?: string }
+  // ownerId is the template owner's numeric id when the caller already
+  // resolved it (a bulk run does so once); undefined means look it up here.
+  template?: {
+    owner: string
+    repo: string
+    branch?: string
+    ownerId?: number | null
+  }
 }
 
 // The assignment-level half of BackfillMarker, threaded from the page that
 // holds the entry and the classroom secret down to each row.
 export type BackfillMarkerSource = Pick<BackfillMarker, "secret" | "template">
+
+// A source whose template owner id is resolved once, for a fan-out that would
+// otherwise repeat the same GET /users read for every repo in the roster.
+export async function resolveBackfillMarkerSource(
+  client: GitHubClient,
+  source: BackfillMarkerSource,
+): Promise<BackfillMarkerSource> {
+  if (!source.template || source.template.ownerId !== undefined) return source
+  return {
+    ...source,
+    template: {
+      ...source.template,
+      ownerId: await lookupUserId(client, source.template.owner),
+    },
+  }
+}
 
 const MARKER_PATH = ".classroom50.yaml"
 
@@ -154,20 +177,13 @@ async function buildBackfillMarker(
   client: GitHubClient,
   marker: BackfillMarker,
 ): Promise<string> {
-  const lookupId = async (login: string): Promise<number | null> => {
-    try {
-      return (await getUser(client, login)).id
-    } catch (err) {
-      log.debug("shim backfill: user id lookup failed (non-fatal)", {
-        login,
-        err,
-      })
-      return null
-    }
-  }
   const [ownerId, sourceOwnerId] = await Promise.all([
-    lookupId(marker.owner),
-    marker.template ? lookupId(marker.template.owner) : null,
+    lookupUserId(client, marker.owner),
+    marker.template
+      ? marker.template.ownerId !== undefined
+        ? marker.template.ownerId
+        : lookupUserId(client, marker.template.owner)
+      : null,
   ])
   return createClassroom50Yaml({
     classroom: marker.classroom,
@@ -180,4 +196,19 @@ async function buildBackfillMarker(
     sourceRepo: marker.template?.repo,
     sourceBranch: marker.template?.branch,
   })
+}
+
+async function lookupUserId(
+  client: GitHubClient,
+  login: string,
+): Promise<number | null> {
+  try {
+    return (await getUser(client, login)).id
+  } catch (err) {
+    log.debug("shim backfill: user id lookup failed (non-fatal)", {
+      login,
+      err,
+    })
+    return null
+  }
 }

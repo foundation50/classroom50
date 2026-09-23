@@ -827,6 +827,84 @@ class TestBaselineScanSource:
         assert "root-backfill" in ag.SOURCE_OPENABLE
         assert ag.feedback_base_outcome(path) == (shas[0], "root-backfill")
 
+    def test_merge_pulled_backfill_still_keeps_root_source(self, tmp_path):
+        # The teacher's backfill lands on the remote while the student holds
+        # unpushed work; a merge-style `git pull` puts the backfill on a side
+        # parent. On the mainline the marker first appears at the merge commit,
+        # whose subject is not the backfill's, so a first-parent scan would
+        # crown the merge as the accept baseline and the runner would refuse
+        # the root-frozen Feedback PR forever.
+        remote = tmp_path / "remote"
+        shas = _make_repo(remote, ["Initial commit"])
+        student = tmp_path / "student"
+        _git(tmp_path, "clone", "-q", str(remote), str(student))
+        (student / "work.txt").write_text("work\n")
+        _git(student, "add", "-A")
+        _git(student, "commit", "-q", "-m", "Submit hello")
+        (remote / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        _git(remote, "add", "-A")
+        _git(remote, "commit", "-q", "-m", ag.SHIM_BACKFILL_COMMIT_SUBJECT + "\n\n[skip ci]")
+        _git(student, "-c", "pull.rebase=false", "pull", "-q", "--no-edit", "origin", "main")
+        parents = _git(student, "rev-list", "--parents", "-n", "1", "HEAD").stdout.split()
+        assert len(parents) == 3, "precondition: HEAD is a merge commit"
+        assert ag._baseline_scan(student) == (shas[0], "root-backfill")
+
+    def test_backfill_after_marker_delete_keeps_accept_source(self, tmp_path):
+        # A real accept marker that a student deleted and the backfill later
+        # restored: the oldest adder is still the accept commit, so dropping
+        # --first-parent must not let the backfill demote it to the root.
+        path = tmp_path / "repo"
+        shas = _make_repo(path, ["Initial commit", ACCEPT, "Submit hello"])
+        _git(path, "rm", "-q", ag.ACCEPT_MARKER_PATH)
+        _git(path, "commit", "-q", "-m", "Remove marker")
+        (path / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        _git(path, "add", "-A")
+        _git(path, "commit", "-q", "-m", ag.SHIM_BACKFILL_COMMIT_SUBJECT + "\n\n[skip ci]")
+        assert ag._baseline_scan(path) == (shas[1], "accept")
+
+    def test_marker_commit_carrying_work_is_not_trusted(self, tmp_path):
+        # A no_autograder accept writes no marker, so a student can add their
+        # own .classroom50.yaml. When that commit also carries work it is not
+        # an accept: the root stays the baseline and main() warns, the same
+        # path guard is_acceptance_commit applies to the tip.
+        path = tmp_path / "repo"
+        shas = _make_repo(path, ["Initial commit", "Submit hello"])
+        (path / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        (path / "solution.py").write_text("print('hi')\n")
+        _git(path, "add", "-A")
+        _git(path, "commit", "-q", "-m", "Accept whatever/the-client-wants")
+        assert ag._baseline_scan(path) == (shas[0], "root")
+        assert ag.feedback_base_outcome(path) == (shas[0], "root")
+
+    def test_accept_commit_deleting_the_seeded_readme_is_trusted(self, tmp_path):
+        # The init_shim accept commits the marker and the shim and removes the
+        # auto_init README in one commit; that is still a bare accept.
+        path = tmp_path / "repo"
+        path.mkdir()
+        _git(path, "init", "-q", "-b", "main")
+        (path / "README.md").write_text("seed\n")
+        _git(path, "add", "-A")
+        _git(path, "commit", "-q", "-m", "Initial commit")
+        root = _git(path, "rev-parse", "HEAD").stdout.strip()
+        (path / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        (path / ".github/workflows").mkdir(parents=True)
+        (path / ".github/workflows/autograde.yaml").write_text("on: push\n")
+        _git(path, "rm", "-q", "README.md")
+        _git(path, "add", "-A")
+        _git(path, "commit", "-q", "-m", "Accept")
+        accept = _git(path, "rev-parse", "HEAD").stdout.strip()
+        assert root != accept
+        assert ag._baseline_scan(path) == (accept, "accept")
+
+    def test_failed_accept_path_read_yields_git_error_not_root(self, tmp_path, monkeypatch):
+        # Inspecting the adder's paths is a git call like any other: a failure
+        # there is history-unreadable, not "student marker", or a transient
+        # error would freeze the Feedback PR at the wrong base.
+        shas = _make_repo(tmp_path / "repo", ["Initial commit", ACCEPT, "Submit hello"])
+        assert shas
+        monkeypatch.setattr(ag, "_commit_changed_paths", lambda workspace, sha: None)
+        assert ag._baseline_scan(tmp_path / "repo") == (None, "git-error")
+
     def test_backfill_subject_matches_the_shared_contract(self):
         assert ag.SHIM_BACKFILL_COMMIT_SUBJECT == "[Classroom 50] Add autograde workflow (enable-autograder)"
 

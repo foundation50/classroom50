@@ -16,6 +16,7 @@ import {
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import {
   addAutogradeShim,
+  resolveBackfillMarkerSource,
   type BackfillMarkerSource,
   type ShimBackfillOutcome,
 } from "@/domain/assignments/shimBackfill"
@@ -94,6 +95,13 @@ export function BulkAutogradeShimModal({
       return
     }
     if (!bulk.isMounted()) return
+    // The template owner's id is the same for every repo: one read per run,
+    // not one per roster entry (the CLI does the same).
+    const resolvedSource = await resolveBackfillMarkerSource(
+      client,
+      markerSource,
+    )
+    if (!bulk.isMounted()) return
     // A confirmed missing workflow scope stops the rest: every remaining repo
     // would fail identically.
     let missingScope = false
@@ -118,7 +126,7 @@ export function BulkAutogradeShimModal({
           configBranch,
           submissionMode,
           submissionTags,
-          marker: { classroom, assignment, owner, ...markerSource },
+          marker: { classroom, assignment, owner, ...resolvedSource },
         })
         if (outcome.status === "missingWorkflowScope") missingScope = true
         return {

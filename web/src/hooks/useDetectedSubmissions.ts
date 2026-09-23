@@ -56,8 +56,10 @@ export type UseDetectedSubmissionsArgs = {
   submissionTags?: string[]
   // Page-scoped repo-name owner segments (mirror useLiveSubmissions).
   repoOwners: string[]
-  // Branch mode on a no_autograder assignment: no marker, so the root commit
-  // (the template seed) is the baseline. See BranchSubmissionLogOptions.
+  // Branch mode: whether the root commit (the template seed) is the baseline
+  // when no marker anchors one. True for every initialized repo, false only
+  // for a bare empty_repo; the caller passes false until the assignment entry
+  // has resolved. See BranchSubmissionLogOptions.
   rootIsBaseline?: boolean
   // Off switch, e.g. until the assignment entry has resolved its mode.
   enabled?: boolean

@@ -29,9 +29,10 @@ export function useAssignmentRepoSetup(
 
   // A verdict is only meaningful while the probe is wanted. Callers flip
   // `enabled` off once they learn the assignment never writes the marker
-  // (empty_repo), and a result cached before that must not read as
-  // "incomplete". Same for refetch: react-query would run a disabled query on
-  // demand, so a heal re-run on such an assignment would cache a false 404.
+  // (empty_repo or no_autograder), and a result cached before that must not
+  // read as "incomplete". Same for refetch: react-query would run a disabled
+  // query on demand, so a heal re-run on such an assignment would cache a
+  // false 404.
   let state: AssignmentRepoSetupState = "unknown"
   if (enabled && query.data === true) state = "complete"
   else if (enabled && query.data === false) state = "incomplete"
