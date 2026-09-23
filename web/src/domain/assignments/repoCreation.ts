@@ -290,7 +290,7 @@ async function createAssignmentRepoWithVisibility(
   })
 }
 
-type AcceptRepoCreationResult = {
+export type AcceptRepoCreationResult = {
   // Set when a public create was refused by org policy and the repo was
   // created private instead (see createAssignmentRepo).
   visibilityFellBackToPrivate?: boolean
