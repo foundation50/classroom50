@@ -57,6 +57,8 @@ const metadataPath = contract.MetadataPath
 // open. errNoAcceptMarker marks a repo whose accept never landed the
 // .classroom50.yaml commit (issue #502): there is no baseline to freeze, and
 // re-running this command can't help; only the student's "Re-run setup" can.
+// It also covers a commitless no_autograder repo, whose baseline would be the
+// root commit it does not have yet.
 var (
 	errBaseMismatch   = errors.New("feedback base mismatch")
 	errAlreadyExists  = errors.New("feedback PR already exists")

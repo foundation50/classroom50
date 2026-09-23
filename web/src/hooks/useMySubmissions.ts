@@ -22,7 +22,9 @@ export function useMySubmissions(
   options: {
     mode: SubmissionMode | undefined
     submissionTags?: string[]
-    // no_autograder assignment: the push reader's baseline is the root commit.
+    // Whether the root commit is the push reader's baseline when no marker
+    // anchors one: true for every initialized repo, false only for a bare
+    // empty_repo. See BranchSubmissionLogOptions.
     rootIsBaseline?: boolean
   },
 ): {

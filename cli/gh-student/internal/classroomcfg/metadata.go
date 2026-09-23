@@ -26,11 +26,14 @@ import (
 // autograde-runner workflow's bootstrap step.
 //
 // It also serves as the runner's accept-commit marker: the runner resolves the
-// Feedback-PR baseline as "the commit that introduced .classroom50.yaml", not
-// by matching the commit subject. Every accept client (this CLI, the web GUI,
-// any future client) MUST create this file in its accept commit; the commit
-// subject carries no contract. Aliased to the shared contract constant so the
-// runner-side ACCEPT_MARKER_PATH and the teacher CLI can't drift from it
+// Feedback-PR baseline as "the oldest commit that introduced .classroom50.yaml".
+// Every accept client (this CLI, the web GUI, any future client) MUST create
+// this file in its accept commit, except a no_autograder accept, which writes
+// nothing; readers then anchor on the root commit. One subject does carry a
+// contract: a marker whose oldest adder is contract.ShimBackfillCommitSubject
+// was added by the teacher's enable-autograder backfill, and readers keep the
+// root. Aliased to the shared contract constant so the runner-side
+// ACCEPT_MARKER_PATH and the teacher CLI can't drift from it
 // (cli/gh-teacher/skeleton/dotgithub/scripts/runner.py).
 const MetadataPath = contract.MetadataPath
 

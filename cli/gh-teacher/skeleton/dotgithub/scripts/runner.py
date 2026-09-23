@@ -153,15 +153,18 @@ FETCH_ATTEMPTS = 3
 # test suites and bounds a hostile asset.
 MAX_FETCH_BYTES = 10 * 1024 * 1024
 
-# The accept commit creates the repo's `.classroom50.yaml`. Resolving the
-# baseline from this structural marker (not the commit subject) is stable
-# across clients/rewording and removes the subject-reuse spoof. The baseline
-# still can't be moved *forward* (to hide pre-baseline work) only because the
-# default-branch force-push/delete ruleset protects the accept commit -- on a
-# plan that rejects org rulesets that protection silently doesn't apply, so
-# this is a robustness win over subject-matching, not a guarantee. Path mirrors
-# classroomcfg.MetadataPath (cli/gh-student/internal/classroomcfg/metadata.go)
-# -- keep in lockstep.
+# The accept commit creates the repo's `.classroom50.yaml` (a no_autograder
+# accept creates nothing; the root commit is that shape's baseline). Resolving
+# the baseline from this structural marker is stable across clients/rewording
+# and removes the subject-reuse spoof; the one subject that matters is
+# SHIM_BACKFILL_COMMIT_SUBJECT, which marks a marker the teacher's backfill
+# added to a repo accepted without one, so the root stays the baseline. The
+# baseline still can't be moved *forward* (to hide pre-baseline work) only
+# because the default-branch force-push/delete ruleset protects the accept
+# commit -- on a plan that rejects org rulesets that protection silently
+# doesn't apply, so this is a robustness win over subject-matching, not a
+# guarantee. Path mirrors classroomcfg.MetadataPath
+# (cli/gh-student/internal/classroomcfg/metadata.go) -- keep in lockstep.
 ACCEPT_MARKER_PATH = ".classroom50.yaml"
 
 # Full set of paths the accept commit lands atomically in one Tree commit.
