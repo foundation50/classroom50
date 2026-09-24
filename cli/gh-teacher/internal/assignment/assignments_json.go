@@ -67,12 +67,21 @@ func (e *UnsupportedValueError) Error() string {
 // UpgradeHint hedges with "if" because a hand-edited typo trips the same check.
 const UpgradeHint = "if a newer Classroom 50 client wrote this value, run `gh extension upgrade " + contract.TeacherExtensionRepo + "`"
 
+// StaleBinaryError is the parse-path wrapper around an UnsupportedValueError.
+// Its MaybeStale marker (updatecheck.Stale) lets main follow the hedged hint
+// with a definite release comparison; the add path never produces one.
+type StaleBinaryError struct{ err error }
+
+func (e *StaleBinaryError) Error() string { return e.err.Error() + "; " + UpgradeHint }
+func (e *StaleBinaryError) Unwrap() error { return e.err }
+func (e *StaleBinaryError) MaybeStale()   {}
+
 func withUpgradeHint(err error) error {
 	var unsupported *UnsupportedValueError
 	if !errors.As(err, &unsupported) {
 		return err
 	}
-	return fmt.Errorf("%w; %s", err, UpgradeHint)
+	return &StaleBinaryError{err: err}
 }
 
 // ValidateStudentPermission checks an assignment's optional student_permission

@@ -266,11 +266,21 @@ func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) 
 // cause and upgrading is the one step the student can take.
 func checkAcceptableMode(assignment, mode string) error {
 	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup && mode != contract.ModeTeam {
-		return fmt.Errorf("assignment %q uses mode %q, which this version of gh-student does not support. Run `gh extension upgrade %s`, then run accept again; if that does not help, ask your teacher",
-			assignment, mode, contract.StudentExtensionRepo)
+		return &unsupportedModeError{assignment: assignment, mode: mode}
 	}
 	return nil
 }
+
+// unsupportedModeError carries the updatecheck.Stale marker so main can follow
+// the hedged upgrade hint with a definite release comparison.
+type unsupportedModeError struct{ assignment, mode string }
+
+func (e *unsupportedModeError) Error() string {
+	return fmt.Sprintf("assignment %q uses mode %q, which this version of gh-student does not support. Run `gh extension upgrade %s`, then run accept again; if that does not help, ask your teacher",
+		e.assignment, e.mode, contract.StudentExtensionRepo)
+}
+
+func (e *unsupportedModeError) MaybeStale() {}
 
 // assertAssignmentAcceptable applies the pre-generate access gates in order:
 // locked (the stronger, visibility-affecting gate) before closed (the narrower
