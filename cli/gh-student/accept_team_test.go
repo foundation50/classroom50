@@ -76,7 +76,7 @@ func TestResolveTeamMembership_AlreadyOnTeam(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var errOut bytes.Buffer
-	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), true, "")
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), false, true, "")
 	if err != nil {
 		t.Fatalf("resolveTeamMembership: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestResolveTeamMembership_TeacherFormationNotOnTeam(t *testing.T) {
 	entry := teamEntry()
 	entry.TeamFormation = contract.TeamFormationTeacher
 	var errOut bytes.Buffer
-	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, true, "")
+	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, true, "")
 	if err == nil || !strings.Contains(err.Error(), "teacher assigns the groups") {
 		t.Fatalf("err = %v, want the teacher-assigns-groups message", err)
 	}
@@ -114,7 +114,7 @@ func TestResolveTeamMembership_StudentFormationNeedsNewTeam(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var errOut bytes.Buffer
-	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), false, "")
+	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), false, false, "")
 	if err == nil || !strings.Contains(err.Error(), "--new-team") {
 		t.Fatalf("err = %v, want the --new-team hint", err)
 	}
@@ -151,7 +151,7 @@ func TestResolveTeamMembership_NewTeamCreatesWith422Retry(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var errOut bytes.Buffer
-	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), true, "The Sharks")
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), false, true, "The Sharks")
 	if err != nil {
 		t.Fatalf("resolveTeamMembership(--new-team): %v", err)
 	}
@@ -398,7 +398,7 @@ func TestResolveTeamMembership_TeacherFormationMemberAllowed(t *testing.T) {
 	entry := teamEntry()
 	entry.TeamFormation = contract.TeamFormationTeacher
 	var errOut bytes.Buffer
-	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, "")
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, false, "")
 	if err != nil {
 		t.Fatalf("resolveTeamMembership: %v", err)
 	}
@@ -425,9 +425,37 @@ func TestResolveTeamMembership_TeacherFormationRejectsSelfCreatedTeam(t *testing
 	entry := teamEntry()
 	entry.TeamFormation = contract.TeamFormationTeacher
 	var errOut bytes.Buffer
-	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, "")
+	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, false, "")
 	if err == nil || !strings.Contains(err.Error(), "was not created by your teacher") {
 		t.Fatalf("err = %v, want the self-created-team refusal", err)
+	}
+}
+
+// Teacher formation + an ORG OWNER on a teacher-created team: GitHub
+// promotes an owner to maintainer on every team they join, so the role read
+// alone looks like the self-created case above. The owner is exempt, and the
+// role is never read at all (#1065).
+func TestResolveTeamMembership_TeacherFormationOwnerExempt(t *testing.T) {
+	mine := contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/user/teams", userTeamsHandler(mine))
+	mux.HandleFunc("/orgs/"+teamTestOrg+"/teams/"+mine+"/memberships/alice",
+		func(w http.ResponseWriter, r *http.Request) {
+			t.Errorf("owner path must not read the team role: %s %s", r.Method, r.URL.Path)
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "active", "role": "maintainer"})
+		})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	entry := teamEntry()
+	entry.TeamFormation = contract.TeamFormationTeacher
+	var errOut bytes.Buffer
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, true, false, "")
+	if err != nil {
+		t.Fatalf("resolveTeamMembership: %v", err)
+	}
+	if membership.Counter != 1 {
+		t.Errorf("membership = %+v, want counter 1", membership)
 	}
 }
 
@@ -461,7 +489,7 @@ func TestGroupTeamCreate_SeedsCounterFromListing(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var errOut bytes.Buffer
-	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), true, "")
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), false, true, "")
 	if err != nil {
 		t.Fatalf("resolveTeamMembership(--new-team): %v", err)
 	}

@@ -386,6 +386,33 @@ describe("acceptAssignment team mode", () => {
     )
   })
 
+  // The teacher-formation gate's role read for a group team, as the mock's
+  // request log records it.
+  const gateRoleRead = (teamSlug: string) =>
+    `GET /orgs/${ORG}/teams/${teamSlug}/memberships/alice`
+
+  it("lets a student accept through a teacher-created team they merely belong to", async () => {
+    // The ordinary production path: a non-owner student the teacher added as
+    // a plain member. The gate must be consulted (not skipped) and must pass.
+    mocked.assignment = ASSIGNMENT_ENTRY
+    const myTeam = await groupTeam(2, 42)
+    const { client, requests } = makeClient({
+      myTeams: [myTeam],
+      repoExists: true,
+      orgRole: "member",
+      teamRole: "member",
+    })
+    const result = await acceptAssignment({
+      client,
+      org: ORG,
+      classroom: CLASSROOM,
+      assignmentSlug: SLUG,
+    })
+    expect(result.status).toBe("already-accepted")
+    expect(result.repo.name).toBe(groupRepoName(CLASSROOM, SLUG, 2))
+    expect(requests).toContain(gateRoleRead(myTeam.slug))
+  })
+
   it("rejects a self-created team under teacher formation (maintainer role)", async () => {
     // The group-team name is derivable from public data, so a student could
     // found a shape-matching team and bypass "your teacher assigns the
@@ -414,10 +441,11 @@ describe("acceptAssignment team mode", () => {
     // GitHub promotes an org owner to maintainer on every team they join, so a
     // teacher who adds themself to a group to test the flow reads exactly like
     // the rogue student above. The owner already administers the org, so the
-    // self-created guard must not apply to them.
+    // self-created guard must not apply to them: the role is never read.
     mocked.assignment = ASSIGNMENT_ENTRY
-    const { client } = makeClient({
-      myTeams: [await groupTeam(2, 42)],
+    const myTeam = await groupTeam(2, 42)
+    const { client, requests } = makeClient({
+      myTeams: [myTeam],
       repoExists: true,
       orgRole: "admin",
       teamRole: "maintainer",
@@ -430,5 +458,6 @@ describe("acceptAssignment team mode", () => {
     })
     expect(result.status).toBe("already-accepted")
     expect(result.repo.name).toBe(groupRepoName(CLASSROOM, SLUG, 2))
+    expect(requests).not.toContain(gateRoleRead(myTeam.slug))
   })
 })
