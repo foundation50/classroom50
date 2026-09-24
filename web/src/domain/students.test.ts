@@ -1202,17 +1202,26 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
       capEmails: ["a@uni.edu"],
       holdInvitesUntilThrottled: true,
     })
-    let attempts = 0
+    let attemptsForA = 0
     const request = client.request as ReturnType<typeof vi.fn>
     const inner = request.getMockImplementation() as (
       path: string,
       options?: { method?: string },
     ) => Promise<unknown>
-    // First POST hits the cap; the second (the restore) goes through.
+    // a@uni.edu's first POST hits the cap; its second (the restore) goes
+    // through. Counted per email, not per POST: the twelve peers below run
+    // concurrently and their sends interleave with these two in an order that
+    // depends on how the threadpool schedules each target's team digest.
     request.mockImplementation(
       (path: string, options?: { method?: string }) => {
-        if (path.endsWith("/invitations") && ++attempts === 2) {
-          state.inviteBodies.push((options as { body: never }).body)
+        const body = (options as { body?: { email?: string } } | undefined)
+          ?.body
+        if (
+          path.endsWith("/invitations") &&
+          body?.email === "a@uni.edu" &&
+          ++attemptsForA === 2
+        ) {
+          state.inviteBodies.push(body as never)
           return Promise.resolve({})
         }
         return inner(path, options)
