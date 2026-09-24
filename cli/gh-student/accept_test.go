@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/ui"
 )
@@ -38,6 +39,10 @@ func TestCheckAcceptableMode(t *testing.T) {
 			}
 			if !tc.wantErr && err != nil {
 				t.Errorf("mode %q: unexpected error %v", tc.mode, err)
+			}
+			// #1055: the rejection must name the upgrade step.
+			if tc.wantErr && !strings.Contains(err.Error(), "gh extension upgrade "+contract.StudentExtensionRepo) {
+				t.Errorf("mode %q: err = %q, want the upgrade command", tc.mode, err)
 			}
 		})
 	}

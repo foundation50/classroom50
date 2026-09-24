@@ -50,6 +50,31 @@ func IsValidAssignmentMode(m string) bool {
 	return false
 }
 
+// UnsupportedValueError marks a known enum field holding a value this binary
+// does not know. On the read path that usually means a newer client wrote it,
+// so ParseAssignments appends an upgrade hint (#1055); the add path validates
+// the teacher's own flag and leaves it plain.
+type UnsupportedValueError struct {
+	Field   string
+	Value   string
+	Allowed []string
+}
+
+func (e *UnsupportedValueError) Error() string {
+	return fmt.Sprintf("invalid %s %q: must be one of %v", e.Field, e.Value, e.Allowed)
+}
+
+// UpgradeHint hedges with "if" because a hand-edited typo trips the same check.
+const UpgradeHint = "if a newer Classroom 50 client wrote this value, run `gh extension upgrade " + contract.TeacherExtensionRepo + "`"
+
+func withUpgradeHint(err error) error {
+	var unsupported *UnsupportedValueError
+	if !errors.As(err, &unsupported) {
+		return err
+	}
+	return fmt.Errorf("%w; %s", err, UpgradeHint)
+}
+
 // ValidateStudentPermission checks an assignment's optional student_permission
 // against GitHub's collaborator ladder. Empty is valid (means the mode default).
 func ValidateStudentPermission(p string) error {
@@ -57,7 +82,7 @@ func ValidateStudentPermission(p string) error {
 		return nil
 	}
 	if !contract.IsValidRepoPermission(p) {
-		return fmt.Errorf("invalid student_permission %q: must be one of %v", p, contract.RepoPermissions)
+		return &UnsupportedValueError{Field: "student_permission", Value: p, Allowed: contract.RepoPermissions}
 	}
 	return nil
 }
@@ -67,7 +92,7 @@ func ValidateStudentPermission(p string) error {
 // there); callers gate presence per mode via the mode/size/formation coupling.
 func ValidateTeamFormation(f string) error {
 	if !contract.IsValidTeamFormation(f) {
-		return fmt.Errorf("invalid team_formation %q: must be one of %v", f, contract.TeamFormations)
+		return &UnsupportedValueError{Field: "team_formation", Value: f, Allowed: contract.TeamFormations}
 	}
 	return nil
 }
@@ -80,7 +105,7 @@ func ValidateSubmissionMode(m string) error {
 		return nil
 	}
 	if !contract.IsValidSubmissionMode(m) {
-		return fmt.Errorf("invalid submission_mode %q: must be one of %v", m, contract.SubmissionModes)
+		return &UnsupportedValueError{Field: "submission_mode", Value: m, Allowed: contract.SubmissionModes}
 	}
 	return nil
 }
@@ -93,7 +118,7 @@ func ValidateRepoVisibility(v string) error {
 		return nil
 	}
 	if !contract.IsValidRepoVisibility(v) {
-		return fmt.Errorf("invalid repo_visibility %q: must be one of %v", v, contract.RepoVisibilities)
+		return &UnsupportedValueError{Field: "repo_visibility", Value: v, Allowed: contract.RepoVisibilities}
 	}
 	return nil
 }
@@ -458,7 +483,7 @@ func ValidateGrading(g *Grading) error {
 		return nil
 	}
 	if !contract.IsValidGradingMode(g.Mode) {
-		return fmt.Errorf("invalid grading.mode %q: must be one of %v", g.Mode, contract.GradingModes)
+		return &UnsupportedValueError{Field: "grading.mode", Value: g.Mode, Allowed: contract.GradingModes}
 	}
 	if g.Mode == contract.GradingModeManual {
 		if g.MaxPoints == nil {
@@ -793,7 +818,7 @@ func ParseAssignments(data []byte) (AssignmentsJSON, error) {
 	}
 	for i, entry := range file.Assignments {
 		if err := ValidateExistingEntry(entry); err != nil {
-			return AssignmentsJSON{}, fmt.Errorf("assignments[%d]: %w", i, err)
+			return AssignmentsJSON{}, fmt.Errorf("assignments[%d]: %w", i, withUpgradeHint(err))
 		}
 		if file.Assignments[i].Autograder == "" {
 			file.Assignments[i].Autograder = contract.DefaultAutograderName
@@ -1004,7 +1029,7 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 		return errors.New("mode must not be empty")
 	}
 	if !IsValidAssignmentMode(entry.Mode) {
-		return fmt.Errorf("invalid mode %q: must be one of %v", entry.Mode, AssignmentModes)
+		return &UnsupportedValueError{Field: "mode", Value: entry.Mode, Allowed: AssignmentModes}
 	}
 	// Template is optional; when present, all three fields must be set.
 	if entry.Template != nil {
@@ -1282,7 +1307,7 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q has empty mode", entry.Slug)
 	}
 	if !IsValidAssignmentMode(entry.Mode) {
-		return fmt.Errorf("entry %q has invalid mode %q (must be one of %v)", entry.Slug, entry.Mode, AssignmentModes)
+		return fmt.Errorf("entry %q: %w", entry.Slug, &UnsupportedValueError{Field: "mode", Value: entry.Mode, Allowed: AssignmentModes})
 	}
 	// Template is optional; a nil block is template-less. When present, all
 	// three fields must round-trip.

@@ -365,6 +365,12 @@ const (
 	// a missing one. Byte-based; the web copy (TEMPLATE_PR_BODY_MAX_BYTES) and
 	// the runner (_TEMPLATE_PR_BODY_MAX_BYTES) must use the same byte semantics.
 	FeedbackTemplateMaxBytes = 60_000
+
+	// TeacherExtensionRepo and StudentExtensionRepo are what `gh extension
+	// upgrade <owner>/<repo>` takes (cli-release.yaml publishes there). gh
+	// extensions never self-update, so stale-binary errors name the command.
+	TeacherExtensionRepo = "foundation50/gh-teacher"
+	StudentExtensionRepo = "foundation50/gh-student"
 )
 
 // FeedbackTemplatePaths are GitHub's native pull request template locations,
