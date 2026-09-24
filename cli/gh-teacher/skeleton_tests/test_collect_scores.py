@@ -3845,6 +3845,38 @@ def test_marker_baseline_backfill_commit_does_not_anchor(monkeypatch):
     assert cs.marker_baseline("https://api.github.com", "cs50", "r", "tok") == (None, False)
 
 
+def test_baseline_source_shared_fixture_parity(monkeypatch):
+    # The collect_scores half of the baseline lockstep: marker_baseline's read
+    # of the oldest marker commit composed with resolve_baseline_source must
+    # agree with Go contract.ResolveBaselineSource, the web baselineSource,
+    # regrade_repos.py and runner.py on one golden fixture. regrade_repos.py
+    # once shipped without the backfill check because nothing pinned it.
+    fixture = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "shared"
+        / "testdata"
+        / "baseline_source_cases.json"
+    )
+    doc = json.loads(fixture.read_text())
+    assert doc["backfill_subject"] == cs.SHIM_BACKFILL_COMMIT_SUBJECT
+    cases = doc["cases"]
+    assert cases, "shared fixture has no cases; did the file move?"
+    for case in cases:
+        message = case["marker_message"]
+        history = (
+            []
+            if message is None
+            else [{"sha": "marker", "commit": {"message": message}}]
+        )
+        monkeypatch.setattr(cs, "_paginate_objects", lambda *a, _h=history, **k: _h)
+        marker = cs.marker_baseline("https://api.github.com", "cs50", "r", "tok")
+        got = cs.resolve_baseline_source(marker, case["root_is_baseline"])
+        assert got == case["expected"], (
+            f"{case['name']}: resolve_baseline_source({marker}, "
+            f"{case['root_is_baseline']}) = {got!r}, want {case['expected']!r}"
+        )
+
+
 def test_detect_repo_submissions_backfilled_marker_uses_root_even_when_flag_is_off(monkeypatch):
     # After enable-autograder the assignment is no longer no_autograder, yet the
     # backfilled repo's baseline must stay the root: pre-backfill pushes still

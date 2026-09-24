@@ -51,3 +51,10 @@ export function shimUpdateCommitMessage(mode: SubmissionMode): string {
 export const SHIM_BACKFILL_COMMIT_MESSAGE = `${prefixCommit(
   "Add autograde workflow (enable-autograder)",
 )}\n\n[skip ci]`
+
+// Whether a commit is the backfill's: subject compared exactly after trimming,
+// body ignored. A marker that commit introduced must not anchor the baseline
+// (see baselineSource). Mirror of contract.IsShimBackfillCommit.
+export function isShimBackfillCommit(message: string): boolean {
+  return commitSubject(message) === commitSubject(SHIM_BACKFILL_COMMIT_MESSAGE)
+}

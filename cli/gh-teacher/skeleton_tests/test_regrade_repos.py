@@ -405,6 +405,28 @@ def test_acceptance_commit_sha_ignores_backfill_introduced_marker(monkeypatch):
     assert rr.acceptance_commit_sha("https://api", "cs50", "repo", "tok", "main") == "accept"
 
 
+def test_is_shim_backfill_commit_shared_fixture_parity():
+    # regrade_repos.py's half of the baseline lockstep. It has no root fallback
+    # (regrade re-runs a graded submission, it never anchors on the seed), so
+    # only the marker half of the rule applies: a marker commit resolves to
+    # "root" exactly when it is the backfill's.
+    fixture = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "shared"
+        / "testdata"
+        / "baseline_source_cases.json"
+    )
+    doc = json.loads(fixture.read_text())
+    assert doc["backfill_subject"] == rr.SHIM_BACKFILL_COMMIT_SUBJECT
+    marker_cases = [c for c in doc["cases"] if c["marker_message"] is not None]
+    assert marker_cases, "shared fixture has no marker cases; did the file move?"
+    for case in marker_cases:
+        got = rr.is_shim_backfill_commit(case["marker_message"])
+        assert got is (case["expected"] == "root"), (
+            f"{case['name']}: is_shim_backfill_commit({case['marker_message']!r}) = {got}"
+        )
+
+
 def test_first_gradeable_commit_grades_work_pushed_after_backfill(monkeypatch):
     # A push after the backfill carries the workflow: the walk returns it
     # before ever reaching the backfill commit.

@@ -678,7 +678,7 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
             sha, _, subject = line.strip().partition("\x00")
             if not sha:
                 continue
-            if subject == SHIM_BACKFILL_COMMIT_SUBJECT:
+            if subject.strip() == SHIM_BACKFILL_COMMIT_SUBJECT:
                 backfilled = True
                 break
             # Trust the marker's adder only when it is a bare setup commit,

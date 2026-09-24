@@ -1,0 +1,90 @@
+{
+  "_comment": "Shared golden fixture pinning the baseline-source rule to identical output across every reader of a student repo's history: Go contract.ResolveBaselineSource (cli/shared/contract/baseline.go, used by gh-student feedback_pr.go and gh-teacher feedbackpr/ensure.go), TS baselineSource (web/src/github-core/queries/repoRefReads.ts), Python collect_scores.baseline_source and regrade_repos.is_shim_backfill_message, and runner.py _baseline_scan (the git-backed reader, exercised on real repos built from these cases). Inputs: marker_message is the FULL commit message of the oldest commit touching .classroom50.yaml, or null when no commit does; root_is_baseline says whether the root commit is a valid fallback (true for every initialized repo, false only for a bare empty_repo or a built-in-autograder repo whose accept never finished). Rule: a marker whose subject (first line, trimmed) equals the enable-autograder backfill subject was added to a repo accepted without one, so the root is the baseline ('root'); any other marker is the accept commit ('marker'); no marker falls back to the root only when root_is_baseline ('root'), else there is no baseline ('none'). The subject comparison is exact after trimming: no case folding, no prefix matching, and the body (where [skip ci] lives) never participates.",
+  "backfill_subject": "[Classroom 50] Add autograde workflow (enable-autograder)",
+  "cases": [
+    {
+      "name": "accept marker anchors regardless of shape flag",
+      "marker_message": "[Classroom 50] Initialize .classroom50.yaml and autograde workflow (gh student accept)",
+      "root_is_baseline": false,
+      "expected": "marker"
+    },
+    {
+      "name": "accept marker still wins when the root would also be valid",
+      "marker_message": "[Classroom 50] Initialize .classroom50.yaml (web accept)",
+      "root_is_baseline": true,
+      "expected": "marker"
+    },
+    {
+      "name": "legacy no_autograder accept (marker, no shim) anchors on the marker",
+      "marker_message": "[Classroom 50] Initialize .classroom50.yaml (gh student accept)\n\nno autograder",
+      "root_is_baseline": true,
+      "expected": "marker"
+    },
+    {
+      "name": "student-authored marker with any other subject anchors on the marker",
+      "marker_message": "add classroom file",
+      "root_is_baseline": true,
+      "expected": "marker"
+    },
+    {
+      "name": "backfill-introduced marker keeps the root",
+      "marker_message": "[Classroom 50] Add autograde workflow (enable-autograder)\n\n[skip ci]",
+      "root_is_baseline": false,
+      "expected": "root"
+    },
+    {
+      "name": "backfill-introduced marker keeps the root when the flag also says root",
+      "marker_message": "[Classroom 50] Add autograde workflow (enable-autograder)\n\n[skip ci]",
+      "root_is_baseline": true,
+      "expected": "root"
+    },
+    {
+      "name": "backfill subject alone, no body",
+      "marker_message": "[Classroom 50] Add autograde workflow (enable-autograder)",
+      "root_is_baseline": false,
+      "expected": "root"
+    },
+    {
+      "name": "backfill subject with surrounding whitespace is trimmed",
+      "marker_message": "  [Classroom 50] Add autograde workflow (enable-autograder)  \n\n[skip ci]",
+      "root_is_baseline": false,
+      "expected": "root"
+    },
+    {
+      "name": "backfill subject with CRLF line ending is trimmed",
+      "marker_message": "[Classroom 50] Add autograde workflow (enable-autograder)\r\n\r\n[skip ci]",
+      "root_is_baseline": false,
+      "expected": "root"
+    },
+    {
+      "name": "case differs: not the backfill, so it is a marker",
+      "marker_message": "[classroom 50] add autograde workflow (enable-autograder)\n\n[skip ci]",
+      "root_is_baseline": true,
+      "expected": "marker"
+    },
+    {
+      "name": "backfill subject as a prefix of a longer subject is not the backfill",
+      "marker_message": "[Classroom 50] Add autograde workflow (enable-autograder) and fix tests",
+      "root_is_baseline": true,
+      "expected": "marker"
+    },
+    {
+      "name": "backfill subject only in the body is not the backfill",
+      "marker_message": "Merge branch 'main'\n\n[Classroom 50] Add autograde workflow (enable-autograder)",
+      "root_is_baseline": true,
+      "expected": "marker"
+    },
+    {
+      "name": "no marker on an initialized repo falls back to the root",
+      "marker_message": null,
+      "root_is_baseline": true,
+      "expected": "root"
+    },
+    {
+      "name": "no marker on a bare empty_repo has no baseline",
+      "marker_message": null,
+      "root_is_baseline": false,
+      "expected": "none"
+    }
+  ]
+}

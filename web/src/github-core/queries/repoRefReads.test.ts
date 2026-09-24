@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 
 import {
   getAssignmentRepos,
@@ -9,7 +11,11 @@ import {
 } from "./repoRefReads"
 import type { GitHubClient, GitHubRequestOptions } from "../client"
 import { GitHubAPIError } from "../errors"
-import { SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
+import {
+  commitSubject,
+  isShimBackfillCommit,
+  SHIM_BACKFILL_COMMIT_MESSAGE,
+} from "@/util/commit"
 
 // The Feedback-PR base must be frozen at the commit the autograde runner's
 // baseline_sha() resolves — the OLDEST commit touching the accept marker. A
@@ -86,6 +92,43 @@ describe("baselineSource", () => {
     expect(baselineSource(null, { rootIsBaseline: true })).toBe("root")
     expect(baselineSource(null)).toBe("none")
     expect(baselineSource(null, { rootIsBaseline: false })).toBe("none")
+  })
+
+  // The web half of the baseline lockstep: the same golden cases Go
+  // contract.ResolveBaselineSource and the Python readers assert. A drift on
+  // any side fails its fixture test instead of shipping (regrade_repos.py once
+  // shipped without the backfill check because nothing pinned it).
+  describe("shared fixture parity", () => {
+    const fixtureUrl = new URL(
+      "../../../../cli/shared/testdata/baseline_source_cases.json",
+      import.meta.url,
+    )
+    const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
+      backfill_subject: string
+      cases: {
+        name: string
+        marker_message: string | null
+        root_is_baseline: boolean
+        expected: "marker" | "root" | "none"
+      }[]
+    }
+
+    it("pins the same backfill subject the writer uses", () => {
+      expect(doc.cases.length).toBeGreaterThan(0)
+      expect(doc.backfill_subject).toBe(
+        commitSubject(SHIM_BACKFILL_COMMIT_MESSAGE),
+      )
+    })
+
+    it.each(doc.cases.map((c) => [c.name, c] as const))("%s", (_, c) => {
+      const marker =
+        c.marker_message === null
+          ? null
+          : { sha: "x", backfilled: isShimBackfillCommit(c.marker_message) }
+      expect(
+        baselineSource(marker, { rootIsBaseline: c.root_is_baseline }),
+      ).toBe(c.expected)
+    })
   })
 })
 

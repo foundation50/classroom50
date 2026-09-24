@@ -264,7 +264,7 @@ func acceptCommitSHA(client githubapi.Client, org, repoName, branch string) (str
 	if oldest == nil {
 		return "", fmt.Errorf("%w in %s/%s", errNoAcceptMarker, org, repoName)
 	}
-	if contract.CommitSubject(oldest.Commit.Message) == contract.ShimBackfillCommitSubject() {
+	if contract.IsShimBackfillCommit(oldest.Commit.Message) {
 		return rootCommitSHA(client, org, repoName, branch)
 	}
 	return oldest.SHA, nil
