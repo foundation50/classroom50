@@ -329,7 +329,7 @@ export async function acceptAssignment(params: {
   // for public templates too. Org owners bypass (they administer every
   // classroom). Advisory like every client-side gate; GitHub's private-template
   // permission remains the hard boundary.
-  const orgMembership = await withAcceptStep(
+  const viewerIsOrgOwner = await withAcceptStep(
     {
       id: "membership",
       label: { key: "accept.steps.membership" },
@@ -339,13 +339,13 @@ export async function acceptAssignment(params: {
     },
     async () => {
       const verified = await acceptAndVerifyOrgMembership(client, org)
-      if (!isOwnerGitHubOrgRole(verified.role)) {
+      const isOwner = isOwnerGitHubOrgRole(verified.role)
+      if (!isOwner) {
         await assertEnrolledOrStaff(client, org, classroom, username)
       }
-      return verified
+      return isOwner
     },
   )
-  const viewerIsOrgOwner = isOwnerGitHubOrgRole(orgMembership.role)
 
   const assignment = await withAcceptStep(
     {

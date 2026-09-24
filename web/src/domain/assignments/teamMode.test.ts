@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
+import type { GitHubOrgMembership } from "@/github-core/types"
 import type { Assignment } from "@/types/classroom"
 import { editAssignment } from "./createEdit"
 import { acceptAssignment } from "./accept"
@@ -238,14 +239,13 @@ describe("acceptAssignment team mode", () => {
 
   // Route-table client for the team accept path: identity + membership, the
   // viewer's teams, the config-repo branch read, the (already existing) repo
-  // create 422, the provisioning probes, and the access writes. `orgRole` is
-  // the viewer's org membership role (admin = org owner); `teamRole` is what
-  // every team-membership read (enrollment probes and the group-team gate)
-  // reports.
+  // create 422, the provisioning probes, and the access writes. `teamRole` is
+  // what every team-membership read (enrollment probes and the group-team
+  // gate) reports.
   function makeClient(opts: {
     myTeams: unknown[]
     repoExists: boolean
-    orgRole?: "admin" | "member"
+    orgRole?: GitHubOrgMembership["role"]
     teamRole?: "member" | "maintainer"
   }) {
     const repoName = groupRepoName(CLASSROOM, SLUG, 2)
@@ -312,18 +312,20 @@ describe("acceptAssignment team mode", () => {
     return { client: { request } as unknown as GitHubClient, requests }
   }
 
+  // A group team for this assignment as GET /user/teams lists it.
+  const groupTeam = async (n: number, id: number) => ({
+    slug: await groupTeamName(CLASSROOM, SLUG, n),
+    id,
+    description: marshalGroupDescription({
+      classroom: CLASSROOM,
+      assignment: SLUG,
+    }),
+    organization: { login: ORG, id: 1 },
+  })
+
   it("short-circuits to already-accepted on the team's existing repo (no second repo)", async () => {
     mocked.assignment = ASSIGNMENT_ENTRY
-    const slug = await groupTeamName(CLASSROOM, SLUG, 2)
-    const myTeam = {
-      slug,
-      id: 42,
-      description: marshalGroupDescription({
-        classroom: CLASSROOM,
-        assignment: SLUG,
-      }),
-      organization: { login: ORG, id: 1 },
-    }
+    const myTeam = await groupTeam(2, 42)
     const { client, requests } = makeClient({
       myTeams: [myTeam],
       repoExists: true,
@@ -347,7 +349,7 @@ describe("acceptAssignment team mode", () => {
     expect(
       requests.some((r) =>
         r.startsWith(
-          `PUT /orgs/${ORG}/teams/${slug}/repos/${ORG}/${result.repo.name}`,
+          `PUT /orgs/${ORG}/teams/${myTeam.slug}/repos/${ORG}/${result.repo.name}`,
         ),
       ),
     ).toBe(true)
@@ -384,24 +386,14 @@ describe("acceptAssignment team mode", () => {
     )
   })
 
-  // The group-team name is derivable from public data, so a student could
-  // found a shape-matching team and bypass "your teacher assigns the groups";
-  // the maintainer role is the tell (teacher-created teams never leave a
-  // student maintainer).
-  const rogueTeam = async () => ({
-    slug: await groupTeamName(CLASSROOM, SLUG, 5),
-    id: 99,
-    description: marshalGroupDescription({
-      classroom: CLASSROOM,
-      assignment: SLUG,
-    }),
-    organization: { login: ORG, id: 1 },
-  })
-
   it("rejects a self-created team under teacher formation (maintainer role)", async () => {
+    // The group-team name is derivable from public data, so a student could
+    // found a shape-matching team and bypass "your teacher assigns the
+    // groups"; the maintainer role is the tell (teacher-created teams never
+    // leave a student maintainer).
     mocked.assignment = ASSIGNMENT_ENTRY
     const { client } = makeClient({
-      myTeams: [await rogueTeam()],
+      myTeams: [await groupTeam(5, 99)],
       repoExists: true,
       orgRole: "member",
       teamRole: "maintainer",
@@ -424,19 +416,8 @@ describe("acceptAssignment team mode", () => {
     // the rogue student above. The owner already administers the org, so the
     // self-created guard must not apply to them.
     mocked.assignment = ASSIGNMENT_ENTRY
-    const slug = await groupTeamName(CLASSROOM, SLUG, 2)
     const { client } = makeClient({
-      myTeams: [
-        {
-          slug,
-          id: 42,
-          description: marshalGroupDescription({
-            classroom: CLASSROOM,
-            assignment: SLUG,
-          }),
-          organization: { login: ORG, id: 1 },
-        },
-      ],
+      myTeams: [await groupTeam(2, 42)],
       repoExists: true,
       orgRole: "admin",
       teamRole: "maintainer",
