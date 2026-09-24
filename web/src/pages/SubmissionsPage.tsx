@@ -56,6 +56,7 @@ import {
 import {
   assignmentSkipsGrading,
   deriveAutogradingState,
+  rootIsBaseline,
 } from "@/domain/assignments/autogradingState"
 import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
@@ -798,7 +799,7 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
-    rootIsBaseline: assignmentResolved && !isEmptyRepoAssignment,
+    rootIsBaseline: assignmentResolved && rootIsBaseline(assignmentInfo),
     enabled: detectionCapable,
   })
 

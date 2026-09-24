@@ -12,7 +12,7 @@ import {
   submissionTagPatterns,
 } from "@/domain/assignments/submissionDetection"
 import { myPushSubmissionsQuery } from "@/hooks/useGetMyPushSubmissions"
-import { isEmptyRepoAssignment } from "@/domain/assignments/autogradingState"
+import { rootIsBaseline } from "@/domain/assignments/autogradingState"
 import type { Assignment } from "@/types/classroom"
 
 // An assignment the student accepted, with the repo that acceptance resolved
@@ -86,7 +86,7 @@ export function useMySubmittedAssignments(
         : {
             ...myPushSubmissionsQuery(client, org, repo, {
               knownDefaultBranch: defaultBranch,
-              rootIsBaseline: !isEmptyRepoAssignment(assignment),
+              rootIsBaseline: rootIsBaseline(assignment),
             }),
             select: summarizePushes,
           },

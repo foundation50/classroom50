@@ -33,6 +33,19 @@ export function assignmentSkipsGrading(assignment: Assignment): boolean {
   )
 }
 
+/**
+ * Whether the root commit is a repo's baseline when no accept marker anchors
+ * one: true for every initialized repo (its root is the template or README
+ * seed, never student work), false only for a bare empty_repo, whose root
+ * commit IS the student's first push. Keyed on empty_repo rather than
+ * no_autograder on purpose: between the flag flipping and the backfill landing,
+ * a repo has no marker and is no longer no_autograder, yet its seed is still
+ * not a submission. The one place every submission reader derives it.
+ */
+export function rootIsBaseline(assignment: Assignment): boolean {
+  return !isEmptyRepoAssignment(assignment)
+}
+
 // The autograding tri-state the assignment-form IA overhaul builds its selector
 // on (empty repo / no built-in autograding / built-in autograding). Derived
 // from the wire fields so the form and every read surface agree; no_autograder

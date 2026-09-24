@@ -34,7 +34,7 @@ import {
   latestDetectedAt,
   latestPushSubmittedAt,
 } from "@/domain/assignments/submissionDetection"
-import { isEmptyRepoAssignment } from "@/domain/assignments/autogradingState"
+import { rootIsBaseline } from "@/domain/assignments/autogradingState"
 import type {
   Assignment,
   AssignmentMode,
@@ -670,7 +670,7 @@ const StudentSubmissionPage = () => {
             submissionMode={submissionMode}
             submissionTags={submissionTags}
             rootIsBaseline={
-              assignmentData ? !isEmptyRepoAssignment(assignmentData) : false
+              assignmentData ? rootIsBaseline(assignmentData) : false
             }
           />
         )
