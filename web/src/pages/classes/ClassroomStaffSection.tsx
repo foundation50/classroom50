@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
 import { useQuery } from "@tanstack/react-query"
-import { useTranslation } from "react-i18next"
+import { Link } from "@tanstack/react-router"
+import { Trans, useTranslation } from "react-i18next"
 import {
   LinkExternalIcon,
   PaperAirplaneIcon,
@@ -37,6 +38,7 @@ import {
 } from "@/util/classroomRoleUI"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import {
+  Alert,
   Button,
   Badge,
   Card,
@@ -87,9 +89,29 @@ const ClassroomStaffSection = ({
             className="shrink-0"
           />
         </div>
-        <p className="text-sm text-base-content/70 pb-4">
+        <p className="text-sm text-base-content/70 pb-2">
           {t("classes.staff.description")}
         </p>
+        {/* Staff teams are attached to a student repository by the collector,
+            not at accept (the student's token can't grant an org team), so the
+            promised write access lags until someone collects. Say so here,
+            where the promise is made (#1040). */}
+        <Alert tone="info" className="mb-4 text-sm">
+          <span>
+            <Trans
+              i18nKey="classes.staff.studentRepoAccessNote"
+              components={{
+                assignmentsLink: (
+                  <Link
+                    className="link"
+                    to="/$org/$classroom/assignments"
+                    params={{ org, classroom }}
+                  />
+                ),
+              }}
+            />
+          </span>
+        </Alert>
 
         <AddStaff org={org} classroom={classroom} disabled={actionsDisabled} />
 

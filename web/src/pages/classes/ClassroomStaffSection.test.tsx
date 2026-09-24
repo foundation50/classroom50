@@ -12,7 +12,32 @@ vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
 }))
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+  Trans: ({
+    i18nKey,
+    components,
+  }: {
+    i18nKey: string
+    components?: Record<string, React.ReactElement>
+  }) => (
+    <span>
+      {i18nKey}
+      {components?.assignmentsLink}
+    </span>
+  ),
 }))
+// Real <Link> needs a router; the stub keeps the target so a test can pin
+// where the access note sends the teacher.
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>()
+  return {
+    ...actual,
+    Link: ({ to, params }: { to: string; params?: Record<string, string> }) => (
+      <a href={to} data-params={JSON.stringify(params)}>
+        {to}
+      </a>
+    ),
+  }
+})
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({ request: vi.fn() }),
 }))
@@ -98,6 +123,20 @@ afterEach(() => {
   removeStaffMutation.mutateAsync.mockClear()
   removeStaffMutation.mutateAsync.mockImplementation(() => Promise.resolve())
   resetQueryData()
+})
+
+describe("ClassroomStaffSection — student repository access note (#1040)", () => {
+  it("explains that TA access lands at score collection and links to the assignments page", () => {
+    roleMock.mockReturnValue({ role: "teacher" })
+    render(<ClassroomStaffSection org="acme" classroom="cs101" />)
+
+    const note = screen.getByText("classes.staff.studentRepoAccessNote")
+    const link = note.querySelector("a")
+    expect(link?.getAttribute("href")).toBe("/$org/$classroom/assignments")
+    expect(link?.getAttribute("data-params")).toBe(
+      JSON.stringify({ org: "acme", classroom: "cs101" }),
+    )
+  })
 })
 
 describe("ClassroomStaffSection — canManageStaff gate", () => {
