@@ -60,7 +60,7 @@
         },
         "failure-details": {
           "enum": ["full", "actual-only", "none"],
-          "description": "How much failure detail students see for this test (release body, Actions log, run summary). `full` (the default when absent) = for an io test, a unified diff for exact comparisons, otherwise expected+actual blocks, plus stderr; for a run or python test, the command's combined stdout+stderr output. `actual-only` = the student's own output only — no expected output and no diff (a diff would reveal it). `none` = only the failure kind (wrong output, wrong exit code, timeout, setup failed). Overrides the assignment's `test_defaults`."
+          "description": "How much failure detail students see for this test (release body, Actions log, run summary). `full` (the default when absent) = for an io test, the input, then a unified diff for exact comparisons, otherwise expected+actual blocks, plus stderr; for a run or python test, the command's combined stdout+stderr output. `actual-only` = the student's own output only — no expected output and no diff (a diff would reveal it), and no input (it would reveal the hidden test case). `none` = only the failure kind (wrong output, wrong exit code, timeout, setup failed). Overrides the assignment's `test_defaults`."
         },
         "show-output": {
           "type": "boolean",
