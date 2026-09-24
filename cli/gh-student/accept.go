@@ -326,7 +326,7 @@ func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int, team
 //   - not on a team, student formation → --new-team founds a team (the
 //     student becomes its GitHub team maintainer), else an error explains
 //     the two ways to get one.
-func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, assignment, username string, entry assignments.Entry, newTeam bool, teamName string) (groupteam.Membership, error) {
+func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, assignment, username string, entry assignments.Entry, isOwner, newTeam bool, teamName string) (groupteam.Membership, error) {
 	membership, found, err := groupteam.MyTeam(client, org, classroom, assignment)
 	if err != nil {
 		return groupteam.Membership{}, err
@@ -343,7 +343,12 @@ func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, as
 		// the role read too — an unverifiable membership must not become the
 		// bypass. Advisory like every client-side gate, but it keeps honest
 		// students off a path the teacher tooling would flag as drift.
-		if entry.TeamFormation == contract.TeamFormationTeacher {
+		//
+		// Org owners are exempt: GitHub promotes an owner to maintainer on
+		// every team they join, so a teacher testing on their own account
+		// would trip the gate (#1065). An owner already administers the org,
+		// so the bypass this guards against isn't theirs.
+		if entry.TeamFormation == contract.TeamFormationTeacher && !isOwner {
 			role, err := groupteam.MembershipRole(context.Background(), client, org, membership.Slug, username)
 			if err != nil {
 				return groupteam.Membership{}, fmt.Errorf("could not verify your group membership: %w; run accept again in a moment", err)
@@ -434,7 +439,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	ownerSegment := username
 	teamSlug := ""
 	if entry.Mode == contract.ModeTeam {
-		membership, err := resolveTeamMembership(client, u, org, classroom, assignment, username, entry, newTeam, teamName)
+		membership, err := resolveTeamMembership(client, u, org, classroom, assignment, username, entry, isOwner, newTeam, teamName)
 		if err != nil {
 			return err
 		}
