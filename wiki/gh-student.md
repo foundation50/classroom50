@@ -17,7 +17,7 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 | `invite <org>/<repo> <username>` | Invite a classmate or TA to push to your assignment repo. Not for team assignments; use `team add` there. |
 | `team list <org> <classroom> <assignment>` | Show your group for a team assignment and who is on it. |
 | `team add <org> <classroom> <assignment> <username>` | Add a classmate to your group (founders only). |
-| `submit` | Submit your work on the current assignment. |
+| `submit` | Submit your work on the current assignment. `--key` for an unlisted classroom when the repository has no `.classroom50.yaml`. |
 
 ## `accept`
 
@@ -211,14 +211,30 @@ autograding workflow itself is set once at accept time and never refreshed:
 changes to the grading logic reach you through the teacher-side setup, fetched
 fresh on every submission.
 
+A repository without `.classroom50.yaml` works too. Assignments with the
+built-in autograder off, and empty-repository assignments, create repositories
+with no Classroom 50 files, so `submit` identifies the assignment from the
+repository name instead, using the classroom's published site. Those
+repositories keep their own `.gitignore` and `.github/` (no teacher-file
+refresh). If the classroom uses an unlisted URL, pass the access key your
+teacher gave you:
+
+```sh
+gh student submit --key <key>
+```
+
 <details>
 <summary>What submit does, step by step</summary>
 
-1. Reads `.classroom50.yaml` for the assignment and its starter code.
+1. Reads `.classroom50.yaml` for the assignment and its starter code. Without
+   the file, matches the repository name against the classroom's published
+   assignment list instead.
 2. Copies your submittable files (tracked, plus untracked files that aren't
    ignored) into a temporary work tree, so build artifacts don't pollute the
    submission.
-3. Fetches the teacher's `.gitignore` and `.github/` from the starter code.
+3. Fetches the teacher's `.gitignore` and `.github/` from the starter code
+   (skipped when the assignment has the built-in autograder off or is an
+   empty repository, since those repositories carry no Classroom 50 files).
 4. Commits with your git `user.name` and `user.email` (unset fields fall back
    to your GitHub login and noreply email) and pushes to the default branch as
    a fast-forward. No force-push, so prior commits stay reachable.

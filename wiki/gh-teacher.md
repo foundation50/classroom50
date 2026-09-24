@@ -694,8 +694,9 @@ of every shape is in
   template, its own CI runs instead; without one, the assignment has no
   autograder. Keeps the feedback PR, frozen at the repository's first commit.
   Score collection records who submitted but no scores (there are no
-  `submit/*` releases); regrade skips it. `gh student submit` doesn't work on
-  these repositories (it reads the marker), so students push directly.
+  `submit/*` releases); regrade skips it. Students submit with
+  `gh student submit` (which identifies the assignment from the repository
+  name when there is no marker) or by pushing directly; the result is the same.
   Mutually exclusive with `empty_repo`, `init_shim`, a non-default
   `--autograder`, and the grading-adjacent fields (tests/allowed-files/
   release-assets/pass-threshold). **Before students accept**, make sure the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -278,14 +279,132 @@ func fetchOneTestEntry(t *testing.T, body, slug string) (Entry, func()) {
 // assignments.json path; other paths 404 (pins the URL shape).
 func newPagesServer(t *testing.T, body string, status int) (*httptest.Server, func()) {
 	t.Helper()
+	return newPagesServerAt(t, "/cs-principles/assignments.json", body, status)
+}
+
+// newPagesServerAt mounts `body`/`status` at one Pages path; other paths 404.
+func newPagesServerAt(t *testing.T, path, body string, status int) (*httptest.Server, func()) {
+	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/cs-principles/assignments.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	})
 	server := httptest.NewServer(mux)
 	return server, server.Close
+}
+
+func TestFetchManifestFromURL_ReturnsEveryEntry(t *testing.T) {
+	server, cleanup := newPagesServer(t, `{
+		"schema": "classroom50/assignments/v1",
+		"assignments": [
+			{"slug": "hello", "name": "Hello", "mode": "individual"},
+			{"slug": "pset1", "name": "Pset 1", "mode": "individual", "renamed_from": "intro"}
+		]
+	}`, http.StatusOK)
+	defer cleanup()
+
+	entries, err := fetchManifestFromURL(context.Background(), server.URL+"/cs-principles/assignments.json")
+	if err != nil {
+		t.Fatalf("fetchManifestFromURL: %v", err)
+	}
+	if len(entries) != 2 || entries[0].Slug != "hello" || entries[1].Slug != "pset1" {
+		t.Fatalf("entries = %+v, want hello and pset1 in manifest order", entries)
+	}
+	if entries[1].RenamedFrom != "intro" {
+		t.Errorf("renamed_from = %q, want intro", entries[1].RenamedFrom)
+	}
+}
+
+func TestFetchManifestFromURL_404IsManifestNotFound(t *testing.T) {
+	// The resolver in submit tells an unlisted classroom from a transport
+	// failure by this predicate, so the whole-manifest 404 must satisfy it.
+	server, cleanup := newPagesServer(t, "not found", http.StatusNotFound)
+	defer cleanup()
+
+	_, err := fetchManifestFromURL(context.Background(), server.URL+"/cs-principles/assignments.json")
+	if !IsManifestNotFound(err) {
+		t.Fatalf("err = %v, want IsManifestNotFound", err)
+	}
+	if !strings.Contains(err.Error(), "publish-pages") {
+		t.Errorf("error should keep the actionable guidance, got %q", err)
+	}
+}
+
+func TestAnnotateManifestNotFound_KeepsSentinelForResolver(t *testing.T) {
+	// FetchManifest hands the resolver an annotated 404; the resolver's
+	// unlisted-vs-wrong-key branching reads it through IsManifestNotFound, so
+	// the annotation must wrap rather than replace the sentinel.
+	base := fmt.Errorf("x/assignments.json returned 404: %w", ErrManifestNotFound)
+	for _, secret := range []string{"", "k3y1"} {
+		if got := annotateManifestNotFound(base, secret); !IsManifestNotFound(got) {
+			t.Errorf("secret=%q: annotated 404 must still satisfy IsManifestNotFound, got %v", secret, got)
+		}
+	}
+	if got := annotateManifestNotFound(base, "").Error(); !strings.Contains(got, "--key <key>") {
+		t.Errorf("no-key 404 should carry the --key hint, got %q", got)
+	}
+	if got := annotateManifestNotFound(base, "k3y1").Error(); !strings.Contains(got, "may be wrong") {
+		t.Errorf("keyed 404 should carry the wrong-key hint, got %q", got)
+	}
+	other := errors.New("dial tcp: connection refused")
+	if got := annotateManifestNotFound(other, "k3y1"); got != other {
+		t.Errorf("a non-404 must pass through unchanged, got %v", got)
+	}
+}
+
+func TestPagesClassroomsIndexURL(t *testing.T) {
+	got := pagesClassroomsIndexURL("cs50-fall-2026")
+	want := "https://cs50-fall-2026.github.io/classroom50/classrooms-index.json"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestFetchClassroomsIndexFromURL(t *testing.T) {
+	newIndexServer := func(t *testing.T, body string, status int) *httptest.Server {
+		t.Helper()
+		server, cleanup := newPagesServerAt(t, "/classrooms-index.json", body, status)
+		t.Cleanup(cleanup)
+		return server
+	}
+
+	t.Run("decodes the public rows and tolerates unknown fields", func(t *testing.T) {
+		server := newIndexServer(t, `{"classrooms": [
+			{"schema": "classroom50/classroom/v1", "name": "CS Principles", "short_name": "cs-principles", "term": "Fall", "org": "o", "active": false},
+			{"name": "Intro", "short_name": "intro"}
+		]}`, http.StatusOK)
+
+		rooms, err := fetchClassroomsIndexFromURL(context.Background(), server.URL+"/classrooms-index.json")
+		if err != nil {
+			t.Fatalf("fetchClassroomsIndexFromURL: %v", err)
+		}
+		if len(rooms) != 2 || rooms[0].ShortName != "cs-principles" || rooms[1].ShortName != "intro" {
+			t.Errorf("rooms = %+v, want cs-principles and intro", rooms)
+		}
+	})
+
+	t.Run("404 names the missing site", func(t *testing.T) {
+		server := newIndexServer(t, "not found", http.StatusNotFound)
+
+		_, err := fetchClassroomsIndexFromURL(context.Background(), server.URL+"/classrooms-index.json")
+		if err == nil || !strings.Contains(err.Error(), "no published Classroom 50 site") {
+			t.Fatalf("err = %v, want the no-site guidance", err)
+		}
+		if IsManifestNotFound(err) {
+			t.Error("an index 404 must not read as a manifest 404")
+		}
+	})
+
+	t.Run("malformed body is a parse error", func(t *testing.T) {
+		server := newIndexServer(t, "<html>", http.StatusOK)
+
+		_, err := fetchClassroomsIndexFromURL(context.Background(), server.URL+"/classrooms-index.json")
+		if err == nil || !strings.Contains(err.Error(), "parse") {
+			t.Fatalf("err = %v, want a parse error", err)
+		}
+	})
 }
 
 func TestEntryDecodesEmptyRepo(t *testing.T) {

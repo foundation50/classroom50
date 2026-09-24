@@ -850,18 +850,40 @@ teacher to fix it.)
 
 ## Submitting and grading
 
-### `read .../.classroom50.yaml: ... no such file or directory` on `gh student submit`
+### `.classroom50.yaml not found in this clone, and ...` on `gh student submit`
 
 `submit` reads `.classroom50.yaml` at the repository root to identify the
-assignment. Two causes:
+assignment. Without the file it falls back to the repository name and the
+classroom's published assignment list, so the rest of the message says what
+went wrong there:
 
-- You're running submit from outside the cloned assignment repository, or from
-  a clone not created by `gh student accept`. `cd` into the directory the
-  `git clone` command created.
-- The assignment is an **empty-repository assignment** or one that **doesn't
-  use the built-in autograder**. Neither kind of repository carries the marker
-  file. As the error's hint says, `gh student submit` is not used there:
-  commit and `git push` directly.
+- **`doesn't start with any published classroom's short name`**: this isn't a
+  clone of an assignment repository. You may be running submit from the wrong
+  directory (`cd` into the directory the `git clone` command created), or the
+  classroom's site hasn't been published yet (ask your teacher).
+- **`uses an unlisted URL`**: the classroom is protected, so its assignment
+  list needs the access key your teacher gave you. Run
+  `gh student submit --key <key>`.
+- **`has no assignment list under the access key you passed`**: the key is
+  wrong, or the classroom isn't unlisted and doesn't need one. Double-check
+  the key with your teacher, or run again without `--key`.
+- **`matches more than one published assignment`**: two classroom and
+  assignment names compose to the same repository prefix. Ask your teacher
+  which one this repository belongs to.
+- **`doesn't match any assignment published for classroom`**: the repository
+  was created by hand, or the assignment hasn't been published. Commit and
+  `git push` directly, or ask your teacher.
+
+Repositories from an **empty-repository assignment** or one that **doesn't use
+the built-in autograder** never carry the marker file; the fallback exists for
+them, and `submit` leaves their `.gitignore` and `.github/` alone.
+
+### `this repository was updated by your teacher (it now carries .classroom50.yaml)` on `gh student submit`
+
+Your teacher turned the built-in autograder on after you cloned, which added
+`.classroom50.yaml` and the autograding workflow to your repository on GitHub.
+Your clone doesn't have those files yet, and submitting from it would remove
+them again. Run `git pull`, then `gh student submit`.
 
 ### Submit pushed a commit but the teacher sees no new work
 
