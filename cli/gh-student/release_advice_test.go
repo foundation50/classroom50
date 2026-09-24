@@ -1,36 +1,20 @@
 package main
 
 import (
-	"context"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/updatecheck"
 )
 
-// TestReleaseAdvice wires an unsupported mode through to the line main prints
-// after the accept error.
-func TestReleaseAdvice(t *testing.T) {
-	err := checkAcceptableMode("hello", "squad")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"tag_name":"v1.55.0"}`))
-	}))
-	t.Cleanup(srv.Close)
-
-	opts := releaseOptions()
-	opts.Current, opts.APIBase = "v1.40.0", srv.URL
-	got := updatecheck.Advice(context.Background(), err, opts, "Ask your teacher")
-	for _, want := range []string{"gh-student: you have v1.40.0", "v1.55.0", "gh extension upgrade foundation50/gh-student"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("advice %q lacks %q", got, want)
-		}
+// TestReleaseAdviceWiring pins what main needs for the release follow-up: an
+// unsupported mode is marked stale, and the lookup targets this binary's
+// extension repo.
+func TestReleaseAdviceWiring(t *testing.T) {
+	if err := checkAcceptableMode("hello", "squad"); !updatecheck.MaybeStale(err) {
+		t.Errorf("unsupported mode error %v is not marked stale", err)
 	}
-
-	opts.Current = "v1.55.0"
-	got = updatecheck.Advice(context.Background(), err, opts, "Ask your teacher")
-	if !strings.HasSuffix(got, "Ask your teacher") {
-		t.Errorf("current advice = %q", got)
+	if opts := releaseOptions(); opts.Repo != contract.StudentExtensionRepo || opts.Current != version {
+		t.Errorf("releaseOptions() = %+v", opts)
 	}
 }

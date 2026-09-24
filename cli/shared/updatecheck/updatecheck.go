@@ -7,121 +7,116 @@
 package updatecheck
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Stale is implemented by errors whose likely cause is a binary older than the
-// config it read. It is the only signal main uses to decide the lookup is
-// worth a round-trip.
-type Stale interface {
-	MaybeStale()
-}
+// stale marks an error whose likely cause is a binary older than the config it
+// read. It is the only signal main uses to decide the lookup is worth a
+// round-trip.
+type stale struct{ err error }
 
-// MaybeStale reports whether err, or anything it wraps, implements Stale.
+func (e *stale) Error() string { return e.err.Error() }
+func (e *stale) Unwrap() error { return e.err }
+
+// Mark flags err as probably caused by a stale binary. The message is left
+// untouched; the mark survives %w wrapping.
+func Mark(err error) error { return &stale{err: err} }
+
+// MaybeStale reports whether err, or anything it wraps, was Marked.
 func MaybeStale(err error) bool {
-	var s Stale
-	return errors.As(err, &s)
+	_, ok := errors.AsType[*stale](err)
+	return ok
 }
 
-// DefaultAPIBase is where releases are looked up. Extension repos live on
+// defaultAPIBase is where releases are looked up. Extension repos live on
 // github.com even for GHES users, so this is not the user's configured host.
-const DefaultAPIBase = "https://api.github.com"
+const defaultAPIBase = "https://api.github.com"
 
-// Timeout bounds the lookup: it runs on a failure path the user is already
+// timeout bounds the lookup: it runs on a failure path the user is already
 // waiting on, and a slow answer is worth less than a fast exit.
-const Timeout = 3 * time.Second
+const timeout = 3 * time.Second
 
 // Options identifies the running binary and where its releases are published.
 type Options struct {
-	// Name is the binary name, e.g. "gh-teacher"; it becomes the User-Agent.
-	Name string
-	// Repo is "owner/name" of the standalone extension repo.
+	// Repo is "owner/name" of the standalone extension repo; its base name is
+	// the binary name.
 	Repo string
 	// Current is the running version as stamped by ldflags ("v1.40.0"), or
 	// "dev" for a source build.
 	Current string
-	// APIBase overrides DefaultAPIBase (tests).
+	// APIBase overrides defaultAPIBase (tests).
 	APIBase string
-	// Client overrides the default http.Client (tests).
-	Client *http.Client
 }
 
-// Result is a definite comparison between the running release and the latest.
-type Result struct {
-	Current string
-	Latest  string
-	Behind  bool
-}
-
-// Compare looks up the newest non-prerelease of opts.Repo and compares it to
-// opts.Current. ok is false whenever nothing definite can be said: a source
-// build, an unparseable tag, no network, or a binary ahead of the latest
-// release (a deploy window or a prerelease), so callers print a line or stay
-// quiet, never guess.
-func Compare(ctx context.Context, opts Options) (Result, bool) {
-	current, ok := parseVersion(opts.Current)
-	if !ok {
-		return Result{}, false
-	}
-	tag, err := latestTag(ctx, opts)
-	if err != nil {
-		return Result{}, false
-	}
-	latest, ok := parseVersion(tag)
-	if !ok {
-		return Result{}, false
-	}
-	switch cmp := current.compare(latest); {
-	case cmp < 0:
-		return Result{Current: current.String(), Latest: latest.String(), Behind: true}, true
-	case cmp == 0:
-		return Result{Current: current.String(), Latest: latest.String()}, true
-	default:
-		return Result{}, false
-	}
-}
-
-// Advice is the whole failure-path flow: empty unless err carries the Stale
-// marker and the lookup is conclusive, otherwise the definite follow-up line to
-// the hedged hint. ifCurrent is the caller's next step when upgrading cannot
-// help, since that differs per CLI.
+// Advice is the whole failure-path flow: empty unless err is Marked and the
+// lookup is conclusive, otherwise the definite follow-up line to the hedged
+// hint. ifCurrent is the caller's next step when upgrading cannot help, since
+// that differs per CLI.
 func Advice(ctx context.Context, err error, opts Options, ifCurrent string) string {
 	if !MaybeStale(err) {
 		return ""
 	}
-	res, ok := Compare(ctx, opts)
+	res, ok := compareRelease(ctx, opts)
 	if !ok {
 		return ""
 	}
-	if res.Behind {
-		return fmt.Sprintf("%s: you have %s and %s is available. Run `gh extension upgrade %s`, then retry", opts.Name, res.Current, res.Latest, opts.Repo)
+	name := path.Base(opts.Repo)
+	if res.behind {
+		return fmt.Sprintf("%s: you have %s and %s is available. Run `gh extension upgrade %s`, then retry", name, res.current, res.latest, opts.Repo)
 	}
-	return fmt.Sprintf("%s: you already have the latest release (%s), so upgrading will not help. %s", opts.Name, res.Current, ifCurrent)
+	return fmt.Sprintf("%s: you already have the latest release (%s), so upgrading will not help. %s", name, res.current, ifCurrent)
+}
+
+type result struct {
+	current, latest string
+	behind          bool
+}
+
+// compareRelease looks up the newest non-prerelease of opts.Repo and compares
+// it to opts.Current. ok is false whenever nothing definite can be said: a
+// source build, an unparseable tag, no network, or a binary ahead of the
+// latest release (a deploy window or a prerelease), so callers print a line or
+// stay quiet, never guess.
+func compareRelease(ctx context.Context, opts Options) (result, bool) {
+	current, ok := parseVersion(opts.Current)
+	if !ok {
+		return result{}, false
+	}
+	tag, err := latestTag(ctx, opts)
+	if err != nil {
+		return result{}, false
+	}
+	latest, ok := parseVersion(tag)
+	if !ok {
+		return result{}, false
+	}
+	order := current.compare(latest)
+	if order > 0 {
+		return result{}, false
+	}
+	return result{current: current.String(), latest: latest.String(), behind: order < 0}, true
 }
 
 func latestTag(ctx context.Context, opts Options) (string, error) {
-	base := opts.APIBase
-	if base == "" {
-		base = DefaultAPIBase
-	}
-	client := opts.Client
-	if client == nil {
-		client = &http.Client{Timeout: Timeout}
-	}
+	base := cmp.Or(opts.APIBase, defaultAPIBase)
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", strings.TrimRight(base, "/"), opts.Repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", opts.Name+"/"+opts.Current)
+	req.Header.Set("User-Agent", path.Base(opts.Repo)+"/"+opts.Current)
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -133,7 +128,9 @@ func latestTag(ctx context.Context, opts Options) (string, error) {
 	var release struct {
 		TagName string `json:"tag_name"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	// Only tag_name is needed; the cap keeps a misbehaving proxy from turning
+	// the 3s time bound into an unbounded read.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release); err != nil {
 		return "", err
 	}
 	if release.TagName == "" {
@@ -171,10 +168,8 @@ func parseVersion(s string) (version, bool) {
 // with the same core (semver). Two prereleases of the same core are equal here;
 // releases/latest never returns one, so the finer ordering is not needed.
 func (v version) compare(o version) int {
-	for _, d := range []int{v.major - o.major, v.minor - o.minor, v.patch - o.patch} {
-		if d != 0 {
-			return d
-		}
+	if c := cmp.Or(cmp.Compare(v.major, o.major), cmp.Compare(v.minor, o.minor), cmp.Compare(v.patch, o.patch)); c != 0 {
+		return c
 	}
 	switch {
 	case v.prerelease != "" && o.prerelease == "":

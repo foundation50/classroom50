@@ -94,7 +94,7 @@ func main() {
 }
 
 func releaseOptions() updatecheck.Options {
-	return updatecheck.Options{Name: "gh-teacher", Repo: contract.TeacherExtensionRepo, Current: version}
+	return updatecheck.Options{Repo: contract.TeacherExtensionRepo, Current: version}
 }
 
 // versionString renders cobra's --version line. A release build shows the
