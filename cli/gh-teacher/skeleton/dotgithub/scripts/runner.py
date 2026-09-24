@@ -154,16 +154,14 @@ FETCH_ATTEMPTS = 3
 # test suites and bounds a hostile asset.
 MAX_FETCH_BYTES = 10 * 1024 * 1024
 
-# The accept commit creates the repo's `.classroom50.yaml` (a no_autograder
-# accept creates nothing; the root commit is that shape's baseline). Resolving
-# the baseline from this structural marker is stable across clients/rewording
-# and removes the subject-reuse spoof; the one subject that matters is
-# SHIM_BACKFILL_COMMIT_SUBJECT, which marks a marker the teacher's backfill
-# added to a repo accepted without one, so the root stays the baseline. The
-# baseline still can't be moved *forward* (to hide pre-baseline work) only
-# because the default-branch force-push/delete ruleset protects the accept
-# commit -- on a plan that rejects org rulesets that protection silently
-# doesn't apply, so this is a robustness win over subject-matching, not a
+# The accept commit creates the repo's `.classroom50.yaml`; a no_autograder
+# accept creates nothing and the root commit is that shape's baseline.
+# Resolving the baseline from this structural marker is stable across
+# clients/rewording and removes the subject-reuse spoof (the one subject that
+# still matters is SHIM_BACKFILL_COMMIT_SUBJECT, below). The baseline still
+# can't be moved *forward* only because the default-branch force-push/delete
+# ruleset protects the accept commit; on a plan that rejects org rulesets that
+# protection silently doesn't apply, so this is a robustness win, not a
 # guarantee. Path mirrors classroomcfg.MetadataPath
 # (cli/gh-student/internal/classroomcfg/metadata.go) -- keep in lockstep.
 ACCEPT_MARKER_PATH = ".classroom50.yaml"
@@ -185,7 +183,7 @@ ACCEPT_COMMIT_PATHS = frozenset(
 # creates the repo with auto_init, which seeds a README the assignment contract
 # says must not exist, so the same commit removes it. Both accept clients
 # hand-mirror the path: classroomcfg.SeededReadmePath (gh-student) and the
-# init_shim deletePaths in web/src/domain/assignments/accept.ts -- keep in
+# init_shim deletePaths in web/src/domain/assignments/acceptSteps.ts -- keep in
 # lockstep. Deletion-only, so a tip accept commit that ADDS or EDITS a README
 # (a student's amended work) still grades.
 ACCEPT_COMMIT_DELETED_PATHS = frozenset({"README.md"})
@@ -202,8 +200,10 @@ SHIM_UPDATE_COMMIT_PATHS = frozenset({".github/workflows/autograde.yaml"})
 # Such a repo was accepted without a marker, so its baseline is the ROOT
 # commit, and a marker this commit introduced must not move it: a Feedback PR
 # frozen at the root would otherwise mismatch the runner's baseline for the
-# repo's whole life. Hand-mirrored with contract.ShimBackfillCommitMessage, the
-# web SHIM_BACKFILL_COMMIT_MESSAGE, and regrade_repos.py; keep byte-identical.
+# repo's whole life. Mirrors contract.ShimBackfillCommitSubject (the first line
+# of ShimBackfillCommitMessage / the web SHIM_BACKFILL_COMMIT_MESSAGE) and the
+# constant of the same name in collect_scores.py and regrade_repos.py; keep
+# byte-identical.
 SHIM_BACKFILL_COMMIT_SUBJECT = "[Classroom 50] Add autograde workflow (enable-autograder)"
 
 # `_baseline_scan` source discriminator. SOURCE_OPENABLE yields a usable
@@ -615,9 +615,9 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
       - SOURCE_ROOT:      the repo's root commit (no commit added the marker,
         or the one that did also carried non-setup work) -- a best-effort
         baseline.
-      - SOURCE_ROOT_BACKFILL: the root commit of a repo whose only marker
-        commit is the enable-autograder backfill (accepted as no_autograder).
-        Trusted: the root IS that shape's baseline.
+      - SOURCE_ROOT_BACKFILL: the root commit of a repo whose oldest
+        marker-adding commit is the enable-autograder backfill (accepted as
+        no_autograder). Trusted: the root IS that shape's baseline.
       - SOURCE_GIT_ERROR: git ran but failed (e.g., "dubious ownership" in a
         container, or an un-deepenable shallow clone). History might exist; we
         couldn't read it. Distinct from SOURCE_NONE so the caller warns right.
@@ -656,16 +656,13 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
             # credentials authenticate the fetch.
             if git("fetch", "--quiet", "--unshallow", "origin").returncode != 0:
                 return None, SOURCE_GIT_ERROR
-        # Earliest commit that ADDED the marker wins, so a later re-add (delete
-        # then restore) can't move the baseline forward and hide work from the
-        # review diff. --diff-filter=A selects additions, --reverse oldest-first.
-        # Run before the root-commit fallback. %s (the subject) rides along so a
-        # marker the enable-autograder backfill introduced is recognized: that
-        # repo was accepted without one, so it keeps the root baseline below.
+        # Earliest commit that ADDED the marker wins, so a later re-add can't
+        # move the baseline forward and hide work. %s rides along so the
+        # backfill's marker is recognized (see SHIM_BACKFILL_COMMIT_SUBJECT).
         # Deliberately NOT --first-parent: when a student merge-pulls the
         # teacher's backfill over unpushed work, first-parent attributes the
         # addition to the merge commit, whose subject hides the backfill and
-        # would turn the merge into a bogus accept baseline.
+        # would make the merge a bogus accept baseline.
         added = git(
             "log", "--reverse", "--diff-filter=A",
             "--format=%H%x00%s", "HEAD", "--", ACCEPT_MARKER_PATH,
@@ -855,8 +852,8 @@ def feedback_base_outcome(
     """(feedback-PR-base-sha, scan-source) for `main()`, which needs both the
     base AND the trust signal. Same (sha, source) as `_baseline_scan`, but
     forces a null sha for non-openable sources so the caller's gate is a simple
-    `sha is not None`: SOURCE_ACCEPT / SOURCE_ROOT open (root warns it's
-    untrusted), SOURCE_GIT_ERROR / SOURCE_NONE skip.
+    `sha is not None`: the SOURCE_OPENABLE sources open (only SOURCE_ROOT warns
+    it's untrusted), SOURCE_GIT_ERROR / SOURCE_NONE skip.
 
     A reviewable diff against the root commit beats no Feedback PR at all, and
     the untrusted-baseline warning tells the teacher to verify.
@@ -1398,8 +1395,9 @@ def no_baseline_warning(source: str = SOURCE_NONE) -> str:
 
 def untrusted_baseline_warning() -> str:
     """GitHub workflow annotation when the Feedback PR opens against the repo's
-    root commit instead of the trusted accept commit (no commit detected adding
-    `.classroom50.yaml`). The PR is still useful; the teacher gets a heads-up
+    root commit instead of the trusted accept commit (no commit added
+    `.classroom50.yaml`, or the one that did also carried non-setup work). The
+    PR is still useful; the teacher gets a heads-up
     that the frozen base may include starter/plumbing work, so the diff could
     be larger than usual.
 
@@ -2808,8 +2806,9 @@ def main() -> int:
     # unconditionally and early so the step runs even when grading fails
     # (teachers review failing work too). The step is the gate: it opens the PR
     # only when the assignment opted in (feedback-pr) and there's a diff. The
-    # base is the accept commit when detected, else the root commit: a root
-    # fallback still opens the PR but warns it's UNTRUSTED; only an unresolvable
+    # base is the accept commit when detected, else the root commit; an
+    # untrusted root fallback (SOURCE_ROOT) warns, the backfill's root
+    # (SOURCE_ROOT_BACKFILL) is trusted and silent; only an unresolvable
     # baseline (git unreadable / not a repo) skips.
     fb_base_sha, fb_source = feedback_base_outcome(workspace, baseline_scan)
     append_sha_outputs(github_output, fb_base_sha, sha)

@@ -22,18 +22,12 @@ import {
   type RepoFeatureApply,
 } from "./acceptSteps"
 
-// The no-setup-commit accept (empty_repo bare repo, or no_autograder): no
-// control files exist or are ever committed, so acceptAssignment's marker probe
-// is meaningless here: an existing repo IS an accepted repo. The provisioning is
-// the surface patch + founder grant (both idempotent upserts, the same
-// least-privilege rule as the committing path), re-run unconditionally to heal
-// a prior accept that died between create and grant. The "setup" step is
-// marked complete (as skipped) so the checklist doesn't look stuck.
-//
-// no_autograder keeps two things the bare path has nothing to hang on: the
-// Pages site (fresh create only) and the Feedback PR, both anchored on the
-// repo's real default branch once GitHub's async template copy settles.
-// The CLI twin is gh-student's acceptWithoutSetupCommit.
+// Accept for the shapes that commit nothing (empty_repo, no_autograder): with no
+// marker to probe, an existing repo IS an accepted repo, and the founder grant is
+// re-run to heal an accept that died between create and grant. no_autograder
+// additionally gets Pages (fresh create) and the Feedback PR, anchored on the
+// branch that materializes after GitHub's async template copy. CLI twin:
+// gh-student's acceptWithoutSetupCommit.
 export async function acceptWithoutSetupCommit(params: {
   client: GitHubClient
   org: string
@@ -154,18 +148,11 @@ export async function acceptWithoutSetupCommit(params: {
     }
     onStepUpdate?.({ id: "access", status: "complete" })
   } else {
-    // Fresh create. Setup is structurally skipped (no control files), so the
-    // step only waits for the branch when something needs it (Pages or the
-    // Feedback PR), then the founder grant runs LAST — consistent with the
-    // templated path's ordering. The grant hard-fails (an un-granted repo is
-    // a broken accept the student can't push to), inside the throwing step
-    // so the checklist surfaces the error and its recovery guidance. The
-    // branch wait itself is best-effort, like the CLI: Pages and the
-    // Feedback PR are deferred to a re-run, never at the cost of the grant.
+    // The branch wait is best-effort (Pages and the PR defer to a re-run); the
+    // founder grant is not: an un-granted repo is one the student can't push
+    // to, so it runs last inside the throwing step, like the templated path.
     let settledBranch = createdBranch
-    // The settled head, when it is the repo's root commit (the generate or
-    // auto_init seed): then it is also the Feedback PR baseline, and the
-    // feedback step can skip its history walks.
+    // Root head (no parents): also the Feedback PR baseline, see feedbackStep.
     let rootSha: string | undefined
     let branchReady = false
     let pagesRefusal: PagesEnableReason | null = null

@@ -353,10 +353,8 @@ export type SubmissionActionListProps = {
   submissionMode?: SubmissionMode
   // The assignment's milestone submission_tags (if any) for the same action.
   submissionTags?: string[]
-  // What "Add autograding workflow" rebuilds a missing `.classroom50.yaml`
-  // from: the classroom secret and the template source. The row supplies
-  // classroom/assignment/owner itself. Undefined while classroom.json is still
-  // loading, which hides the action rather than writing a secret-less marker.
+  // Marker source for "Add autograding workflow"; undefined hides the action
+  // (see markerSource in SubmissionsPage).
   markerSource?: BackfillMarkerSource
   // Whether the Pause/Resume-autograding action applies: owner + a gradable
   // default-autograder assignment (same gate as submissionMode). Omitted/false

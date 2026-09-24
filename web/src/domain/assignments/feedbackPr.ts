@@ -445,20 +445,12 @@ async function pushEmptyCommit(params: {
   )
 }
 
-// The baseline commit to freeze `feedback` at: the OLDEST commit touching the
-// .classroom50.yaml marker (the accept commit), or null when the marker can't
-// be resolved — the same rule the runner's baseline_sha() applies. Read-only
-// and 404/lag-tolerant (any read failure collapses to null) for the accept
-// path, which has a just-committed-SHA fallback. The teacher repair reads the
-// marker directly instead, because there a read failure and an empty history
-// call for different remedies.
-//
-// `branch` names the repo's default branch for the two root-commit cases: a
-// marker the enable-autograder backfill introduced (that repo was accepted
-// without one, so the root is its baseline), and, only when `rootIsBaseline`
-// is set (the no_autograder shape), no marker at all. Only a DEFINITIVE empty
-// history falls through to the root: a transient marker read failure resolves
-// null, so a marker-carrying repo is never frozen at the wrong commit.
+// The commit to freeze `feedback` at, per baselineSource: the marker's oldest
+// commit, or the root of `branch` when the marker was backfilled or is absent
+// and rootIsBaseline says the root is the seed. Null on any read failure so a
+// marker-carrying repo is never frozen at the wrong commit (the accept path has
+// a just-committed fallback; the teacher repair reads the marker itself because
+// there a failure and an empty history call for different remedies).
 export async function resolveFeedbackBaselineSha(
   client: GitHubClient,
   org: string,

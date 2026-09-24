@@ -8,8 +8,7 @@ import (
 )
 
 // The shared golden cases keep this rule, the web baselineSource, and the
-// Python readers in lockstep; a drift in any one of them failed silently before
-// this fixture existed (regrade_repos.py shipped without the backfill check).
+// Python readers in lockstep.
 func TestResolveBaselineSource_SharedFixtureParity(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "testdata", "baseline_source_cases.json"))
 	if err != nil {

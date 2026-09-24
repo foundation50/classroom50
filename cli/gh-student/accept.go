@@ -687,12 +687,8 @@ type acceptRepoParams struct {
 //     the idempotent provisioning to repair it.
 //   - freshly created → provision normally.
 func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
-	// The no-setup-commit paths (empty_repo, no_autograder) never commit
-	// control files, so the marker probe below is meaningless: an existing
-	// repo IS an accepted repo. Their provisioning is the founder grant (an
-	// idempotent upsert, re-run unconditionally to heal a prior accept that
-	// died between create and grant) plus, for no_autograder, Pages and the
-	// Feedback PR.
+	// No control files means no marker to probe: an existing repo IS an accepted
+	// repo (see acceptWithoutSetupCommit).
 	if p.emptyRepo || p.noAutograder {
 		return acceptWithoutSetupCommit(client, u, verbose, out, p)
 	}
@@ -770,19 +766,11 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 	return reportAccepted(u, out, p.fullName, p.htmlURL)
 }
 
-// acceptWithoutSetupCommit is acceptIntoRepo's twin for the shapes that commit
-// no control files: empty_repo (a bare repo with no commits) and no_autograder
-// (an initialized repo left exactly as GitHub created it). No marker probe, no
-// read-back of a marker. The sole provisioning both share is the founder role
-// grant — the same least-privilege rule as the normal path (`push` for
-// individual, `admin` for group). It splits on alreadyExisted like the
-// templated path: a healthy already-accepted repo reconciles the grant
-// best-effort (a transient failure must not fail a re-run), while a fresh
-// create hard-fails the grant and first asserts mode/size coherence.
-//
-// no_autograder additionally keeps Pages (fresh create only) and the Feedback
-// PR, whose baseline is the repo's root commit since no marker commit exists
-// (an older marker, from before accept stopped writing one, still wins).
+// acceptWithoutSetupCommit provisions the shapes that commit no control files
+// (empty_repo: bare, no commits; no_autograder: left exactly as GitHub created
+// it), so there is no marker to probe or read back. Provisioning is the founder
+// grant (plus team attach); no_autograder also gets Pages and the Feedback PR,
+// whose base is the root commit unless a legacy marker exists.
 func acceptWithoutSetupCommit(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
 	resolveBase := func() (string, error) {
 		return feedbackBaseSHAOrRoot(client, p.org, p.repoName, p.branch)
@@ -799,9 +787,8 @@ func acceptWithoutSetupCommit(client githubapi.Client, u *ui.UI, verbose bool, o
 		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
 			u.Detail("could not update %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 		}
-		// Repos accepted before the accept-time-PR feature get their PR by
-		// re-accepting — the only Actions-free route. Existing PRs
-		// short-circuit inside, keeping repeat re-accepts read-only.
+		// Same re-accept route to a missing Feedback PR as the templated
+		// already-accepted path; existing PRs short-circuit inside.
 		if p.noAutograder && p.feedbackPR {
 			openFeedbackPRStep(client, u, verbose, p, resolveBase)
 		}
@@ -819,7 +806,8 @@ func acceptWithoutSetupCommit(client githubapi.Client, u *ui.UI, verbose bool, o
 	// Pages and the Feedback PR both need the branch readable first (the
 	// generated repo's git data can lag the create): wait once for both. A
 	// failed wait is not fatal to the accept, so the steps that needed it are
-	// skipped with the same deferral hint DropFiles' consumers use.
+	// skipped, each with the remedy its own step would have named
+	// (branchUnsettledRemedies).
 	branchReady := false
 	if p.noAutograder && (p.pages != nil || p.feedbackPR) {
 		if err := waitForStableBranch(client, p.org, p.repoName, p.branch); err != nil {
@@ -838,9 +826,8 @@ func acceptWithoutSetupCommit(client githubapi.Client, u *ui.UI, verbose bool, o
 		return err
 	}
 
-	// Feedback PR is best-effort (a failure only defers to a re-run). Before
-	// the founder grant so the repo is fully set up before we (possibly)
-	// narrow the student's own access.
+	// Best-effort, and before the founder grant for the reason
+	// provisionAcceptedRepo gives.
 	if branchReady && p.feedbackPR {
 		openFeedbackPRStep(client, u, verbose, p, resolveBase)
 	}
@@ -868,8 +855,8 @@ func attachTeamStep(client githubapi.Client, p acceptRepoParams) error {
 }
 
 // enablePagesStep configures the assignment's GitHub Pages site once the branch
-// is readable and, on the committing path, before the control-files commit so
-// that commit's push is a workflow site's first deploy (a deploy workflow's
+// is readable and before the control-files commit, so that commit's push is a
+// workflow site's first deploy (a deploy workflow's
 // first run would otherwise fail with no site). Fresh create only, never
 // re-asserted on heal, so a student's own later Pages change survives.
 // Best-effort: a refusal warns with the next step and never fails accept; 409

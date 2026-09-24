@@ -473,7 +473,8 @@ const submitEntryTimeout = 15 * time.Second
 // connection: go-gh's client has no HTTP timeout and git has no request
 // timeout. Vars so tests can shrink them.
 var (
-	// Single GET before anything else runs.
+	// The pre-snapshot GETs: the remote marker probe on a markerless clone and
+	// the default-branch read.
 	defaultBranchTimeout = 10 * time.Second
 	// Per request inside fetchRepoPath, so a large .github/ tree is not
 	// penalized for its size.

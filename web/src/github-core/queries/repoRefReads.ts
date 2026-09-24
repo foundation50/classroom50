@@ -58,17 +58,15 @@ export function getCommitByRepo(
   )
 }
 
-// The accept-marker baseline: the OLDEST commit touching `.classroom50.yaml`,
-// the same resolution rule as the runner's baseline_sha(). Null when no commit
-// does (a bare or no_autograder repo). `backfilled` marks the one case where
-// that oldest commit must NOT anchor anything: the enable-autograder backfill
-// introduced it, so the repo was accepted without a marker and its baseline is
-// the root commit (a Feedback PR frozen there would otherwise mismatch the
-// runner for the repo's whole life). Paginated to exhaustion because a wrong
-// SHA is worse than a slow read: a single page would hand back a NEWER commit
-// once the marker's history exceeds 100 entries.
+// The marker's introducing commit; `backfilled` means the enable-autograder
+// backfill wrote it, so the repo was accepted without one (baseline: root, see
+// baselineSource).
 export type MarkerBaseline = { sha: string; backfilled: boolean }
 
+// Oldest commit touching the marker, the runner's baseline_sha() rule; null
+// when none does. Paginated to exhaustion: a single page would return a NEWER
+// commit once the history exceeds 100 entries, and a wrong SHA is worse than a
+// slow read.
 export async function getMarkerBaseline(
   client: GitHubClient,
   owner: string,
@@ -113,12 +111,10 @@ export function baselineSource(
   return { source: "none" }
 }
 
-// The ROOT commit of `branch`, or null on a commitless repo. The Feedback-PR
-// and submission baseline for a no_autograder repo, which carries no marker:
-// its root is the template (or README) seed, so everything above it is the
-// student's. Only the oldest commit matters, so after page 1 reveals the page
-// count the walk jumps straight to the last page instead of reading every page
-// in between.
+// The ROOT commit of `branch`, or null on a commitless repo: the baseline when
+// baselineSource resolves "root" (the seed is not student work). Only the oldest
+// commit matters, so after page 1 reveals the page count the walk jumps straight
+// to the last page.
 export async function getRootCommitSha(
   client: GitHubClient,
   owner: string,

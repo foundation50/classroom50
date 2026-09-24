@@ -4,7 +4,8 @@
 // `gh teacher assignment rename` (cli/gh-teacher/internal/assignmentcmd/
 // rename.go) phase for phase: one atomic config commit (slug + renamed_from +
 // lock, scores.json bucket re-key, autograders/<old>/ move), then a
-// marker-verified serial fan-out renaming each student repo, then the lock
+// marker-verified (prefix-verified for a markerless no_autograder assignment)
+// serial fan-out renaming each student repo, then the lock
 // restore — held while any repo failed, because an accept mid-heal would mint
 // a fresh repo at a straggler's NEW name and permanently 422 its rename.
 // Idempotent: a re-run resumes from state and heals stragglers.
@@ -681,12 +682,9 @@ export async function renameAssignment(
   }
   const oldPrefix = assignmentRepoPrefix(classroom, oldSlug)
   const newPrefix = assignmentRepoPrefix(classroom, newSlug)
-  // A no_autograder assignment's repos carry no marker, so the fan-out falls
-  // back to prefix ownership. The classroom's other slugs whose repo prefix
-  // extends this one ("hw" vs "hw-extra") are the over-match a marker would
-  // have caught; their repos are skipped as foreign. A sibling's previous slug
-  // counts too: repos a partially completed sibling rename left behind still
-  // carry the old prefix.
+  // Sibling prefixes for the markerless fallback (see renameOneRepo). A
+  // sibling's renamed_from counts too: repos a partially completed sibling
+  // rename left behind still carry its old prefix.
   const entry = oldEntry ?? newEntry
   const markerless = entry ? isNoAutograderAssignment(entry) : false
   const siblingPrefixes = preFile.assignments

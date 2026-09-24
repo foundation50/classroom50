@@ -251,19 +251,13 @@ export type Assignment = {
   // absent reads as false.
   empty_repo?: boolean
   // No built-in autograder on an INITIALIZED repo (templated or README): accept
-  // commits NOTHING into the repo, no .classroom50.yaml marker and no autograde
-  // shim (neither the default shim nor a Pages-fetched workflow), so each repo
-  // is exactly what GitHub created and a template's own .github/ CI runs
-  // instead, or nothing does (discussion #1045). UNLIKE empty_repo it permits
-  // the Feedback PR, anchored on the root commit since no marker commit exists;
-  // submission detection uses the same root baseline. It excludes the
-  // grading-adjacent fields and is mutually exclusive with empty_repo,
-  // init_shim, and a non-default autograder. Mutable; not retrofitted by the
-  // edit itself, but clearing it has a follow-up that adds the shim (and the
-  // missing marker) to already-accepted repos (shimBackfill.ts / `gh teacher
-  // assignment enable-autograder`). Omitted when false (CLI omitempty); absent
-  // reads as false. In lockstep with the CLI's assignments-v1 schema
-  // (`no_autograder`).
+  // commits nothing (no marker, no shim), so the repo is exactly what GitHub
+  // created and the Feedback PR / submission baseline is the root commit
+  // (discussion #1045). Permits the Feedback PR, excludes the grading-adjacent
+  // fields; mutually exclusive with empty_repo, init_shim, and a non-default
+  // autograder. Clearing it is followed by the shim + marker backfill
+  // (shimBackfill.ts / `gh teacher assignment enable-autograder`). Omitted when
+  // false; lockstep with the CLI's assignments-v1 schema.
   no_autograder?: boolean
   // Built-in autograder on an otherwise-empty repo: a TEMPLATE-LESS assignment
   // whose repo is initialized with ONLY the marker + default autograde shim (no

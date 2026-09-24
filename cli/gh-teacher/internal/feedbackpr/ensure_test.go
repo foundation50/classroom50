@@ -230,10 +230,6 @@ func runEnsureMarkerless(t *testing.T, s *ensureServer, mode string, markerless 
 // The ordinary autograded assignment: no teacher template.
 var builtInBody = feedbackBodySpec{autograded: true}
 
-// TestEnsure_FreshOpen pins the full sequence on an un-pushed repo: freeze the
-// base at the accept commit, hit the zero-diff 422, land ONE empty commit (the
-// head's own tree, [skip ci] in the message), fast-forward, retry the create,
-// label it. Returns nil (a fresh open).
 // A no_autograder accept writes no marker: the markerless ensure freezes the
 // base at the branch's root commit instead of reporting the repo incomplete.
 func TestEnsure_MarkerlessFallsBackToRootCommit(t *testing.T) {
@@ -289,6 +285,10 @@ func TestEnsure_BackfilledMarkerAnchorsOnRootEvenWhenNotMarkerless(t *testing.T)
 	}
 }
 
+// TestEnsure_FreshOpen pins the full sequence on an un-pushed repo: freeze the
+// base at the accept commit, hit the zero-diff 422, land ONE empty commit (the
+// head's own tree, [skip ci] in the message), fast-forward, retry the create,
+// label it. Returns nil (a fresh open).
 func TestEnsure_FreshOpen(t *testing.T) {
 	s := &ensureServer{}
 	if err := runEnsure(t, s, contract.ModeIndividual); err != nil {

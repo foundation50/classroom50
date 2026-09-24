@@ -69,7 +69,7 @@ func (e *UnsupportedValueError) Error() string {
 const UpgradeHint = "if a newer Classroom 50 client wrote this value, run `gh extension upgrade " + contract.TeacherExtensionRepo + "`"
 
 // withUpgradeHint also marks the error stale so main can follow the hedged
-// hint with a definite release comparison; the add path never gets here.
+// hint with a definite release comparison.
 func withUpgradeHint(err error) error {
 	var unsupported *UnsupportedValueError
 	if !errors.As(err, &unsupported) {
@@ -1193,21 +1193,14 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 	return nil
 }
 
-// validateNoAutograderExclusions rejects the combinations no_autograder rules
-// out. A narrower sibling of empty_repo: it commits no shim and no marker
-// (accept leaves the repo exactly as GitHub created it), and it must not
-// coexist with empty_repo (already file-less) or a non-default autograder
-// (which fetches a teacher-authored Pages workflow — the opposite of adding
-// nothing). It applies to any initialized repo, templated or README (a
-// template may carry teacher-supplied CI; a README repo simply has no
-// autograder), and UNLIKE empty_repo it permits feedback_pr (an initialized
-// repo has a root commit to freeze the base at). submission_mode/
-// submission_tags are PERMITTED — with no shim they carry no trigger, but they
-// still define what the submissions page counts as a submission (branch
-// commits / milestone tags).
-// Unlike empty_repo, no_autograder has no `assignment add` flag yet (it is
-// GUI/manifest-set), so error wording names the JSON fields, not a
-// --no-autograder flag; the parse path wraps with the entry context.
+// validateNoAutograderExclusions rejects what no_autograder rules out. A
+// no_autograder accept commits no shim and no marker (the repo stays as GitHub
+// created it), so anything the shim would run or enforce is excluded, as are
+// empty_repo (already file-less) and a non-default autograder. Unlike empty_repo
+// it permits feedback_pr (a root commit exists to freeze the base at) and
+// submission_mode/submission_tags (no trigger, but they still define what the
+// submissions page counts). There is no `assignment add` flag yet, so error
+// wording names the JSON fields; the parse path wraps with the entry context.
 func validateNoAutograderExclusions(entry AssignmentEntry) error {
 	if entry.EmptyRepo {
 		return errors.New("no_autograder is mutually exclusive with empty_repo: a bare repo already commits no shim")

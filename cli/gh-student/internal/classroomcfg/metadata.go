@@ -22,19 +22,9 @@ import (
 	"github.com/foundation50/gh-student/internal/githubapi"
 )
 
-// MetadataPath is the in-repo path read by both the student CLI and the
-// autograde-runner workflow's bootstrap step.
-//
-// It also serves as the runner's accept-commit marker: the runner resolves the
-// Feedback-PR baseline as "the oldest commit that introduced .classroom50.yaml".
-// Every accept client (this CLI, the web GUI, any future client) MUST create
-// this file in its accept commit, except a no_autograder accept, which writes
-// nothing; readers then anchor on the root commit. One subject does carry a
-// contract: a marker whose oldest adder is contract.ShimBackfillCommitSubject
-// was added by the teacher's enable-autograder backfill, and readers keep the
-// root. Aliased to the shared contract constant so the runner-side
-// ACCEPT_MARKER_PATH and the teacher CLI can't drift from it
-// (cli/gh-teacher/skeleton/dotgithub/scripts/runner.py).
+// MetadataPath aliases contract.MetadataPath (the accept marker and baseline
+// anchor; see its doc and contract/baseline.go for the resolution rule) so the
+// runner's ACCEPT_MARKER_PATH and the teacher CLI can't drift from it.
 const MetadataPath = contract.MetadataPath
 
 // AutogradeWorkflowPath is the in-repo destination for the autograde shim
@@ -44,16 +34,11 @@ const AutogradeWorkflowPath = contract.AutogradeShimPath
 // SeededReadmePath is the README GitHub's auto_init seeds at repo creation.
 const SeededReadmePath = "README.md"
 
-// SchemaRepoConfigV1 is the versioned sentinel stamped into `.classroom50.yaml`
-// at accept time. Readers treat it as optional — pre-v1 files predate it — but
-// new accepts always write it so future shape changes are detectable. Mirrors
-// the web GUI's emitted value.
+// SchemaRepoConfigV1 aliases repoconfig.SchemaV1.
 const SchemaRepoConfigV1 = repoconfig.SchemaV1
 
-// Config, Identity, and Source are the `.classroom50.yaml` document, shared
-// with the teacher CLI (which writes the marker when turning the built-in
-// autograder on for repos accepted without one) so both render it identically
-// through repoconfig.Render. See repoconfig for the field-level contract.
+// Config, Identity, and Source alias the shared repoconfig document so both
+// CLIs render the marker through repoconfig.Render.
 type (
 	Config   = repoconfig.Config
 	Identity = repoconfig.Identity

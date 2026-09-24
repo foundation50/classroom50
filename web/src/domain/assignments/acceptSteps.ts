@@ -44,13 +44,7 @@ import { attachRepoToGroupTeam } from "@/domain/teams/groupTeams"
 // landing the control files, enabling Pages, settling a fresh repo's branch,
 // opening the Feedback PR, and the founder grant. Each owns its own recovery
 // copy so the two flows report failures identically.
-// Land .classroom50.yaml + the autograde workflow as one Tree commit, riding out
-// GitHub's git-data lag after POST .../generate (reads 404, the first write 409s
-// "Git Repository is empty"). The whole read→build→commit→update runs inside
-// withFreshRepoRetry, re-reading the ref + parent commit each attempt and
-// requiring non-empty SHAs before writing. Safe because the student's
-// just-accepted repo has no concurrent writers.
-//
+
 // The budget is deliberately generous (~50s, polling every 8s once warmed up):
 // the accept flow can't resume itself, so giving up here strands the student
 // on a repo without its setup files (issue #502). The CLI waits a comparable
@@ -74,6 +68,12 @@ const setupRetryOptions = (onStillInitializing?: () => void) => ({
   },
 })
 
+// Land .classroom50.yaml + the autograde workflow as one Tree commit, riding out
+// GitHub's git-data lag after POST .../generate (reads 404, the first write 409s
+// "Git Repository is empty"). The whole read→build→commit→update runs inside
+// withFreshRepoRetry, re-reading the ref + parent commit each attempt and
+// requiring non-empty SHAs before writing. Safe because the student's
+// just-accepted repo has no concurrent writers.
 export async function commitAcceptFilesWithFreshRepoRetry(params: {
   client: GitHubClient
   owner: string
@@ -326,24 +326,18 @@ export function grantFounderAccessStep(params: {
   )
 }
 
-// The commit to freeze `feedback` at, preferring the marker's earliest commit
-// over the SHA this run just wrote. On the HEAL path the marker already exists,
-// so the repair commit is NOT the baseline the runner resolves — freezing there
-// would make the runner refuse to maintain the PR for the repo's whole life. On
-// a fresh accept the lookup returns the commit just written (or fails on read
-// lag), so falling back to it is correct. With no committed SHA to fall back on
-// (the already-accepted path, where no commit ran), an unresolvable marker
-// leaves nothing to anchor the base and the step defers.
+// The commit to freeze `feedback` at: the resolved baseline (marker or root, see
+// resolveFeedbackBaselineSha), else the SHA this run wrote. The marker wins on a
+// heal because the repair commit is not the baseline the runner resolves.
 export async function resolveFeedbackBaseSha(params: {
   client: GitHubClient
   org: string
   repo: string
   committedSha: string | null
-  // The repo's default branch, for the root-commit cases (a backfilled marker,
-  // or no marker on a no_autograder repo); see resolveFeedbackBaselineSha.
+  // Default branch, read only when the baseline resolves to the root commit.
   branch: string
-  // no_autograder: no marker is ever written, so the root commit is the
-  // baseline even with an empty marker history.
+  // Whether a markerless repo's root is the baseline (see rootIsBaseline in
+  // autogradingState); the no-setup-commit path passes true.
   rootIsBaseline?: boolean
 }): Promise<string | null> {
   const { client, org, repo, committedSha, branch, rootIsBaseline } = params

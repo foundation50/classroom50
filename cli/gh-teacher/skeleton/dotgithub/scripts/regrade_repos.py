@@ -424,8 +424,10 @@ AUTOGRADE_SHIM_PATH = f".github/workflows/{AUTOGRADE_WORKFLOW}"
 # Subject of the commit that adds the shim to a repo accepted while the
 # built-in autograder was off (`gh teacher assignment enable-autograder` / the
 # gradebook's "Add autograding workflow"). Every commit beneath it predates the
-# workflow, so no tag there can fire. Hand-mirrored with
-# contract.ShimBackfillCommitMessage and the web SHIM_BACKFILL_COMMIT_MESSAGE.
+# workflow, so no tag there can fire, and a marker it introduced is not an
+# accept (acceptance_commit_sha). Mirrors contract.ShimBackfillCommitSubject and
+# the runner.py / collect_scores.py constant of the same name; keep
+# byte-identical.
 SHIM_BACKFILL_COMMIT_SUBJECT = "[Classroom 50] Add autograde workflow (enable-autograder)"
 
 

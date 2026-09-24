@@ -249,13 +249,11 @@ func oldestCommit(client githubapi.Client, org, repoName, query string) (*commit
 	return &commits[len(commits)-1], nil
 }
 
-// acceptCommitSHA recovers the accept baseline for a repo on branch: the
-// earliest commit touching the .classroom50.yaml marker, the same rule as the
-// runner's baseline_sha(), so the feedback base frozen here matches what the
-// runner later verifies. A marker the enable-autograder backfill introduced
-// does NOT anchor: that repo was accepted without one (no_autograder), so its
-// baseline is the root commit, and the runner resolves it the same way. Wraps
-// errNoAcceptMarker when no commit touches the marker.
+// acceptCommitSHA is the marker baseline: the oldest commit touching
+// .classroom50.yaml (runner.py's baseline_sha() applies the same rule). A
+// marker the enable-autograder backfill introduced falls through to the root
+// commit (contract.IsShimBackfillCommit). Wraps errNoAcceptMarker when no
+// commit touches the marker.
 func acceptCommitSHA(client githubapi.Client, org, repoName, branch string) (string, error) {
 	oldest, err := oldestCommit(client, org, repoName, "path="+url.QueryEscape(classroomcfg.MetadataPath))
 	if err != nil {
@@ -270,10 +268,9 @@ func acceptCommitSHA(client githubapi.Client, org, repoName, branch string) (str
 	return oldest.SHA, nil
 }
 
-// rootCommitSHA is the oldest commit on branch: the Feedback-PR baseline for a
-// no_autograder repo, which carries no marker (its root is the template or
-// README seed, so everything above it is the student's). Errors on a
-// commitless repo.
+// rootCommitSHA is the oldest commit on branch: the baseline for a repo whose
+// marker is absent or backfill-introduced (its root is the template or README
+// seed, so everything above it is the student's). Errors on a commitless repo.
 func rootCommitSHA(client githubapi.Client, org, repoName, branch string) (string, error) {
 	oldest, err := oldestCommit(client, org, repoName, "sha="+url.QueryEscape(branch))
 	if err != nil {

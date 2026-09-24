@@ -444,14 +444,9 @@ export async function acceptAssignment(params: {
   // whole setup step are skipped. Mirrors the CLI's acceptWithoutSetupCommit.
   const isEmptyRepo = assignment.empty_repo === true
 
-  // no_autograder assignment: an initialized repo (template or README) that
-  // is left exactly as GitHub created it. Accept commits NOTHING: no autograde
-  // shim of either kind (neither the default shim nor a Pages-fetched
-  // workflow) and no .classroom50.yaml marker, so a template's own .github/
-  // CI runs, or nothing does, and a grader importing the repo sees only the
-  // student's files (discussion #1045). Unlike empty_repo it keeps the starter
-  // content and permits the Feedback PR, whose baseline is then the repo's
-  // root commit. Mirrors the CLI student accept gate (entry.CommitsShim()).
+  // no_autograder: accept commits NOTHING (no marker, no shim; see the field doc
+  // in types/classroom.ts), so the Feedback PR baseline is the root commit.
+  // Mirrors the CLI student accept gate (entry.CommitsShim()).
   const isNoAutograder = assignment.no_autograder === true
 
   // init_shim assignment: a TEMPLATE-LESS repo initialized with only the marker

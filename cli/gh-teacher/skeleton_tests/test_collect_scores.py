@@ -3849,8 +3849,7 @@ def test_baseline_source_shared_fixture_parity(monkeypatch):
     # The collect_scores half of the baseline lockstep: marker_baseline's read
     # of the oldest marker commit composed with resolve_baseline_source must
     # agree with Go contract.ResolveBaselineSource, the web baselineSource,
-    # regrade_repos.py and runner.py on one golden fixture. regrade_repos.py
-    # once shipped without the backfill check because nothing pinned it.
+    # regrade_repos.py and runner.py on one golden fixture.
     fixture = (
         pathlib.Path(__file__).resolve().parents[2]
         / "shared"

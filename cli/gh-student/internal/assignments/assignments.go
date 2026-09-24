@@ -115,14 +115,11 @@ type Entry struct {
 	// existed).
 	SubmissionTags []string `json:"submission_tags,omitempty"`
 
-	// NoAutograder marks an initialized assignment (templated or README) as
-	// having no built-in autograder: accept commits NOTHING into the repo, no
-	// .classroom50.yaml marker and no autograde shim (neither the default shim
-	// nor a Pages-fetched workflow), so each repo is exactly what GitHub
-	// created and a template's own .github/ CI runs instead, or nothing does.
-	// UNLIKE EmptyRepo it keeps the starter content and permits the Feedback
-	// PR (anchored on the root commit). Absent reads as false (the teacher CLI
-	// omits it when false).
+	// NoAutograder marks an initialized assignment (templated or README) with no
+	// built-in autograder: accept writes nothing (no marker, no shim), so the
+	// template's own .github/ CI runs instead, or nothing does. Unlike EmptyRepo
+	// it keeps the starter content and permits the Feedback PR (anchored on the
+	// root commit). Absent reads as false.
 	NoAutograder bool `json:"no_autograder,omitempty"`
 
 	// InitShim marks a TEMPLATE-LESS assignment whose repo is initialized with
@@ -368,7 +365,6 @@ type ClassroomSummary struct {
 	ShortName string `json:"short_name"`
 }
 
-// classroomsIndexFile is the top-level shape of classrooms-index.json.
 type classroomsIndexFile struct {
 	Classrooms []ClassroomSummary `json:"classrooms"`
 }
