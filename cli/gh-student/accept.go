@@ -262,9 +262,8 @@ func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) 
 
 // checkAcceptableMode rejects an unrecognized mode (which can't map to a repo
 // role). Shape coherence is a separate check (assertModeCoherentForCreate).
-// The teacher's tooling is always at least as new as the schema value it
-// wrote, so a stale gh-student is the likely cause and upgrading is the one
-// step the student can take themselves.
+// The teacher's tooling wrote the value, so a stale gh-student is the likely
+// cause and upgrading is the one step the student can take.
 func checkAcceptableMode(assignment, mode string) error {
 	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup && mode != contract.ModeTeam {
 		return fmt.Errorf("assignment %q uses mode %q, which this version of gh-student does not support. Run `gh extension upgrade %s`, then run accept again; if that does not help, ask your teacher",

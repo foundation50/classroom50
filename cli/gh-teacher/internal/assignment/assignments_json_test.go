@@ -1620,12 +1620,9 @@ func TestParseAssignments_Rejects(t *testing.T) {
 	}
 }
 
-// TestParseAssignments_UnknownValueNamesUpgrade covers #1055: a stale
-// gh-teacher meeting a value a newer client wrote (there, `mode: team`) failed
-// the whole manifest, so every command for the classroom died with an error
-// that read like a corrupt file. The parse stays strict, but the error must
-// now name the upgrade. Structural errors keep their plain message: no
-// upgrade fixes an empty name.
+// TestParseAssignments_UnknownValueNamesUpgrade covers #1055: an unknown enum
+// value anywhere in the manifest must name the upgrade, while structural
+// errors (which no upgrade fixes) stay plain.
 func TestParseAssignments_UnknownValueNamesUpgrade(t *testing.T) {
 	const upgrade = "gh extension upgrade " + contract.TeacherExtensionRepo
 	valid := `{"slug":"travail-pratique-1","name":"TP1","mode":"individual","autograder":"default"}`
@@ -1705,8 +1702,7 @@ func TestParseAssignments_UnknownValueNamesUpgrade(t *testing.T) {
 	}
 }
 
-// The add path validates the teacher's own flag value, so the upgrade hint
-// would be misleading there; only the parse path appends it.
+// The add path validates the teacher's own flag, so no upgrade hint there.
 func TestValidateAssignmentEntry_UnknownModeHasNoUpgradeHint(t *testing.T) {
 	err := ValidateAssignmentEntry(AssignmentEntry{Slug: "hw", Name: "HW", Mode: "pair", Autograder: "default"})
 	if err == nil {

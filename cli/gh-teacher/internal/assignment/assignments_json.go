@@ -50,12 +50,10 @@ func IsValidAssignmentMode(m string) bool {
 	return false
 }
 
-// UnsupportedValueError reports a known enum field holding a value outside
-// this binary's allow-list. It is distinct from a structural error because on
-// the read path the likely cause is a newer client (the web app is always
-// current) writing a value this release predates, so ParseAssignments turns it
-// into an upgrade prompt rather than a dead end (#1055). On the add path the
-// value came from the teacher's own flag, so it stays a plain validation error.
+// UnsupportedValueError marks a known enum field holding a value this binary
+// does not know. On the read path that usually means a newer client wrote it,
+// so ParseAssignments appends an upgrade hint (#1055); the add path validates
+// the teacher's own flag and leaves it plain.
 type UnsupportedValueError struct {
 	Field   string
 	Value   string
@@ -66,12 +64,9 @@ func (e *UnsupportedValueError) Error() string {
 	return fmt.Sprintf("invalid %s %q: must be one of %v", e.Field, e.Value, e.Allowed)
 }
 
-// UpgradeHint is the next step appended to an UnsupportedValueError met while
-// reading assignments.json. It hedges ("if") because a hand-edited typo trips
-// the same check.
+// UpgradeHint hedges with "if" because a hand-edited typo trips the same check.
 const UpgradeHint = "if a newer Classroom 50 client wrote this value, run `gh extension upgrade " + contract.TeacherExtensionRepo + "`"
 
-// withUpgradeHint appends UpgradeHint when err carries an UnsupportedValueError.
 func withUpgradeHint(err error) error {
 	var unsupported *UnsupportedValueError
 	if !errors.As(err, &unsupported) {

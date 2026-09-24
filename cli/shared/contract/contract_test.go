@@ -612,8 +612,8 @@ func TestFeedbackTemplateContract(t *testing.T) {
 	}
 }
 
-// TestExtensionRepos pins the `gh extension upgrade` targets the CLIs print in
-// stale-binary errors to the repos .github/workflows/cli-release.yaml publishes.
+// TestExtensionRepos pins the `gh extension upgrade` targets to the repos
+// cli-release.yaml publishes.
 func TestExtensionRepos(t *testing.T) {
 	if TeacherExtensionRepo != "foundation50/gh-teacher" {
 		t.Errorf("TeacherExtensionRepo = %q, want foundation50/gh-teacher", TeacherExtensionRepo)

@@ -40,8 +40,7 @@ func TestCheckAcceptableMode(t *testing.T) {
 			if !tc.wantErr && err != nil {
 				t.Errorf("mode %q: unexpected error %v", tc.mode, err)
 			}
-			// A stale binary is the likely cause, so the rejection must name
-			// the upgrade step (#1055) rather than dead-end on "unsupported".
+			// #1055: the rejection must name the upgrade step.
 			if tc.wantErr && !strings.Contains(err.Error(), "gh extension upgrade "+contract.StudentExtensionRepo) {
 				t.Errorf("mode %q: err = %q, want the upgrade command", tc.mode, err)
 			}
