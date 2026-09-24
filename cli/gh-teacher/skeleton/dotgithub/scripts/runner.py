@@ -111,9 +111,10 @@ MAX_CAPTURED_CHARS = 2000
 MAX_LOG_CAPTURED_CHARS = 100_000
 
 # Per-test failure-detail levels -- mirror tests.go / tests-v1.schema.json.
-# full: io tests show a diff (exact) or expected+actual blocks plus stderr;
-# run/python tests show the command's combined output (the default).
-# actual-only: the student's own output, never the expected side or a diff.
+# full: io tests show the input, then a diff (exact) or expected+actual
+# blocks, plus stderr; run/python tests show the command's combined output
+# (the default).
+# actual-only: the student's own output; no input, expected output, or diff.
 # none: just the failure-kind summary line.
 FAILURE_DETAILS_FULL = "full"
 FAILURE_DETAILS_ACTUAL_ONLY = "actual-only"
@@ -1746,8 +1747,8 @@ def _make_outcome(name: str, points: int, passed: bool, detail: str,
     fields stripped before result.json: a `detail` summary line (the failure
     kind -- safe under every failure-details level) and a `capture` dict of raw
     streams (`output` and `setup-output` for run/python tests, `stdout` /
-    `stderr` / `expected` for io tests) that the renderers clip and
-    policy-filter per surface."""
+    `stderr` plus `input` / `expected` on failure for io tests) that the
+    renderers clip and policy-filter per surface."""
     if score is None:
         score = points if passed else 0
     return {
@@ -2007,6 +2008,7 @@ def _execute_spec(spec: dict[str, Any], *, cwd: pathlib.Path,
         return _make_outcome(name, points, False, f"invalid regex in expected: {exc}")
     if not passed:
         capture["expected"] = expected
+        capture["input"] = stdin
     outcome = _make_outcome(name, points, passed,
                             f"exit {rp.returncode}; comparison={comparison}",
                             capture=capture)
@@ -2154,21 +2156,24 @@ def _command_lines(outcome: dict[str, Any], *, include_run: bool = True) -> str:
     return "\n".join(parts)
 
 
-def _setup_output_block(outcome: dict[str, Any], limit: int) -> str:
-    """The labelled `--- setup output ---` block of an outcome's setup command;
-    empty when it printed nothing."""
-    text = (outcome.get("capture") or {}).get("setup-output") or ""
-    if not text.strip():
+def _capture_block(cap: dict[str, str], key: str, label: str, limit: int,
+                   *, keep_blank: bool = False) -> str:
+    """One labelled `--- label ---` block of a captured stream, or empty when
+    the stream is blank. keep_blank still renders whitespace-only text: a
+    blank line of stdin is real test data."""
+    text = cap.get(key) or ""
+    if not text or (not keep_blank and not text.strip()):
         return ""
-    return f"--- setup output ---\n{_clip(text, limit)}"
+    return f"--- {label} ---\n{_clip(text, limit)}"
 
 
 def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) -> str:
     """Failure text for one failing outcome, clipped to the surface's limit
     and honoring the test's failure-details level: `none` stops at the
     failure-kind summary line, `actual-only` adds only the student's own
-    streams, and `full` (the default) also shows the expected side. The
-    commands are prepended when the test opted in via show-command."""
+    streams, and `full` (the default) also shows the teacher's side (an io
+    test's input and expected output). The commands are prepended when the
+    test opted in via show-command."""
     level = outcome.get("failure-details") or FAILURE_DETAILS_FULL
     detail = (outcome.get("detail") or "").rstrip()
     if level == FAILURE_DETAILS_NONE:
@@ -2179,23 +2184,27 @@ def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
     if commands:
         detail += f"\n{commands}"
     if kind == "setup":
-        block = _setup_output_block(outcome, limit)
+        block = _capture_block(cap, "setup-output", "setup output", limit)
         return detail + (f"\n{block}" if block else "")
     # A test that fails in its run phase skips the output section, so under
     # show-output the setup output rides along here instead of vanishing.
     if outcome.get("show-output"):
-        block = _setup_output_block(outcome, limit)
+        block = _capture_block(cap, "setup-output", "setup output", limit)
         if block:
             detail += f"\n{block}"
     if kind in ("cases", "exit"):
         # Safe at every failure-details level: these tests have no expected
         # side to redact.
-        out = cap.get("output") or ""
-        return detail + (f"\n--- output ---\n{_clip(out, limit)}" if out.strip() else "")
+        block = _capture_block(cap, "output", "output", limit)
+        return detail + (f"\n{block}" if block else "")
     if kind == "output":
         comparison = outcome.get("comparison") or ""
         stdout = cap.get("stdout") or ""
         if level == FAILURE_DETAILS_FULL:
+            # Input leads so a student can rerun the exact failing case (#1044).
+            block = _capture_block(cap, "input", "input", limit, keep_blank=True)
+            if block:
+                detail += f"\n{block}"
             # A line diff only makes sense against a full expected output, and
             # only for exact: for included/regex the expectation is a fragment
             # or pattern, so those keep the verbatim expected/actual blocks.
@@ -2213,12 +2222,13 @@ def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
                            f"\n{_clip(cap.get('expected'), limit)}"
                            f"\n--- actual stdout ---\n{_clip(stdout, limit)}")
         else:
-            # actual-only: the diff and the expected block would both reveal
-            # the answer, so only the student's own stdout is shown.
+            # actual-only: the diff and the expected block would reveal the
+            # answer, and the input would reveal the hidden test case, so only
+            # the student's own stdout is shown.
             detail += f"\n--- actual stdout ---\n{_clip(stdout, limit)}"
-        stderr = cap.get("stderr") or ""
-        if stderr.strip():
-            detail += f"\n--- stderr ---\n{_clip(stderr, limit)}"
+        block = _capture_block(cap, "stderr", "stderr", limit)
+        if block:
+            detail += f"\n{block}"
         return detail
     # timeout / failed start / bad fixture / bad regex: the summary is all
     # there is (no process output was captured).
@@ -2236,9 +2246,9 @@ def compose_output(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
                        ("output", "output"),
                        ("stdout", "stdout"),
                        ("stderr", "stderr")):
-        text = cap.get(key) or ""
-        if text.strip():
-            outputs.append(f"--- {label} ---\n{_clip(text, limit)}")
+        block = _capture_block(cap, key, label, limit)
+        if block:
+            outputs.append(block)
     if not outputs:
         outputs.append("(no output captured)")
     commands = _command_lines(outcome)
@@ -2303,6 +2313,16 @@ def _colorize(text: str, code: str, *, color: bool) -> str:
     return f"{code}{text}{ANSI_RESET}"
 
 
+def _colorize_diff_line(line: str, *, color: bool) -> str:
+    if line.startswith("+"):
+        return _colorize(line, ANSI_GREEN, color=color)
+    if line.startswith("-"):
+        return _colorize(line, ANSI_RED, color=color)
+    if line.startswith("@@"):
+        return _colorize(line, ANSI_CYAN, color=color)
+    return line
+
+
 def _strip_control_chars(text: str) -> str:
     """Drop ASCII control chars (incl. newlines) so a name can't inject a
     column-0 workflow command into the log report. Mirrors tests.go's
@@ -2344,13 +2364,17 @@ def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
         # way (mirrors the two-space indent that defends the detail lines).
         lines.append(f"::group::FAIL: {_strip_control_chars(o['test-name'])}")
         detail = compose_detail(o, limit=MAX_LOG_CAPTURED_CHARS)
+        # Color only the unified diff (its `--- expected` header up to the next
+        # block header): stdin or output starting with -/+ must not read as
+        # hunk lines.
+        in_diff = False
         for dl in detail.rstrip().splitlines():
-            if dl.startswith("+"):
-                dl = _colorize(dl, ANSI_GREEN, color=color)
-            elif dl.startswith("-"):
-                dl = _colorize(dl, ANSI_RED, color=color)
-            elif dl.startswith("@@"):
-                dl = _colorize(dl, ANSI_CYAN, color=color)
+            if dl == "--- expected":
+                in_diff = True
+            elif re.fullmatch(r"--- .+ ---", dl):
+                in_diff = False
+            if in_diff:
+                dl = _colorize_diff_line(dl, color=color)
             lines.append(f"  {dl}")
         lines.append("::endgroup::")
 

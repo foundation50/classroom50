@@ -170,6 +170,54 @@ class TestExecuteIO:
         detail = ag.compose_detail(o)
         assert "--- stderr ---" in detail and "warn" in detail
 
+    def test_fail_shows_input_before_expected_and_actual(self, tmp_path):
+        # #1044: without the stdin the program read, a student can't rerun
+        # the failing case.
+        spec = {"name": "t", "type": "io", "run": "read n; echo got $n",
+                "input": "90001\n", "expected": "1 day", "comparison": "included",
+                "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"]
+        detail = ag.compose_detail(o)
+        assert "--- input ---\n90001\n" in detail
+        assert detail.index("--- input ---") < detail.index("--- expected (included) ---")
+        assert detail.index("--- expected (included) ---") < detail.index("--- actual stdout ---")
+
+    def test_exact_fail_shows_input_before_diff(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "cat", "input": "ping\n",
+                "expected": "pong", "comparison": "exact", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert "--- input ---\nping\n" in detail
+        assert detail.index("--- input ---") < detail.index("--- expected")
+
+    def test_fail_without_input_omits_the_block(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "echo nope",
+                "expected": "yes", "comparison": "included", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "--- input ---" not in ag.compose_detail(o)
+
+    def test_fail_keeps_whitespace_only_input(self, tmp_path):
+        # A bare Enter is real test data (`read n` gets "" rather than EOF),
+        # so unlike a blank output stream it must still be shown.
+        spec = {"name": "t", "type": "io", "run": "cat", "input": "\n",
+                "expected": "yes", "comparison": "included", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "--- input ---\n\n" in ag.compose_detail(o)
+
+    def test_fail_shows_input_file_contents(self, tmp_path):
+        (tmp_path / "in.txt").write_text("from file\n")
+        spec = {"name": "t", "type": "io", "run": "cat", "input-file": "in.txt",
+                "expected": "other", "comparison": "included", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "--- input ---\nfrom file\n" in ag.compose_detail(o)
+
+    def test_passing_io_does_not_capture_input(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "cat", "input": "ping\n",
+                "expected": "ping", "comparison": "included", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert o["passed"] and "input" not in o["capture"]
+
     def test_invalid_regex_fails_with_message(self, tmp_path):
         spec = {"name": "t", "type": "io", "run": "echo x",
                 "expected": "(unterminated", "comparison": "regex", "points": 1}
@@ -524,20 +572,23 @@ class TestLoadTests:
 class TestComposeDetail:
     def _io_fail(self, tmp_path, level, comparison="exact"):
         spec = {"name": "t", "type": "io", "run": "echo warn >&2; echo nope",
-                "expected": "one\ntwo", "comparison": comparison, "points": 1,
-                "failure-details": level}
+                "input": "secret-case\n", "expected": "one\ntwo",
+                "comparison": comparison, "points": 1, "failure-details": level}
         return ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
 
     def test_full_shows_expected_side(self, tmp_path):
         detail = ag.compose_detail(self._io_fail(tmp_path, "full"))
         assert "-two" in detail and "+nope" in detail  # the diff
+        assert "--- input ---\nsecret-case" in detail
 
     def test_actual_only_hides_expected_and_diff(self, tmp_path):
         # #765: neither the diff nor the expected block may reveal the answer,
-        # but the student's own stdout/stderr stay visible.
+        # but the student's own stdout/stderr stay visible. The input is the
+        # teacher's too, so it stays hidden with them.
         detail = ag.compose_detail(self._io_fail(tmp_path, "actual-only"))
         assert "two" not in detail
         assert "+++" not in detail and "--- expected" not in detail
+        assert "--- input ---" not in detail and "secret-case" not in detail
         assert "--- actual stdout ---" in detail and "nope" in detail
         assert "--- stderr ---" in detail and "warn" in detail
 
@@ -546,6 +597,18 @@ class TestComposeDetail:
             self._io_fail(tmp_path, "actual-only", comparison="included"))
         assert "--- expected" not in detail
         assert "nope" in detail
+
+    def test_actual_only_hides_input_file_contents(self, tmp_path):
+        (tmp_path / "in.txt").write_text("hidden dataset\n")
+        spec = {"name": "t", "type": "io", "run": "cat", "input-file": "in.txt",
+                "expected": "other", "comparison": "included", "points": 1,
+                "failure-details": "actual-only"}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert "--- input ---" not in detail
+        # cat echoes stdin, so the student's own stdout legitimately carries
+        # the text; only the labelled block must be absent.
+        assert "--- actual stdout ---\nhidden dataset" in detail
 
     def test_none_keeps_only_the_failure_kind(self, tmp_path):
         detail = ag.compose_detail(self._io_fail(tmp_path, "none"))
@@ -896,6 +959,19 @@ class TestRenderLogReport:
         assert f"{ag.ANSI_BOLD}{ag.ANSI_RED}FAIL{ag.ANSI_RESET}" in report
         assert f"  {ag.ANSI_RED}-two{ag.ANSI_RESET}" in report
         assert f"  {ag.ANSI_GREEN}+nope{ag.ANSI_RESET}" in report
+
+    def test_diff_coloring_skips_input_and_stderr_blocks(self, tmp_path):
+        # Signed numbers on stdin sit right above the diff in the log; painting
+        # them red/green would read as a second hunk.
+        spec = {"name": "t", "type": "io", "run": "cat; echo -err >&2",
+                "input": "-3\n+4\n", "expected": "1", "comparison": "exact",
+                "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        report = ag.render_log_report([o], color=True)
+        assert "\n  -3\n  +4\n" in report
+        assert "\n  -err\n" in report
+        assert f"  {ag.ANSI_RED}-1{ag.ANSI_RESET}" in report
+        assert f"  {ag.ANSI_GREEN}+-3{ag.ANSI_RESET}" in report
 
     def test_detail_cannot_inject_workflow_commands(self):
         # Detail carries student-controlled output; GitHub only interprets

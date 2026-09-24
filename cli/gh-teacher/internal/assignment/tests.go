@@ -81,8 +81,8 @@ const (
 var comparisonModes = []string{comparisonExact, comparisonIncluded, comparisonRegex}
 
 // Failure-detail levels: how much of a failing test's captured output the
-// grader shows students (full = diff/expected+actual, actual-only = the
-// student's own output, none = just the failure kind). Empty means the
+// grader shows students (full = input + diff/expected+actual, actual-only =
+// the student's own output, none = just the failure kind). Empty means the
 // grader default (full).
 const (
 	failureDetailsFull       = "full"
