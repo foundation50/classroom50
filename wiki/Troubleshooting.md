@@ -864,6 +864,9 @@ went wrong there:
 - **`uses an unlisted URL`**: the classroom is protected, so its assignment
   list needs the access key your teacher gave you. Run
   `gh student submit --key <key>`.
+- **`has no assignment list under the access key you passed`**: the key is
+  wrong, or the classroom isn't unlisted and doesn't need one. Double-check
+  the key with your teacher, or run again without `--key`.
 - **`matches more than one published assignment`**: two classroom and
   assignment names compose to the same repository prefix. Ask your teacher
   which one this repository belongs to.

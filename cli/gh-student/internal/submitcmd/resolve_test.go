@@ -228,6 +228,30 @@ func TestResolveFromRepoName_KeyReachesManifestAndConfig(t *testing.T) {
 	}
 }
 
+func TestResolveFromRepoName_WrongKeyIsNamedPlainly(t *testing.T) {
+	// A manifest 404 under a supplied key is a wrong key (or a key passed for
+	// a plain classroom), not a publishing problem; say so in one line instead
+	// of stacking the fetch layer's Pages guidance.
+	stubPages(t,
+		[]assignments.ClassroomSummary{{ShortName: "secret-class"}},
+		map[string][]assignments.Entry{})
+
+	_, _, err := resolveFromRepoName(context.Background(), "org", "secret-class-hello-alice", "wr0ng", testUI(), false)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	for _, want := range []string{`"secret-class"`, "double-check the key", "omit --key"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should contain %q, got %q", want, err)
+		}
+	}
+	for _, reject := range []string{"publish-pages", "404"} {
+		if strings.Contains(err.Error(), reject) {
+			t.Errorf("error should not carry the fetch layer's %q text, got %q", reject, err)
+		}
+	}
+}
+
 func TestResolveFromRepoName_UnlistedDoesNotMaskPlainMatch(t *testing.T) {
 	// One candidate is unlisted and one is plain and matches: the match wins
 	// and no --key hint is raised.

@@ -66,6 +66,7 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 	var (
 		matches   []repoNameMatch
 		unlisted  []string
+		wrongKey  []string
 		lookupErr error
 	)
 	for _, classroom := range candidates {
@@ -77,6 +78,11 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 			// Unpublished, or protected and fetched without its key. Decided
 			// after the other candidates: a plain classroom may still match.
 			unlisted = append(unlisted, classroom)
+		case assignments.IsManifestNotFound(err):
+			// The manifest was fetched under the key and isn't there: the key
+			// doesn't open this classroom (or the classroom is plain, in
+			// which case another candidate may still match).
+			wrongKey = append(wrongKey, classroom)
 		default:
 			lookupErr = err
 		}
@@ -98,6 +104,8 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 		return nil, nil, fmt.Errorf("%s not found in this clone, and the repository name %q matches more than one published assignment (%s); ask your teacher which one this repository belongs to", classroomcfg.MetadataPath, repo, strings.Join(names, ", "))
 	case lookupErr != nil:
 		return nil, nil, fmt.Errorf("%s not found in this clone, and the assignment couldn't be looked up from the repository name: %w", classroomcfg.MetadataPath, lookupErr)
+	case len(wrongKey) > 0:
+		return nil, nil, fmt.Errorf("%s not found in this clone, and classroom %q has no assignment list under the access key you passed; double-check the key your teacher gave you, or omit --key if the classroom isn't unlisted", classroomcfg.MetadataPath, wrongKey[0])
 	case len(unlisted) > 0:
 		return nil, nil, fmt.Errorf("%s not found in this clone, and classroom %q uses an unlisted URL, so its assignment list needs the access key your teacher gave you; run `gh student submit --key <key>`", classroomcfg.MetadataPath, unlisted[0])
 	default:
