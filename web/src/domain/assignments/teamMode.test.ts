@@ -238,8 +238,16 @@ describe("acceptAssignment team mode", () => {
 
   // Route-table client for the team accept path: identity + membership, the
   // viewer's teams, the config-repo branch read, the (already existing) repo
-  // create 422, the provisioning probes, and the access writes.
-  function makeClient(opts: { myTeams: unknown[]; repoExists: boolean }) {
+  // create 422, the provisioning probes, and the access writes. `orgRole` is
+  // the viewer's org membership role (admin = org owner); `teamRole` is what
+  // every team-membership read (enrollment probes and the group-team gate)
+  // reports.
+  function makeClient(opts: {
+    myTeams: unknown[]
+    repoExists: boolean
+    orgRole?: "admin" | "member"
+    teamRole?: "member" | "maintainer"
+  }) {
     const repoName = groupRepoName(CLASSROOM, SLUG, 2)
     const requests: string[] = []
     const request = vi.fn(
@@ -255,7 +263,7 @@ describe("acceptAssignment team mode", () => {
         if (url === `/user/memberships/orgs/${ORG}`) {
           // PATCH (accept invite) and GET (verify) share the shape. role
           // admin = org owner, which bypasses the enrollment team probes.
-          return { state: "active", role: "admin" }
+          return { state: "active", role: opts.orgRole ?? "admin" }
         }
         if (method === "GET" && url.startsWith("/user/teams")) {
           return opts.myTeams
@@ -286,10 +294,11 @@ describe("acceptAssignment team mode", () => {
           return { type: "file" }
         }
         if (method === "GET" && url.includes("/memberships/")) {
-          // The teacher-formation gate's role read: a plain member (a
-          // teacher-created team) passes; see the self-created test for the
+          // Team-membership reads: the enrollment probes and the teacher-
+          // formation gate's role read. A plain member (a teacher-created
+          // team) passes the gate; see the self-created test for the
           // maintainer rejection.
-          return { state: "active", role: "member" }
+          return { state: "active", role: opts.teamRole ?? "member" }
         }
         if (method === "PUT" && url.includes("/teams/")) {
           return undefined
@@ -375,37 +384,31 @@ describe("acceptAssignment team mode", () => {
     )
   })
 
+  // The group-team name is derivable from public data, so a student could
+  // found a shape-matching team and bypass "your teacher assigns the groups";
+  // the maintainer role is the tell (teacher-created teams never leave a
+  // student maintainer).
+  const rogueTeam = async () => ({
+    slug: await groupTeamName(CLASSROOM, SLUG, 5),
+    id: 99,
+    description: marshalGroupDescription({
+      classroom: CLASSROOM,
+      assignment: SLUG,
+    }),
+    organization: { login: ORG, id: 1 },
+  })
+
   it("rejects a self-created team under teacher formation (maintainer role)", async () => {
-    // The group-team name is derivable from public data, so a student could
-    // found a shape-matching team and bypass "your teacher assigns the
-    // groups"; the maintainer role is the tell (teacher-created teams never
-    // leave a student maintainer).
     mocked.assignment = ASSIGNMENT_ENTRY
-    const slug = await groupTeamName(CLASSROOM, SLUG, 5)
-    const rogueTeam = {
-      slug,
-      id: 99,
-      description: marshalGroupDescription({
-        classroom: CLASSROOM,
-        assignment: SLUG,
-      }),
-      organization: { login: ORG, id: 1 },
-    }
-    const base = makeClient({ myTeams: [rogueTeam], repoExists: true })
-    const request = vi.fn(
-      async (url: string, init?: { method?: string; body?: unknown }) => {
-        if ((init?.method ?? "GET") === "GET" && url.includes("/memberships/"))
-          return { state: "active", role: "maintainer" }
-        return (
-          base.client as unknown as {
-            request: (u: string, i?: unknown) => Promise<unknown>
-          }
-        ).request(url, init)
-      },
-    )
+    const { client } = makeClient({
+      myTeams: [await rogueTeam()],
+      repoExists: true,
+      orgRole: "member",
+      teamRole: "maintainer",
+    })
     await expect(
       acceptAssignment({
-        client: { request } as unknown as GitHubClient,
+        client,
         org: ORG,
         classroom: CLASSROOM,
         assignmentSlug: SLUG,
@@ -413,5 +416,38 @@ describe("acceptAssignment team mode", () => {
     ).rejects.toSatisfy(
       (err) => localizedMessageOf(err)?.key === "accept.errors.teamSelfCreated",
     )
+  })
+
+  it("lets an org owner accept through a teacher-created team they maintain (#1065)", async () => {
+    // GitHub promotes an org owner to maintainer on every team they join, so a
+    // teacher who adds themself to a group to test the flow reads exactly like
+    // the rogue student above. The owner already administers the org, so the
+    // self-created guard must not apply to them.
+    mocked.assignment = ASSIGNMENT_ENTRY
+    const slug = await groupTeamName(CLASSROOM, SLUG, 2)
+    const { client } = makeClient({
+      myTeams: [
+        {
+          slug,
+          id: 42,
+          description: marshalGroupDescription({
+            classroom: CLASSROOM,
+            assignment: SLUG,
+          }),
+          organization: { login: ORG, id: 1 },
+        },
+      ],
+      repoExists: true,
+      orgRole: "admin",
+      teamRole: "maintainer",
+    })
+    const result = await acceptAssignment({
+      client,
+      org: ORG,
+      classroom: CLASSROOM,
+      assignmentSlug: SLUG,
+    })
+    expect(result.status).toBe("already-accepted")
+    expect(result.repo.name).toBe(groupRepoName(CLASSROOM, SLUG, 2))
   })
 })

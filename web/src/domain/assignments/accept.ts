@@ -329,7 +329,7 @@ export async function acceptAssignment(params: {
   // for public templates too. Org owners bypass (they administer every
   // classroom). Advisory like every client-side gate; GitHub's private-template
   // permission remains the hard boundary.
-  await withAcceptStep(
+  const orgMembership = await withAcceptStep(
     {
       id: "membership",
       label: { key: "accept.steps.membership" },
@@ -345,6 +345,7 @@ export async function acceptAssignment(params: {
       return verified
     },
   )
+  const viewerIsOrgOwner = isOwnerGitHubOrgRole(orgMembership.role)
 
   const assignment = await withAcceptStep(
     {
@@ -603,7 +604,15 @@ export async function acceptAssignment(params: {
         // bypass "your teacher assigns the groups" entirely. Fail closed on
         // the role read too — an unverifiable membership must not become the
         // bypass.
-        if ((assignment.team_formation ?? "teacher") === "teacher") {
+        //
+        // Org owners are exempt: GitHub promotes an owner to maintainer on
+        // every team they join, so a teacher testing the flow on their own
+        // account would trip the guard (#1065). An owner already administers
+        // the whole org, so the bypass this guards against isn't theirs.
+        if (
+          (assignment.team_formation ?? "teacher") === "teacher" &&
+          !viewerIsOrgOwner
+        ) {
           const membership = await client.request<{ role?: string }>(
             `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
               team.slug,
