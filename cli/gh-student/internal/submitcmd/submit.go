@@ -37,6 +37,7 @@ import (
 )
 
 func NewCmd() *cobra.Command {
+	var key string
 	cmd := &cobra.Command{
 		Use:   "submit",
 		Short: "Submit your work on the current assignment",
@@ -61,9 +62,16 @@ func NewCmd() *cobra.Command {
 			"    never refreshed: changes to the grading logic, runtime, or\n" +
 			"    dependencies reach you through the teacher-side setup, fetched\n" +
 			"    fresh on every submission.\n\n" +
+			"A repository without `.classroom50.yaml` (an assignment with the\n" +
+			"built-in autograder off, or an empty-repository assignment) still\n" +
+			"works: the assignment is looked up from the repository name in the\n" +
+			"classroom's published site. Those repositories keep their own\n" +
+			"`.gitignore` and `.github/`, and a classroom with an unlisted URL\n" +
+			"needs `--key`.\n\n" +
 			"Functionally equivalent to `git commit -am 'Submit' && git push`,\n" +
 			"plus the teacher file refresh.",
-		Example: "  gh student submit",
+		Example: "  gh student submit\n" +
+			"  gh student submit --key a1b2c3d4",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
 
@@ -76,26 +84,42 @@ func NewCmd() *cobra.Command {
 			errOut := cmd.ErrOrStderr()
 			verbose, _ := cmd.Flags().GetBool("verbose")
 
-			return submitAssignment(cmd.Context(), client, verbose, out, errOut)
+			if key != "" {
+				if err := classroomcfg.ValidateSecret(key); err != nil {
+					return err
+				}
+			}
+
+			return submitAssignment(cmd.Context(), client, verbose, key, out, errOut)
 		},
 	}
+	cmd.Flags().StringVar(&key, "key", "", "Access key from your teacher, only for a classroom with an unlisted URL")
 
 	return cmd
 }
 
-// annotateMissingConfig turns a failed .classroom50.yaml read into the most
-// helpful error. A missing marker (fs.ErrNotExist) is the empty_repo or
-// no_autograder case: those repos carry no marker and submit can't identify
-// the assignment, so hint that students on them push directly. Any other read
-// error passes through unchanged.
-func annotateMissingConfig(err error) error {
-	if errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("%w; if this assignment uses an empty repository or no built-in autograder, `gh student submit` isn't used, so commit and `git push` directly", err)
+// readOrResolveConfig reads the clone's `.classroom50.yaml`, falling back to
+// the repo-name resolver when the file is absent (see resolveFromRepoName).
+// The Entry is non-nil only on the fallback path, where the resolver already
+// fetched the manifest row; any other read error passes through unchanged.
+func readOrResolveConfig(ctx context.Context, root, org, repo, key string, u *ui.UI, verbose bool) (*classroomcfg.Config, *assignments.Entry, error) {
+	config, err := classroomcfg.ReadConfig(filepath.Join(root, classroomcfg.MetadataPath))
+	if err == nil {
+		if key != "" && config.Secret != "" && key != config.Secret {
+			return nil, nil, fmt.Errorf("--key does not match the access key recorded in %s; omit --key, since this repository already knows its classroom", classroomcfg.MetadataPath)
+		}
+		if key != "" && config.Secret == "" {
+			config.Secret = key
+		}
+		return config, nil, nil
 	}
-	return err
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, err
+	}
+	return resolveFromRepoName(ctx, org, repo, key, u, verbose)
 }
 
-func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool, out io.Writer, errOut io.Writer) error {
+func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool, key string, out io.Writer, errOut io.Writer) error {
 	const remote = "origin"
 
 	u := ui.New(errOut)
@@ -106,20 +130,6 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 	}
 	if !inside {
 		return fmt.Errorf("not inside a Git repository; run this from your assignment repository clone")
-	}
-
-	config, err := classroomcfg.ReadConfig(filepath.Join(root, classroomcfg.MetadataPath))
-	if err != nil {
-		return annotateMissingConfig(err)
-	}
-
-	message := contract.PrefixCommit(fmt.Sprintf("Submit %s", config.Assignment))
-
-	// The user's git identity, with a noreply fallback so a shell without
-	// git identity still submits.
-	identity, err := identitypkg.Resolve(client, root)
-	if err != nil {
-		return fmt.Errorf("resolve git identity: %w", err)
 	}
 
 	remoteURL, err := gitOutput(root, "config", "--get", "remote."+remote+".url")
@@ -133,6 +143,20 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		return fmt.Errorf("parse remote URL: %w", err)
 	}
 	repoHTMLURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
+
+	config, entry, err := readOrResolveConfig(ctx, root, repoOwner, repoName, key, u, verbose)
+	if err != nil {
+		return err
+	}
+
+	message := contract.PrefixCommit(fmt.Sprintf("Submit %s", config.Assignment))
+
+	// The user's git identity, with a noreply fallback so a shell without
+	// git identity still submits.
+	identity, err := identitypkg.Resolve(client, root)
+	if err != nil {
+		return fmt.Errorf("resolve git identity: %w", err)
+	}
 
 	// Push to the assignment repo's actual default branch (which GitHub, not
 	// Classroom 50, may have named `master`) so the autograde shim — which
@@ -167,8 +191,12 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 	// Resolve the manifest entry once (best-effort): allowed_files fails open
 	// (the runner enforces authoritatively at grade time); submission_mode
 	// failing to resolve is warned about after the push (a tag-mode
-	// assignment would then need a re-run to grade).
-	entry, entryErr := fetchSubmitEntry(ctx, repoOwner, config, u, verbose)
+	// assignment would then need a re-run to grade). The repo-name resolver
+	// already fetched the row for a markerless clone.
+	var entryErr error
+	if entry == nil {
+		entry, entryErr = fetchSubmitEntry(ctx, repoOwner, config, u, verbose)
+	}
 	var allowedFiles []string
 	if entry != nil {
 		allowedFiles = entry.AllowedFiles

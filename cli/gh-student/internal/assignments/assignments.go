@@ -36,7 +36,12 @@ const PagesFetchTimeout = 15 * time.Second
 // the student CLI needs are typed; unrecognized fields decode silently so
 // future shape additions work without a flag day.
 type Entry struct {
-	Slug         string       `json:"slug"`
+	Slug string `json:"slug"`
+	// RenamedFrom is the slug this assignment had before a one-shot
+	// `gh teacher assignment rename`. Repos a partially completed rename left
+	// behind still carry the old prefix, so name-based resolution matches it
+	// too. Absent for a never-renamed assignment.
+	RenamedFrom  string       `json:"renamed_from,omitempty"`
 	Name         string       `json:"name"`
 	Mode         string       `json:"mode"`
 	MaxGroupSize int          `json:"max_group_size,omitempty"`
@@ -270,6 +275,14 @@ func pagesAutograderURL(org, classroom, secret, name string) string {
 	return fmt.Sprintf("https://%s.github.io/%s/%s/autograders/%s.yaml", org, configRepoName, classroomPathSegment(classroom, secret), name)
 }
 
+// pagesClassroomsIndexURL builds the Pages URL for the org-wide
+// classrooms-index.json publish-pages.yaml writes (public fields of every
+// classroom.json, protected classrooms included). Mirrors the web GUI's
+// classroomsIndexUrl.
+func pagesClassroomsIndexURL(org string) string {
+	return fmt.Sprintf("https://%s.github.io/%s/classrooms-index.json", org, configRepoName)
+}
+
 // FetchEntry finds the entry by slug in the Pages `assignments.json`. No auth
 // — the Pages site is public. secret is the optional capability-URL segment
 // (empty for an unprotected classroom). Thin wrapper around fetchEntryFromURL
@@ -283,58 +296,48 @@ func FetchEntry(ctx context.Context, org, classroom, secret, assignment string) 
 		nf.Classroom = classroom
 		return entry, nf
 	}
-	// A whole-manifest 404 on a protected classroom is usually a wrong or
-	// missing --key (the manifest lives at <classroom>/<secret>/), not a Pages
-	// problem. The inner 404 can't tell; augment it here where the key is in
-	// scope.
-	if errors.Is(err, errManifestNotFound) {
-		if secret != "" {
-			return entry, fmt.Errorf("%w; the access key (--key) may be wrong, so double-check the key your teacher gave you", err)
-		}
-		return entry, fmt.Errorf("%w; if this is an unlisted classroom, you must pass the access key your teacher gave you with `--key <key>`", err)
-	}
-	return entry, err
+	return entry, annotateManifestNotFound(err, secret)
 }
 
-// fetchEntryFromURL is the HTTP-bearing core. Returns actionable messages for
-// network failures, 404, and schema mismatches; a missing slug returns a typed
-// NotFoundError. Mode rejection happens at the call site.
+// FetchManifest returns every entry of a classroom's Pages `assignments.json`.
+// Same transport and error shapes as FetchEntry; a whole-manifest 404 still
+// satisfies IsManifestNotFound so a caller probing several classrooms can tell
+// "unlisted or unpublished" from a network failure.
+func FetchManifest(ctx context.Context, org, classroom, secret string) ([]Entry, error) {
+	entries, err := fetchManifestFromURL(ctx, pagesAssignmentsURL(org, classroom, secret))
+	return entries, annotateManifestNotFound(err, secret)
+}
+
+// annotateManifestNotFound adds the key-aware hint to a whole-manifest 404:
+// on a protected classroom the manifest lives at <classroom>/<secret>/, so a
+// 404 is usually a wrong or missing --key, not a Pages problem. The inner
+// fetch can't tell; this runs where the key is in scope.
+func annotateManifestNotFound(err error, secret string) error {
+	if !errors.Is(err, ErrManifestNotFound) {
+		return err
+	}
+	if secret != "" {
+		return fmt.Errorf("%w; the access key (--key) may be wrong, so double-check the key your teacher gave you", err)
+	}
+	return fmt.Errorf("%w; if this is an unlisted classroom, you must pass the access key your teacher gave you with `--key <key>`", err)
+}
+
+// IsManifestNotFound reports whether err is a whole-manifest 404 (the
+// classroom's assignments.json is unpublished, or protected and fetched
+// without its key), as opposed to a manifest that loaded but lacks a slug
+// (IsNotFound).
+func IsManifestNotFound(err error) bool {
+	return errors.Is(err, ErrManifestNotFound)
+}
+
+// fetchEntryFromURL fetches the manifest and picks one slug; a missing slug
+// returns a typed NotFoundError. Mode rejection happens at the call site.
 func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	entries, err := fetchManifestFromURL(ctx, rawURL)
 	if err != nil {
-		return Entry{}, fmt.Errorf("build GET %s: %w", rawURL, err)
+		return Entry{}, err
 	}
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: PagesFetchTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return Entry{}, fmt.Errorf("GET %s: %w (the classroom's published site may not be live yet; ask your teacher to check that the publish-pages workflow has run)", rawURL, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return Entry{}, fmt.Errorf("%s returned 404: the classroom may not exist yet, or its publish-pages workflow may not have run; ask your teacher to confirm the classroom is published: %w", rawURL, errManifestNotFound)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return Entry{}, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-	if err != nil {
-		return Entry{}, fmt.Errorf("read %s: %w", rawURL, err)
-	}
-
-	var file assignmentsFile
-	if err := json.Unmarshal(body, &file); err != nil {
-		return Entry{}, fmt.Errorf("parse %s: %w", rawURL, err)
-	}
-	if file.Schema != assignmentsSchemaV1 {
-		return Entry{}, fmt.Errorf("%s: schema = %q, want %q; this version of gh-student is too old to read the classroom's assignment list, so update gh-student and try again",
-			rawURL, file.Schema, assignmentsSchemaV1)
-	}
-
-	for _, entry := range file.Assignments {
+	for _, entry := range entries {
 		if entry.Slug == assignment {
 			return entry, nil
 		}
@@ -345,10 +348,103 @@ func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, e
 	}
 }
 
-// errManifestNotFound flags a whole-manifest 404 (vs NotFoundError, which
+// fetchManifestFromURL is the HTTP-bearing core. Returns actionable messages
+// for network failures, 404, and schema mismatches.
+func fetchManifestFromURL(ctx context.Context, rawURL string) ([]Entry, error) {
+	body, err := getPagesJSON(ctx, rawURL)
+	if err != nil {
+		if errors.Is(err, errPagesNotFound) {
+			return nil, fmt.Errorf("%s returned 404: the classroom may not exist yet, or its publish-pages workflow may not have run; ask your teacher to confirm the classroom is published: %w", rawURL, ErrManifestNotFound)
+		}
+		return nil, err
+	}
+
+	var file assignmentsFile
+	if err := json.Unmarshal(body, &file); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", rawURL, err)
+	}
+	if file.Schema != assignmentsSchemaV1 {
+		return nil, fmt.Errorf("%s: schema = %q, want %q; this version of gh-student is too old to read the classroom's assignment list, so update gh-student and try again",
+			rawURL, file.Schema, assignmentsSchemaV1)
+	}
+	return file.Assignments, nil
+}
+
+// ClassroomSummary is one row of classrooms-index.json. Only the public
+// fields publish-pages.yaml emits are typed; the index never carries a
+// classroom's secret, so a protected classroom is listed but its manifest
+// still needs the key.
+type ClassroomSummary struct {
+	ShortName string `json:"short_name"`
+	Name      string `json:"name"`
+}
+
+// classroomsIndexFile is the top-level shape of classrooms-index.json.
+type classroomsIndexFile struct {
+	Classrooms []ClassroomSummary `json:"classrooms"`
+}
+
+// FetchClassroomsIndex lists the org's published classrooms. Used to recover
+// the classroom of a repo that carries no `.classroom50.yaml`. A 404 means
+// the org has no published Classroom 50 site at all.
+func FetchClassroomsIndex(ctx context.Context, org string) ([]ClassroomSummary, error) {
+	return fetchClassroomsIndexFromURL(ctx, pagesClassroomsIndexURL(org))
+}
+
+func fetchClassroomsIndexFromURL(ctx context.Context, rawURL string) ([]ClassroomSummary, error) {
+	body, err := getPagesJSON(ctx, rawURL)
+	if err != nil {
+		if errors.Is(err, errPagesNotFound) {
+			return nil, fmt.Errorf("%s returned 404: the organization has no published Classroom 50 site; ask your teacher to check that the publish-pages workflow has run", rawURL)
+		}
+		return nil, err
+	}
+	var file classroomsIndexFile
+	if err := json.Unmarshal(body, &file); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", rawURL, err)
+	}
+	return file.Classrooms, nil
+}
+
+// errPagesNotFound is getPagesJSON's raw 404 signal; each caller rewraps it
+// with a message naming what was missing.
+var errPagesNotFound = errors.New("not found (404)")
+
+// getPagesJSON GETs one public Pages document, bounded by PagesFetchTimeout
+// and a 4 MiB body cap.
+func getPagesJSON(ctx context.Context, rawURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build GET %s: %w", rawURL, err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: PagesFetchTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: %w (the classroom's published site may not be live yet; ask your teacher to check that the publish-pages workflow has run)", rawURL, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errPagesNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", rawURL, err)
+	}
+	return body, nil
+}
+
+// ErrManifestNotFound flags a whole-manifest 404 (vs NotFoundError, which
 // means the manifest loaded but lacks the slug) so FetchEntry can add a
-// key-aware hint. Matched via errors.Is.
-var errManifestNotFound = errors.New("assignments manifest not found (404)")
+// key-aware hint and submit's repo-name resolver can tell an unlisted
+// classroom from a transport failure. Matched via errors.Is.
+var ErrManifestNotFound = errors.New("assignments manifest not found (404)")
 
 // NotFoundError means the Pages fetch succeeded but the requested slug isn't
 // in the manifest. Typed so callers can branch without matching error text.

@@ -3,9 +3,6 @@ package submitcmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -71,30 +68,6 @@ func TestParseGitHubRemote_ErrorMentionsShape(t *testing.T) {
 	if !strings.Contains(err.Error(), "git@github.com") {
 		t.Errorf("error should hint at expected shape, got %q", err)
 	}
-}
-
-func TestAnnotateMissingConfig(t *testing.T) {
-	t.Run("missing marker -> empty-repo hint, still ErrNotExist", func(t *testing.T) {
-		base := fmt.Errorf("open .classroom50.yaml: %w", fs.ErrNotExist)
-		got := annotateMissingConfig(base)
-		if !errors.Is(got, fs.ErrNotExist) {
-			t.Errorf("annotated error must still satisfy errors.Is(fs.ErrNotExist), got %v", got)
-		}
-		if !strings.Contains(got.Error(), "git push` directly") {
-			t.Errorf("missing marker should surface the empty-repo hint, got %q", got)
-		}
-	})
-
-	t.Run("other read error -> passes through unchanged, no hint", func(t *testing.T) {
-		base := errors.New("permission denied")
-		got := annotateMissingConfig(base)
-		if got != base {
-			t.Errorf("a non-ErrNotExist error must pass through unchanged, got %v", got)
-		}
-		if strings.Contains(got.Error(), "git push` directly") {
-			t.Errorf("a non-missing-marker error must not get the empty-repo hint, got %q", got)
-		}
-	})
 }
 
 func TestResolveRepoDefaultBranch(t *testing.T) {
