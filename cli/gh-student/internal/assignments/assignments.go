@@ -322,10 +322,7 @@ func annotateManifestNotFound(err error, secret string) error {
 	return fmt.Errorf("%w; if this is an unlisted classroom, you must pass the access key your teacher gave you with `--key <key>`", err)
 }
 
-// IsManifestNotFound reports whether err is a whole-manifest 404 (the
-// classroom's assignments.json is unpublished, or protected and fetched
-// without its key), as opposed to a manifest that loaded but lacks a slug
-// (IsNotFound).
+// IsManifestNotFound reports whether err wraps ErrManifestNotFound.
 func IsManifestNotFound(err error) bool {
 	return errors.Is(err, ErrManifestNotFound)
 }

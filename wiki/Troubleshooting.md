@@ -878,6 +878,13 @@ Repositories from an **empty-repository assignment** or one that **doesn't use
 the built-in autograder** never carry the marker file; the fallback exists for
 them, and `submit` leaves their `.gitignore` and `.github/` alone.
 
+### `this repository was updated by your teacher (it now carries .classroom50.yaml)` on `gh student submit`
+
+Your teacher turned the built-in autograder on after you cloned, which added
+`.classroom50.yaml` and the autograding workflow to your repository on GitHub.
+Your clone doesn't have those files yet, and submitting from it would remove
+them again. Run `git pull`, then `gh student submit`.
+
 ### Submit pushed a commit but the teacher sees no new work
 
 `submit` pushes to the repository's actual default branch (`main`, or `master`

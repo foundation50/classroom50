@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -322,6 +323,28 @@ func TestFetchManifestFromURL_404IsManifestNotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "publish-pages") {
 		t.Errorf("error should keep the actionable guidance, got %q", err)
+	}
+}
+
+func TestAnnotateManifestNotFound_KeepsSentinelForResolver(t *testing.T) {
+	// FetchManifest hands the resolver an annotated 404; the resolver's
+	// unlisted-vs-wrong-key branching reads it through IsManifestNotFound, so
+	// the annotation must wrap rather than replace the sentinel.
+	base := fmt.Errorf("x/assignments.json returned 404: %w", ErrManifestNotFound)
+	for _, secret := range []string{"", "k3y1"} {
+		if got := annotateManifestNotFound(base, secret); !IsManifestNotFound(got) {
+			t.Errorf("secret=%q: annotated 404 must still satisfy IsManifestNotFound, got %v", secret, got)
+		}
+	}
+	if got := annotateManifestNotFound(base, "").Error(); !strings.Contains(got, "--key <key>") {
+		t.Errorf("no-key 404 should carry the --key hint, got %q", got)
+	}
+	if got := annotateManifestNotFound(base, "k3y1").Error(); !strings.Contains(got, "may be wrong") {
+		t.Errorf("keyed 404 should carry the wrong-key hint, got %q", got)
+	}
+	other := errors.New("dial tcp: connection refused")
+	if got := annotateManifestNotFound(other, "k3y1"); got != other {
+		t.Errorf("a non-404 must pass through unchanged, got %v", got)
 	}
 }
 

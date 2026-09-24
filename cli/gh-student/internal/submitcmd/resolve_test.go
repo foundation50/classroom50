@@ -13,6 +13,7 @@ import (
 
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
+	"github.com/foundation50/gh-student/internal/githubapi"
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
@@ -96,11 +97,12 @@ func TestResolveFromRepoName_MarkerlessBuiltInKeepsTemplateSource(t *testing.T) 
 
 func TestResolveFromRepoName_GroupRepoAndCase(t *testing.T) {
 	// Group repos end in group-N, and GitHub may show the owner segment in
-	// any case; matching is on the lowercased prefix only.
+	// any case; matching is on the lowercased prefix only. An empty_repo
+	// entry keeps no teacher-file source even when it carries a template.
 	stubPages(t,
 		[]assignments.ClassroomSummary{{ShortName: "CS50"}},
 		map[string][]assignments.Entry{
-			"CS50": {{Slug: "final", Mode: "team", EmptyRepo: true}},
+			"CS50": {{Slug: "final", Mode: "team", EmptyRepo: true, Template: tpl("cs50", "final-tpl", "main")}},
 		})
 
 	cfg, _, err := resolveFromRepoName(context.Background(), "org", "cs50-final-group-3", "", testUI(), false)
@@ -109,6 +111,9 @@ func TestResolveFromRepoName_GroupRepoAndCase(t *testing.T) {
 	}
 	if cfg.Classroom != "CS50" || cfg.Assignment != "final" {
 		t.Errorf("config = %s/%s, want CS50/final", cfg.Classroom, cfg.Assignment)
+	}
+	if cfg.Source != nil {
+		t.Errorf("an empty_repo repo must not get a teacher-file source, got %+v", cfg.Source)
 	}
 }
 
@@ -367,6 +372,18 @@ func TestReadOrResolveConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("marker present with the same secret: --key is accepted", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMarker(t, dir, "classroom: cs50\nassignment: hello\nsecret: abcd\n")
+		cfg, _, err := readOrResolveConfig(context.Background(), dir, "org", "cs50-hello-alice", "abcd", testUI(), false)
+		if err != nil {
+			t.Fatalf("a key equal to the recorded secret must be accepted, got %v", err)
+		}
+		if cfg.Secret != "abcd" {
+			t.Errorf("secret = %q, want abcd", cfg.Secret)
+		}
+	})
+
 	t.Run("marker absent: resolver runs and its entry is returned", func(t *testing.T) {
 		dir := t.TempDir()
 		stubPages(t,
@@ -402,4 +419,47 @@ func TestReadConfigMissingFileIsErrNotExist(t *testing.T) {
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("err = %v, want fs.ErrNotExist so submit can fall back to the repo name", err)
 	}
+}
+
+func TestRefuseStaleMarkerlessClone(t *testing.T) {
+	stub := func(t *testing.T, exists bool, err error) *[]string {
+		t.Helper()
+		orig := remoteFileExistsFn
+		t.Cleanup(func() { remoteFileExistsFn = orig })
+		var probed []string
+		remoteFileExistsFn = func(_ githubapi.Client, owner, repo, path string) (bool, error) {
+			probed = append(probed, owner+"/"+repo+":"+path)
+			return exists, err
+		}
+		return &probed
+	}
+
+	t.Run("remote has the marker the clone lacks: stop and say git pull", func(t *testing.T) {
+		// The enable-autograder backfill committed .classroom50.yaml and the
+		// shim to the remote; a snapshot push from this stale clone would
+		// delete both and report success.
+		probed := stub(t, true, nil)
+		err := refuseStaleMarkerlessClone(nil, "org", "cs50-hello-alice")
+		if err == nil || !strings.Contains(err.Error(), "git pull") {
+			t.Fatalf("err = %v, want a git pull instruction", err)
+		}
+		if got := strings.Join(*probed, " "); got != "org/cs50-hello-alice:"+classroomcfg.MetadataPath {
+			t.Errorf("probed %q, want the marker path on the clone's remote", got)
+		}
+	})
+
+	t.Run("remote has no marker either: proceed", func(t *testing.T) {
+		stub(t, false, nil)
+		if err := refuseStaleMarkerlessClone(nil, "org", "cs50-hello-alice"); err != nil {
+			t.Fatalf("a genuinely markerless repo must submit, got %v", err)
+		}
+	})
+
+	t.Run("probe fails: stop rather than guess", func(t *testing.T) {
+		stub(t, false, errors.New("GET repos/...: 502"))
+		err := refuseStaleMarkerlessClone(nil, "org", "cs50-hello-alice")
+		if err == nil || !strings.Contains(err.Error(), "502") {
+			t.Fatalf("err = %v, want the probe error surfaced", err)
+		}
+	})
 }

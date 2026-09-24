@@ -6,18 +6,27 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
+	"github.com/foundation50/gh-student/internal/githubapi"
+	"github.com/foundation50/gh-student/internal/reponame"
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
-// Injectable Pages readers so tests can drive the resolver without a live
-// site.
+// Injectable Pages and GitHub readers so tests can drive the resolver without
+// a live site.
 var (
 	fetchClassroomsIndexFn = assignments.FetchClassroomsIndex
 	fetchManifestFn        = assignments.FetchManifest
+	remoteFileExistsFn     = classroomcfg.FileExists
 )
+
+// markerlessErr prefixes every resolver failure with the one fact the student
+// needs first: the clone has no marker. wiki/Troubleshooting.md keys its
+// heading on this lead-in.
+func markerlessErr(format string, args ...any) error {
+	return fmt.Errorf(classroomcfg.MetadataPath+" not found in this clone, and "+format, args...)
+}
 
 // repoNameMatch is one (classroom, assignment) pair whose repo-name prefix the
 // clone's repo name carries.
@@ -30,25 +39,20 @@ type repoNameMatch struct {
 	prefix string
 }
 
-// resolveFromRepoName recovers what `.classroom50.yaml` would have said for a
-// clone that has none (a no_autograder or empty_repo accept writes no marker,
-// and a student may delete it) from the repo name and the org's published
-// site: classrooms-index.json narrows the classroom, then each candidate
-// classroom's assignments.json is prefix-matched against the repo name, the
-// same roster-free rule `gh teacher assignment rename` uses for markerless
-// repos. The returned Config is what submit reads from a real marker; the
-// Entry is the matched manifest row so the caller need not fetch it again.
-//
-// A protected classroom's manifest lives under its secret, so it can only be
-// matched when key is set; the error for that case says so rather than
-// pushing blind, since a tag-mode assignment would then never grade.
+// resolveFromRepoName recovers the marker a no_autograder or empty_repo accept
+// never wrote, from the repo name and the org's published site, using the same
+// repo-name prefix rule `gh teacher assignment rename` applies to markerless
+// repos. A protected classroom's manifest lives under its key, so without
+// --key the error says so rather than pushing blind (a tag-mode assignment
+// would then never grade). The Entry is the matched manifest row so the caller
+// need not fetch it again.
 func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, verbose bool) (*classroomcfg.Config, *assignments.Entry, error) {
 	if verbose {
 		u.Detail("No %s in this clone; resolving the assignment from the repository name", classroomcfg.MetadataPath)
 	}
 	index, err := fetchClassroomsIndexFn(ctx, org)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s not found in this clone, and the assignment couldn't be looked up from the repository name: %w", classroomcfg.MetadataPath, err)
+		return nil, nil, markerlessErr("the assignment couldn't be looked up from the repository name: %w", err)
 	}
 
 	repoLower := strings.ToLower(repo)
@@ -60,7 +64,7 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 		}
 	}
 	if len(candidates) == 0 {
-		return nil, nil, fmt.Errorf("%s not found in this clone, and %q doesn't start with any published classroom's short name, so this doesn't look like a Classroom 50 assignment repository; if it is one, commit and `git push` directly and ask your teacher to check the classroom is published", classroomcfg.MetadataPath, repo)
+		return nil, nil, markerlessErr("%q doesn't start with any published classroom's short name, so this doesn't look like a Classroom 50 assignment repository; if it is one, commit and `git push` directly and ask your teacher to check the classroom is published", repo)
 	}
 
 	var (
@@ -101,16 +105,33 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 		for _, m := range matches {
 			names = append(names, m.classroom+"/"+m.entry.Slug)
 		}
-		return nil, nil, fmt.Errorf("%s not found in this clone, and the repository name %q matches more than one published assignment (%s); ask your teacher which one this repository belongs to", classroomcfg.MetadataPath, repo, strings.Join(names, ", "))
+		return nil, nil, markerlessErr("the repository name %q matches more than one published assignment (%s); ask your teacher which one this repository belongs to", repo, strings.Join(names, ", "))
 	case lookupErr != nil:
-		return nil, nil, fmt.Errorf("%s not found in this clone, and the assignment couldn't be looked up from the repository name: %w", classroomcfg.MetadataPath, lookupErr)
+		return nil, nil, markerlessErr("the assignment couldn't be looked up from the repository name: %w", lookupErr)
 	case len(wrongKey) > 0:
-		return nil, nil, fmt.Errorf("%s not found in this clone, and classroom %q has no assignment list under the access key you passed; double-check the key your teacher gave you, or omit --key if the classroom isn't unlisted", classroomcfg.MetadataPath, wrongKey[0])
+		return nil, nil, markerlessErr("classroom %q has no assignment list under the access key you passed; double-check the key your teacher gave you, or omit --key if the classroom isn't unlisted", wrongKey[0])
 	case len(unlisted) > 0:
-		return nil, nil, fmt.Errorf("%s not found in this clone, and classroom %q uses an unlisted URL, so its assignment list needs the access key your teacher gave you; run `gh student submit --key <key>`", classroomcfg.MetadataPath, unlisted[0])
+		return nil, nil, markerlessErr("classroom %q uses an unlisted URL, so its assignment list needs the access key your teacher gave you; run `gh student submit --key <key>`", unlisted[0])
 	default:
-		return nil, nil, fmt.Errorf("%s not found in this clone, and %q doesn't match any assignment published for classroom %q; if this repository was created by hand, commit and `git push` directly, otherwise ask your teacher", classroomcfg.MetadataPath, repo, candidates[0])
+		return nil, nil, markerlessErr("%q doesn't match any assignment published for classroom %q; if this repository was created by hand, commit and `git push` directly, otherwise ask your teacher", repo, candidates[0])
 	}
+}
+
+// refuseStaleMarkerlessClone stops a markerless clone whose remote already
+// carries the marker. That shape is a clone taken before the teacher's
+// enable-autograder backfill: submit snapshots the local tree onto a fresh
+// clone of the remote, so pushing would delete the backfilled marker and
+// autograde workflow and report success. A plain `git push` from the same
+// clone would conflict; this is the equivalent stop.
+func refuseStaleMarkerlessClone(client githubapi.Client, owner, repo string) error {
+	exists, err := remoteFileExistsFn(client, owner, repo, classroomcfg.MetadataPath)
+	if err != nil {
+		return fmt.Errorf("check whether %s/%s already has %s: %w", owner, repo, classroomcfg.MetadataPath, err)
+	}
+	if exists {
+		return fmt.Errorf("this repository was updated by your teacher (it now carries %s), but your clone doesn't have that change yet; run `git pull`, then `gh student submit` again", classroomcfg.MetadataPath)
+	}
+	return nil
 }
 
 // matchAssignmentRepo returns every entry of one classroom whose repo-name
@@ -123,7 +144,7 @@ func matchAssignmentRepo(repoLower, classroom string, entries []assignments.Entr
 			if slug == "" {
 				continue
 			}
-			prefix := contract.AssignmentRepoPrefix(classroom, slug)
+			prefix := reponame.Prefix(classroom, slug)
 			if strings.HasPrefix(repoLower, prefix) {
 				out = append(out, repoNameMatch{classroom: classroom, entry: entry, prefix: prefix})
 				break

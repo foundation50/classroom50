@@ -233,7 +233,8 @@ gh student submit --key <key>
    ignored) into a temporary work tree, so build artifacts don't pollute the
    submission.
 3. Fetches the teacher's `.gitignore` and `.github/` from the starter code
-   (skipped for a repository without `.classroom50.yaml`).
+   (skipped when the assignment has the built-in autograder off or is an
+   empty repository, since those repositories carry no Classroom 50 files).
 4. Commits with your git `user.name` and `user.email` (unset fields fall back
    to your GitHub login and noreply email) and pushes to the default branch as
    a fast-forward. No force-push, so prior commits stay reachable.

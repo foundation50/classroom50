@@ -148,6 +148,11 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 	if err != nil {
 		return err
 	}
+	if entry != nil {
+		if err := refuseStaleMarkerlessClone(client, repoOwner, repoName); err != nil {
+			return err
+		}
+	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("Submit %s", config.Assignment))
 
@@ -196,6 +201,12 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 	var entryErr error
 	if entry == nil {
 		entry, entryErr = fetchSubmitEntry(ctx, repoOwner, config, u, verbose)
+		// A key the student typed that opens nothing is a wrong key, not a
+		// Pages blip: stop here as the markerless path does, rather than push
+		// a submission whose tag-mode grading would silently be skipped.
+		if entryErr != nil && key != "" && assignments.IsManifestNotFound(entryErr) {
+			return fmt.Errorf("classroom %q has no assignment list under the access key you passed; double-check the key your teacher gave you, or omit --key if the classroom isn't unlisted", config.Classroom)
+		}
 	}
 	var allowedFiles []string
 	if entry != nil {
