@@ -785,6 +785,14 @@ class TestUntrustedBaselineWarning:
         # Must NOT say the step skipped -- the PR opened.
         assert "skip" not in msg.lower()
 
+    def test_names_both_untrusted_causes(self):
+        # SOURCE_ROOT is also the verdict when a marker adder carried other
+        # files (_baseline_scan), so the text must not claim no commit added
+        # the marker at all.
+        msg = ag.untrusted_baseline_warning()
+        assert "none added it" in msg
+        assert "also carried other files" in msg
+
     def test_names_the_marker_path(self):
         assert ag.ACCEPT_MARKER_PATH in ag.untrusted_baseline_warning()
 

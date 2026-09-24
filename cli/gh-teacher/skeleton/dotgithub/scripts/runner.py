@@ -1397,18 +1397,19 @@ def untrusted_baseline_warning() -> str:
     """GitHub workflow annotation when the Feedback PR opens against the repo's
     root commit instead of the trusted accept commit (no commit added
     `.classroom50.yaml`, or the one that did also carried non-setup work). The
-    PR is still useful; the teacher gets a heads-up
-    that the frozen base may include starter/plumbing work, so the diff could
-    be larger than usual.
+    PR is still useful; the teacher gets a heads-up that the frozen base may
+    include starter/plumbing work, so the diff could be larger than usual.
 
     A `::warning::` annotation (not a plain log) so it shows in the run summary.
     Pure helper for the same testability reason as `no_baseline_warning`."""
     return (
         "::warning title=classroom50 Feedback PR::opened the Feedback PR "
-        f"against the repo's root commit -- no commit was detected as adding "
-        f"{ACCEPT_MARKER_PATH}, so this baseline is UNTRUSTED and the review "
-        "diff may include starter/plumbing files. Verify the repo was created "
-        "by an accept flow if the diff looks larger than expected."
+        f"against the repo's root commit. No commit added {ACCEPT_MARKER_PATH} "
+        "on its own (either none added it, or the one that did also carried "
+        "other files), so this baseline is UNTRUSTED and the review diff may "
+        "include starter or plumbing files. If the diff looks larger than "
+        "expected, check that an accept flow created the repo and that nothing "
+        "else was committed alongside the marker."
     )
 
 
