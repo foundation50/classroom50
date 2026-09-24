@@ -1,10 +1,9 @@
 import { IDENTITY_CSV_FIELDS } from "@/util/rosterCsv"
 
-// The single source of truth for the roster-import header vocabulary, shared by
-// the parser (parseRosterImportFile) and the empty-result diagnostic
-// (detectImportHeaderIssue). Keeping one exported set is what lets those two
-// agree on whether a first line is a header row and which columns to advertise —
-// a second hand-synced copy would silently drift.
+// The roster-import header vocabulary, shared by the parser
+// (parseRosterImportFile) and the empty-result diagnostic
+// (detectImportHeaderIssue) so the two agree on whether a first line is a
+// header row and which columns to advertise.
 
 // Columns that can identify a row, in PRECEDENCE order: a `github_id` wins over
 // a `username`, which wins over an `email`. A row needs at least one of them.

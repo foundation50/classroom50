@@ -26,10 +26,10 @@ import (
 var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id", "role"}
 
 // identityColumns are the reserved columns that can identify a student. A
-// roster or import header must carry at least one of them; every other reserved
-// column is optional on read (absent reads as "") because the writer always
-// emits the full RosterColumns header, so a file only ever LACKS a column when a
-// teacher hand-edited it or it predates the column (role).
+// roster or import header must carry at least one; every other reserved column
+// is optional on read because every writer emits the full RosterColumns header,
+// so a file only lacks a column when hand-edited or written before that column
+// existed (role).
 var identityColumns = []string{"github_id", "username", "email"}
 
 // FullRosterHeader is the on-disk roster.csv header (RosterColumns,
@@ -44,41 +44,33 @@ func isCanonicalColumn(name string) bool {
 	return slices.Contains(RosterColumns, name)
 }
 
-// rosterLayout is a parsed roster.csv header: where each canonical column sits
-// (role may be absent) and the extra columns in file order. Reading is keyed by
-// header NAME, not position, so a teacher may reorder columns or insert their
-// own anywhere; only the names in RosterColumns are ever interpreted.
+// rosterLayout is a parsed roster.csv header: where each reserved column sits
+// (absent when the file lacks it) and the extra columns in file order. Reading
+// is keyed by header NAME, so a teacher may reorder columns or insert their own
+// anywhere; only the names in RosterColumns are ever interpreted.
 type rosterLayout struct {
 	width     int
 	canonical map[string]int
-	extra     []layoutColumn
-	// extraNames is extra's names, shared by every row's ExtraOrder.
+	// extraNames[k] sits at record index extraIndex[k]. extraNames doubles as
+	// every row's ExtraOrder, so it is shared rather than rebuilt per row.
 	extraNames []string
-}
-
-type layoutColumn struct {
-	name  string
-	index int
+	extraIndex []int
 }
 
 // canonicalLayout is the layout of a file whose header is exactly RosterColumns.
 var canonicalLayout = func() rosterLayout {
-	l := rosterLayout{width: len(RosterColumns), canonical: make(map[string]int, len(RosterColumns))}
-	for i, name := range RosterColumns {
-		l.canonical[name] = i
+	l, err := parseRosterLayout(RosterColumns)
+	if err != nil {
+		panic(err)
 	}
 	return l
 }()
 
-// parseRosterLayout validates a stored roster.csv header. Names are trimmed
-// (the web reader trims too, so both tools agree on a header with a stray
-// space). At least one identityColumns name must appear; every other reserved
-// column is optional; anything else is an extra column. Three shapes are
-// rejected rather than mangled on round-trip: a duplicate name (clobbers on
-// read, collapses on write), an extra reusing a reserved name (the web's
-// header-keyed parser mis-reads it), and an extra beginning with a spreadsheet
-// formula trigger (EncodeRoster writes header names verbatim, so it would
-// re-inject a formula).
+// parseRosterLayout validates a stored roster.csv header. It mirrors the web
+// reader's rules (parseRosterCsv) so neither tool writes a file the other
+// refuses: names are trimmed, at least one identity column must be present,
+// and a duplicate name or a formula-leading extra name is rejected rather than
+// mangled on round-trip.
 func parseRosterLayout(header []string) (rosterLayout, error) {
 	layout := rosterLayout{width: len(header), canonical: make(map[string]int, len(RosterColumns))}
 	seenExtra := make(map[string]bool)
@@ -86,7 +78,7 @@ func parseRosterLayout(header []string) (rosterLayout, error) {
 		name := strings.TrimSpace(raw)
 		if isCanonicalColumn(name) {
 			if _, dup := layout.canonical[name]; dup {
-				return rosterLayout{}, fmt.Errorf("unexpected header: extra column %q reuses a reserved column name", name)
+				return rosterLayout{}, fmt.Errorf("unexpected header: reserved column %q appears more than once", name)
 			}
 			layout.canonical[name] = i
 			continue
@@ -98,11 +90,11 @@ func parseRosterLayout(header []string) (rosterLayout, error) {
 			return rosterLayout{}, fmt.Errorf("unexpected header: extra column %q begins with a spreadsheet formula trigger", name)
 		}
 		seenExtra[name] = true
-		layout.extra = append(layout.extra, layoutColumn{name: name, index: i})
 		layout.extraNames = append(layout.extraNames, name)
+		layout.extraIndex = append(layout.extraIndex, i)
 	}
 	if !hasIdentityColumn(layout.canonical) {
-		return rosterLayout{}, fmt.Errorf("unexpected header: no identity column; add at least one of %v (got %v; the other reserved columns %v are optional, and any other column is kept as-is)", identityColumns, header, RosterColumns)
+		return rosterLayout{}, fmt.Errorf("unexpected header: no identity column; add at least one of %s (got %v)", strings.Join(identityColumns, ", "), header)
 	}
 	return layout, nil
 }
@@ -110,16 +102,14 @@ func parseRosterLayout(header []string) (rosterLayout, error) {
 // hasIdentityColumn reports whether a parsed header carries at least one of
 // identityColumns.
 func hasIdentityColumn(columns map[string]int) bool {
-	for _, name := range identityColumns {
-		if _, ok := columns[name]; ok {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(identityColumns, func(name string) bool {
+		_, ok := columns[name]
+		return ok
+	})
 }
 
-// cell returns the record's value for a canonical column, or "" when the
-// header lacks it (role on a pre-role file).
+// cell returns the record's value for a reserved column, or "" when the header
+// lacks it.
 func (l rosterLayout) cell(record []string, name string) string {
 	if i, ok := l.canonical[name]; ok {
 		return record[i]
@@ -134,28 +124,27 @@ func (l rosterLayout) columnName(i int) string {
 			return name
 		}
 	}
-	for _, c := range l.extra {
-		if c.index == i {
-			return fmt.Sprintf("column %d (%s)", i+1, c.name)
-		}
+	if k := slices.Index(l.extraIndex, i); k >= 0 {
+		return fmt.Sprintf("column %d (%s)", i+1, l.extraNames[k])
 	}
 	return fmt.Sprintf("column %d", i+1)
 }
 
 // canonicalize reorders a raw record into EncodeRoster's column order
-// (RosterColumns, then extras in file order), filling an absent role with "",
-// so a lenient-preserved row stays aligned with the rewritten header. A record
-// whose width doesn't match the header can't be mapped and is kept verbatim.
+// (RosterColumns, then extras in file order), filling absent reserved columns
+// with "", so a lenient-preserved row stays aligned with the rewritten header.
+// A record whose width doesn't match the header can't be mapped and is kept
+// verbatim.
 func (l rosterLayout) canonicalize(record []string) []string {
 	if len(record) != l.width {
 		return record
 	}
-	out := make([]string, 0, len(RosterColumns)+len(l.extra))
+	out := make([]string, 0, len(RosterColumns)+len(l.extraIndex))
 	for _, name := range RosterColumns {
 		out = append(out, l.cell(record, name))
 	}
-	for _, c := range l.extra {
-		out = append(out, record[c.index])
+	for _, idx := range l.extraIndex {
+		out = append(out, record[idx])
 	}
 	return out
 }
@@ -257,12 +246,10 @@ func (r RosterRow) IsPendingEmailInvite() bool {
 		NormalizeInviteEmail(r.Email) != ""
 }
 
-// ParseRoster decodes the roster CSV. Columns are matched by header name in any
-// order: at least one identity column (github_id, username, email) must be
-// present, every other reserved column is optional and reads as "" when absent,
-// and any other column is preserved verbatim in RosterRow.Extra so a teacher's
-// own data survives a rewrite (which always emits the full RosterColumns
-// header). Empty input is rejected. Any malformed data row is an error.
+// ParseRoster decodes the roster CSV under the header rules of
+// parseRosterLayout: reserved columns are read by name, any other column is
+// preserved verbatim in RosterRow.Extra so a teacher's own data survives a
+// rewrite. Empty input is rejected. Any malformed data row is an error.
 func ParseRoster(data []byte) ([]RosterRow, error) {
 	return parseRoster(data, false)
 }
@@ -329,9 +316,8 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 	return rows, nil
 }
 
-// importMetadataColumns are read when present; `name` is split into first/last
-// for a file that lacks those columns. Identity comes from identityColumns, at
-// least one of which must be present. Every other column is ignored: an SIS or
+// importMetadataColumns are read when present. `name` is split into first/last
+// for a file that lacks those columns. Every other column is ignored: an SIS or
 // LMS export carries plenty the import has no use for. Mirrors the web's
 // rosterImportHeaders.ts.
 var importMetadataColumns = []string{"first_name", "last_name", "name", "section", "role"}
@@ -353,7 +339,7 @@ func parseImportLayout(header []string) (map[string]int, error) {
 		recognized[name] = i
 	}
 	if !hasIdentityColumn(recognized) {
-		return nil, fmt.Errorf("unexpected header: no identity column; add at least one of %v (got %v; other columns are ignored)", identityColumns, header)
+		return nil, fmt.Errorf("unexpected header: no identity column; add at least one of %s (got %v; other columns are ignored)", strings.Join(identityColumns, ", "), header)
 	}
 	return recognized, nil
 }
@@ -363,20 +349,22 @@ func parseImportLayout(header []string) (map[string]int, error) {
 // when that split column is ABSENT from the header (not merely empty), so a
 // deliberately blank first_name is never overwritten.
 func importRecordToCanonical(record []string, columns map[string]int) []string {
-	out := make([]string, len(RosterColumns))
-	for i, name := range RosterColumns {
-		if idx, ok := columns[name]; ok {
-			out[i] = record[idx]
+	cells := make(map[string]string, len(columns))
+	for name, idx := range columns {
+		cells[name] = record[idx]
+	}
+	if full, ok := cells["name"]; ok {
+		first, last := splitFullName(full)
+		if _, ok := columns["first_name"]; !ok {
+			cells["first_name"] = first
+		}
+		if _, ok := columns["last_name"]; !ok {
+			cells["last_name"] = last
 		}
 	}
-	if idx, ok := columns["name"]; ok {
-		first, last := splitFullName(record[idx])
-		if _, hasFirst := columns["first_name"]; !hasFirst {
-			out[1] = first
-		}
-		if _, hasLast := columns["last_name"]; !hasLast {
-			out[2] = last
-		}
+	out := make([]string, len(RosterColumns))
+	for i, name := range RosterColumns {
+		out[i] = cells[name]
 	}
 	return out
 }
@@ -391,16 +379,12 @@ func splitFullName(name string) (first, last string) {
 	return parts[0], strings.Join(parts[1:], " ")
 }
 
-// ParseImportCSV decodes a teacher-supplied import CSV. Columns are matched by
-// header name, case-insensitively and in any order: at least one of github_id,
-// username, or email must be present; first_name, last_name, name, section, and
-// role are read when present; every other column is ignored — so a roster.csv
-// the web wrote (including pending email-only invite rows) imports as-is, and
-// so does an SIS export carrying its own columns. Rows follow the stored-file
-// identity rule: at least one of username, github_id, or email. github_id and
-// role are parsed onto the returned rows so the import command can cross-check
-// the id against the resolved account and round-trip role; neither is applied
-// here.
+// ParseImportCSV decodes a teacher-supplied import CSV under the header rules
+// of parseImportLayout, so a roster.csv the web wrote (including pending
+// email-only invite rows) imports as-is, and so does an SIS export carrying its
+// own columns. github_id and role are parsed onto the returned rows so the
+// import command can cross-check the id against the resolved account and
+// round-trip role; neither is applied here.
 //
 // Row errors are collected across the whole file and returned joined (one
 // `line %d: ...` per bad row), ALONGSIDE the rows that did parse, so the caller
@@ -449,7 +433,7 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 		// admits name-only/unlinked rows (recordToRow), but the CLI import has
 		// no action for a row it can't address, so those stay per-line errors
 		// here rather than silently passing through.
-		if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" {
+		if row.Username == "" && row.Email == "" && strings.TrimSpace(canonicalLayout.cell(record, "github_id")) == "" {
 			rowErrs = append(rowErrs, fmt.Errorf("line %d: row has no username, github_id, or email; at least one is required to identify a student", line))
 			continue
 		}
@@ -518,13 +502,11 @@ func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, err
 		}
 		row.GitHubID = id
 	}
-	if len(layout.extra) > 0 {
-		// Every row's extra order IS the header's, so share that slice instead
-		// of rebuilding an identical one per row. Read-only after parse.
-		row.Extra = make(map[string]string, len(layout.extra))
+	if len(layout.extraIndex) > 0 {
+		row.Extra = make(map[string]string, len(layout.extraIndex))
 		row.ExtraOrder = layout.extraNames
-		for _, c := range layout.extra {
-			row.Extra[c.name] = undefangCSVCell(record[c.index])
+		for k, idx := range layout.extraIndex {
+			row.Extra[layout.extraNames[k]] = undefangCSVCell(record[idx])
 		}
 	}
 	return row, nil

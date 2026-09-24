@@ -1478,8 +1478,8 @@ func TestParseRosterLenient_ReordersPreservedRawRow(t *testing.T) {
 func TestParseRoster_RejectsDuplicateCanonicalColumn(t *testing.T) {
 	in := []byte("username,first_name,last_name,email,section,github_id,username\nalice,A,A,a@x,s,1,dup\n")
 	_, err := ParseRoster(in)
-	if err == nil || !strings.Contains(err.Error(), "reserved column name") {
-		t.Fatalf("expected reserved-column-name error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "appears more than once") {
+		t.Fatalf("expected duplicate-reserved-column error, got %v", err)
 	}
 }
 
@@ -1498,8 +1498,8 @@ func TestParseRoster_RejectsExtraColumnReusingCanonicalName(t *testing.T) {
 	// file other tools (the web app) mis-read — reject it.
 	in := []byte("username,first_name,last_name,email,section,github_id,email\nalice,A,A,a@x,s,1,dup\n")
 	_, err := ParseRoster(in)
-	if err == nil || !strings.Contains(err.Error(), "reserved column name") {
-		t.Fatalf("expected reserved-column-name error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "appears more than once") {
+		t.Fatalf("expected duplicate-reserved-column error, got %v", err)
 	}
 }
 
