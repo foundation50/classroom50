@@ -76,12 +76,12 @@ export async function readBranchSubmissionLog(
         repo,
         branch,
       )
-      const source = baselineSource(marker, options)
+      const baseline = baselineSource(marker, options)
       // Newest-first, so the root commit is the last entry.
       const baselineSha =
-        source === "marker"
-          ? marker!.sha
-          : source === "root"
+        baseline.source === "marker"
+          ? baseline.sha
+          : baseline.source === "root"
             ? (commits.at(-1)?.sha ?? null)
             : null
       return { commits, baselineSha }

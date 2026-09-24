@@ -27,6 +27,7 @@ import {
   createClassroom50Yaml,
   defaultAutograderWorkflow,
 } from "./autograderYaml"
+import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import {
   commitShimFiles,
   isDefaultShim,
@@ -82,8 +83,6 @@ export async function resolveBackfillMarkerSource(
   }
 }
 
-const MARKER_PATH = ".classroom50.yaml"
-
 export async function addAutogradeShim(params: {
   client: GitHubClient
   org: string
@@ -137,7 +136,7 @@ export async function addAutogradeShim(params: {
     (await getRepoFileAtRef(client, {
       owner: org,
       repo,
-      path: MARKER_PATH,
+      path: ACCEPT_MARKER_PATH,
       ref: head.headSha,
     })) !== null
   if (!hasMarker) {
@@ -150,7 +149,7 @@ export async function addAutogradeShim(params: {
     // without it the runner refuses the repo and the only remedy left would
     // be a heal re-accept, whose marker commit would move the baseline.
     files.push({
-      path: MARKER_PATH,
+      path: ACCEPT_MARKER_PATH,
       content: await buildBackfillMarker(client, marker),
     })
   }

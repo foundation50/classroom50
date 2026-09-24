@@ -6,6 +6,7 @@ import {
   type GitHubBlob,
 } from "../types"
 import { STUDENT_CSV_FIELDS } from "@/util/rosterCsv"
+import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import {
   assignmentsFilePath,
@@ -249,7 +250,7 @@ export function assignmentAcceptTree(params: {
 
   const tree: GitTreeEntry[] = [
     {
-      path: ".classroom50.yaml",
+      path: ACCEPT_MARKER_PATH,
       mode: "100644",
       type: "blob",
       content: metadataYaml,

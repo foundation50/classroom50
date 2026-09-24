@@ -2,6 +2,11 @@ import { parseDocument } from "yaml"
 import { z } from "zod"
 import { SECRET_PATTERN } from "./secret"
 
+// The in-repo accept marker every reader anchors the baseline on. Mirrors
+// contract.MetadataPath (Go) and ACCEPT_MARKER_PATH (runner.py,
+// collect_scores.py) with no compile-time link; keep byte-identical.
+export const ACCEPT_MARKER_PATH = ".classroom50.yaml"
+
 const IdentitySchema = z.object({
   username: z.string().min(1),
   // Immutable numeric GitHub user id; nullable when unresolved.

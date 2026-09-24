@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { repoContentsPathExists } from "@/domain/assignments"
+import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import { githubKeys } from "@/github-core/queries"
 
 // Whether an existing assignment repo finished its accept: "incomplete" means
@@ -20,7 +21,7 @@ export function useAssignmentRepoSetup(
   const query = useQuery({
     queryKey: githubKeys.repoSetupMarker(org, repo),
     queryFn: () =>
-      repoContentsPathExists(client, org ?? "", repo, ".classroom50.yaml"),
+      repoContentsPathExists(client, org ?? "", repo, ACCEPT_MARKER_PATH),
     enabled,
     // Gates the accept page's repair guidance; a re-run heals the repo, so
     // never serve a stale "incomplete" on the next mount.

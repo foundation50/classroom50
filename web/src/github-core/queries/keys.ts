@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query"
 
 import { CONFIG_REPO } from "@/util/configRepo"
+import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import {
   assignmentsFilePath,
   classroomFilePath,
@@ -59,7 +60,7 @@ export const githubKeys = {
   // `owner` may be undefined while the route param resolves; the query is
   // disabled then, and the tuple keeps the undefined so the key is unchanged.
   repoMarkerFile: (owner: string | undefined, repo: string) =>
-    [...githubKeys.all, "repos", owner, repo, ".classroom50.yaml"] as const,
+    [...githubKeys.all, "repos", owner, repo, ACCEPT_MARKER_PATH] as const,
   repoSetupMarker: (owner: string | undefined, repo: string) =>
     [...githubKeys.all, "repos", owner, repo, "setup-marker"] as const,
 
