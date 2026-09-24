@@ -143,9 +143,10 @@ type submissionModeParams struct {
 }
 
 // shimOutcome is one repo's classified result from a shim write loop (the
-// submission-mode retrofit or the enable-autograder backfill). updated/current
-// are the happy paths; unrecognized needs the teacher's judgment (never
-// overwritten); notAccepted is a skip; failed is transient (re-run retries).
+// submission-mode retrofit or the enable-autograder backfill). updated/
+// markerAdded/current are the happy paths; unrecognized needs the teacher's
+// judgment (never overwritten); notAccepted is a skip; failed is transient
+// (re-run retries).
 type shimOutcome int
 
 const (

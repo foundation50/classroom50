@@ -42,18 +42,14 @@ export async function listDefaultBranchCommits(
 
 export type BranchSubmissionLog = {
   commits: GitHubCommit[]
-  // Oldest .classroom50.yaml commit; null on a bare repo, where every commit counts.
+  // The commit student work is counted above (marker or root, see
+  // baselineSource); null on a bare repo, where every commit counts.
   baselineSha: string | null
 }
 
 export type BranchSubmissionLogOptions = {
-  // An initialized repo's root commit is the template (or README) seed, never
-  // a submission, so it is the baseline when no marker commit anchors one: a
-  // no_autograder accept writes no marker, and a built-in assignment's repos
-  // may sit unbackfilled after the autograder was turned on. Off only for a
-  // bare empty_repo, whose root commit IS the student's first push. A marker
-  // still wins when present, unless the backfill introduced it (that repo was
-  // accepted without one and keeps the root baseline).
+  // Whether a markerless repo's root commit is the baseline; derive it with
+  // rootIsBaseline() in autogradingState. Resolution lives in baselineSource.
   rootIsBaseline?: boolean
 }
 

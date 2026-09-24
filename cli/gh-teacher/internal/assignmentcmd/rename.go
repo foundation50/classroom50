@@ -68,9 +68,9 @@ func assignmentRenameCmd() *cobra.Command {
 			"repos are skipped, stragglers are healed. Historical submissions\n" +
 			"keep their scores (collection accepts the pre-rename slug embedded\n" +
 			"in old result.json payloads via renamed_from).\n\n" +
-			"Students only need `git pull` once before their next\n" +
-			"`gh student submit` (the local marker must catch up); plain pushes\n" +
-			"grade correctly immediately.",
+			"Students with a marker only need `git pull` once before their next\n" +
+			"`gh student submit` (the local marker must catch up); markerless\n" +
+			"repos and plain pushes grade correctly immediately.",
 		Example: "  gh teacher assignment rename cs50-fall-2026 cs-principles problem-set-three-with-a-long-name ps3\n" +
 			"  gh teacher assignment rename cs50-fall-2026 cs-principles old-slug new-slug --dry-run\n" +
 			"  gh teacher assignment rename cs50-fall-2026 cs-principles old-slug new-slug --yes",
@@ -169,8 +169,6 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	}
 	resume := false
 	prevLocked := false
-	// A no_autograder assignment's repos carry no marker by design, so the
-	// fan-out falls back to prefix ownership for them (see renameOneRepo).
 	markerless := false
 	if idx, ok := assignment.FindAssignment(preFile.Assignments, p.oldSlug); ok {
 		entry := preFile.Assignments[idx]
@@ -202,7 +200,7 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	// Enumerate candidate repos by prefix over the org list (roster-free, so
 	// dropped students' repos are covered). Prefix over-match against a
 	// sibling slug is possible ("hw" also prefixes "hw-extra" repos), so the
-	// fan-out verifies OWNERSHIP per repo via the marker before touching it.
+	// fan-out verifies OWNERSHIP per repo before touching it (see markerOwnership).
 	names, err := orgrepos.ListNames(client, p.org)
 	if err != nil {
 		return err
@@ -478,8 +476,8 @@ func setRenamedEntryLocked(client githubapi.Client, p renameParams, branch strin
 	return err
 }
 
-// siblingPrefix is another assignment in the classroom whose student-repo
-// prefix extends the renamed one, so a prefix match alone can't tell them apart.
+// siblingPrefix is a classroom slug whose student-repo prefix extends the
+// renamed one.
 type siblingPrefix struct {
 	slug, prefix string
 }
@@ -493,8 +491,7 @@ type markerOwnership struct {
 	siblings   []siblingPrefix
 }
 
-// foreignSibling reports the sibling slug a markerless repo's name also
-// matches, if any: a prefix match alone can't rule that repo out as ours.
+// foreignSibling reports the sibling slug whose prefix repo also carries, if any.
 func (o markerOwnership) foreignSibling(repo string) (slug string, ok bool) {
 	for _, s := range o.siblings {
 		if strings.HasPrefix(repo, s.prefix) {
@@ -510,8 +507,8 @@ func (o markerOwnership) foreignSibling(repo string) (slug string, ok bool) {
 // only the marker is checked/rewritten. Ownership is marker-gated because the
 // prefix can over-match a sibling slug — a proper sibling repo carries a
 // marker naming ITS slug and is skipped untouched. A markerless assignment's
-// repos fall back to prefix ownership (see markerOwnership); a marker one of
-// them happens to carry (accepted before the marker was dropped) still wins.
+// repos fall back to prefix ownership (see markerOwnership); a marker still
+// wins when present.
 //
 // Marker before rename, on purpose: the config already carries the new slug,
 // so a marker pointing at it grades correctly even while the repo still has

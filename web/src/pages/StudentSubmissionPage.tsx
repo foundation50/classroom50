@@ -178,9 +178,7 @@ const SubmissionBody = ({
   mode?: AssignmentMode
   submissionMode?: SubmissionMode
   submissionTags?: string[]
-  // Whether the root commit is the push list's baseline when no marker anchors
-  // one: true for every initialized repo, false only for a bare empty_repo.
-  // See BranchSubmissionLogOptions.
+  // rootIsBaseline(assignment) for the push list (see autogradingState).
   rootIsBaseline?: boolean
 }) => {
   const { t } = useTranslation()

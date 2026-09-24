@@ -851,8 +851,8 @@ class TestBaselineScanSource:
 
     def test_backfill_after_marker_delete_keeps_accept_source(self, tmp_path):
         # A real accept marker that a student deleted and the backfill later
-        # restored: the oldest adder is still the accept commit, so dropping
-        # --first-parent must not let the backfill demote it to the root.
+        # restored: the oldest adder is still the accept commit, so the backfill
+        # must not demote it to the root.
         path = tmp_path / "repo"
         shas = _make_repo(path, ["Initial commit", ACCEPT, "Submit hello"])
         _git(path, "rm", "-q", ag.ACCEPT_MARKER_PATH)

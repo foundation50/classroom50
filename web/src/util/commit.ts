@@ -45,9 +45,10 @@ export function shimUpdateCommitMessage(mode: SubmissionMode): string {
   )
 }
 
-// The commit that adds the default shim to a repo accepted while the built-in
-// autograder was off. Byte-mirror of contract.ShimBackfillCommitMessage
-// (pinned by its Go test) and collect_scores.py's TOOL_COMMIT_SUBJECTS.
+// The backfill commit (default shim and/or the missing marker) for a repo
+// accepted while the built-in autograder was off. Its subject is a baseline
+// contract: byte-mirror of contract.ShimBackfillCommitMessage (pinned by its Go
+// test) and collect_scores.py's TOOL_COMMIT_SUBJECTS.
 export const SHIM_BACKFILL_COMMIT_MESSAGE = `${prefixCommit(
   "Add autograde workflow (enable-autograder)",
 )}\n\n[skip ci]`

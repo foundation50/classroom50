@@ -960,12 +960,8 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
 
 def is_no_autograder(entry: dict[str, Any]) -> bool:
     """True only when no_autograder is the boolean `true` (strict, like
-    is_empty_repo). A no_autograder assignment commits no shim and no marker
-    (accept leaves the repo as GitHub created it), so it never autogrades and
-    produces no submit/* releases: regrade skips it and collection detects its
-    submissions from repo state, with the root commit as the baseline. Keep
-    byte-identical across collect/regrade and the autograde-runner read step so
-    every tool agrees."""
+    is_empty_repo). Keep byte-identical across collect/regrade and the
+    autograde-runner read step so every tool agrees."""
     return entry.get("no_autograder") is True
 
 
@@ -3046,9 +3042,9 @@ def _repo_url(api_url: str, owner: str, repo: str) -> str:
 # none counts as a submission. Hand-mirrored with cli/shared/contract's
 # PrefixCommit forms and the web's TOOL_COMMIT_SUBJECTS.
 #
-# The backfill subject also matters to the BASELINE: a marker that commit
-# introduced belongs to a repo accepted without one (no_autograder), whose
-# baseline is the root commit. Mirrors runner.py SHIM_BACKFILL_COMMIT_SUBJECT.
+# Also the one subject the baseline rule reads (see marker_baseline). Mirrors
+# contract.ShimBackfillCommitSubject and the runner.py / regrade_repos.py
+# constant of the same name; keep byte-identical.
 SHIM_BACKFILL_COMMIT_SUBJECT = "[Classroom 50] Add autograde workflow (enable-autograder)"
 TOOL_COMMIT_SUBJECTS = frozenset(
     {
@@ -3348,12 +3344,9 @@ def detect_repo_submissions(
     it. A commitless repo is learned from the read itself (409), never from the
     listing's lagging `size`, at the cost of one request per bare repo.
 
-    `root_is_baseline` marks an initialized (non-empty_repo) repo: when no
-    marker commit anchors the baseline, the root commit (the template or README
-    seed) is it, rather than a submission. Off only for a bare empty_repo, whose
-    root commit IS the student's first push. A marker still wins when present,
-    unless the enable-autograder backfill introduced it: that repo was accepted
-    without one (no_autograder), so it keeps the root baseline."""
+    `root_is_baseline`: the root commit is the seed, not a submission, so it
+    anchors the baseline when no marker does; off only for a bare empty_repo.
+    Marker vs root is decided by resolve_baseline_source."""
     try:
         if mode == "tag":
             tags = list_repo_tags(api_url, org, repo_name, token)

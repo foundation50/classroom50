@@ -12,11 +12,8 @@ export type MyPushSubmissionsOptions = {
   // A caller that already holds the repo's default branch (the list, from
   // the org repo walk) passes it to skip the opening getRepo.
   knownDefaultBranch?: string
-  // Whether the root commit is the baseline when no marker anchors one: true
-  // for every initialized repo (its root is the seed), false only for a bare
-  // empty_repo, whose root commit is the student's first push. Defaults to
-  // true so the list and the page share one cache entry without both having
-  // to state it. See BranchSubmissionLogOptions.
+  // rootIsBaseline(assignment) from autogradingState; part of the key. Defaults
+  // to true, the shape of every initialized repo.
   rootIsBaseline?: boolean
 }
 

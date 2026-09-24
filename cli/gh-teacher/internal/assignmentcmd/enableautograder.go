@@ -44,7 +44,7 @@ func assignmentEnableAutograderCmd() *cobra.Command {
 			"    already did).\n" +
 			"  - Adds the default autograde workflow to each existing repo that\n" +
 			"    lacks one, rendered for the assignment's current submission type\n" +
-			"    and tags. Repos that already have the file are left untouched.\n" +
+			"    and tags. An existing workflow file is never rewritten.\n" +
 			"  - Adds the `.classroom50.yaml` marker in the same commit when the\n" +
 			"    repo has none (accept writes no marker while the autograder is\n" +
 			"    off), since the autograder reads it to find the assignment.\n" +
@@ -259,8 +259,7 @@ type backfillMarker struct {
 }
 
 // render builds the marker accept would have written for repo, minus
-// accepted_at (this is not the accept). The student's numeric id is a
-// best-effort lookup, null when unresolved, the same rule accept applies.
+// accepted_at (this is not the accept).
 func (m backfillMarker) render(client githubapi.Client, org, repo string) (string, error) {
 	login := strings.TrimPrefix(repo, contract.AssignmentRepoPrefix(m.classroom, m.slug))
 	out, err := repoconfig.Render(repoconfig.Config{
@@ -289,12 +288,12 @@ func lookupUserID(client githubapi.Client, login string) *int64 {
 }
 
 // backfillShim adds the default shim to one repo that lacks it, plus the
-// marker when that is missing too. A repo that already carries a default shim
-// is reported current and never rewritten (the submission-mode retrofit owns
-// reconciling its trigger); any other file at the reserved path is reported
-// unrecognized and left alone, since calling it "present" would hide that
-// nothing grades. The check runs inside the commit build against the parent
-// SHA, like retrofitShim, so it's rebase-safe.
+// marker when that is missing too. An existing default shim is never rewritten
+// (the submission-mode retrofit owns reconciling its trigger) and, with its
+// marker in place, is reported current; any other file at the reserved path is
+// reported unrecognized and left alone, since calling it "present" would hide
+// that nothing grades. The check runs inside the commit build against the
+// parent SHA, like retrofitShim, so it's rebase-safe.
 func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMode string, submissionTags []string, dryRun bool, marker backfillMarker) shimResult {
 	branch, notFound, err := studentRepoDefaultBranch(client, org, repo)
 	if err != nil {
@@ -312,11 +311,9 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 	})
 
 	var unrecognized error
-	// markerOnly records that the last build found the default shim already in
-	// place and wrote just the marker (a template that ships the shim, or a
-	// backfill by a release that wrote the shim alone). Without the marker the
-	// runner refuses the repo and the only remedy left is a heal re-accept,
-	// whose marker commit would move the baseline off the root.
+	// markerOnly: the default shim was already in place and only the marker was
+	// written (a template that ships the shim, or a backfill that wrote the shim
+	// alone); reported as shimMarkerAdded.
 	markerOnly := false
 	build := func(parentSHA string) (map[string]string, error) {
 		unrecognized = nil
@@ -393,7 +390,7 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 
 // isDefaultShim recognizes a default autograde shim from either accept client:
 // the known trigger block plus a `uses:` of the org's reusable runner. Mirrors
-// the web isDefaultShim (shimBackfill.ts).
+// the web isDefaultShim (submissionTrigger.ts).
 func isDefaultShim(content string) bool {
 	return shimTriggerBlock.MatchString(content) &&
 		strings.Contains(content, "/classroom50/.github/workflows/autograde-runner.yaml@")

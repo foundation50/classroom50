@@ -368,7 +368,7 @@ def test_first_gradeable_commit_fails_when_only_pre_backfill_work_exists(monkeyp
 
 
 def test_first_gradeable_commit_fails_when_backfill_introduced_the_marker(monkeypatch):
-    # The 1.56 no_autograder shape: accept wrote no marker, so the backfill
+    # A no_autograder accept writes no marker, so the backfill
     # commit is the ONLY commit touching .classroom50.yaml. It is not the
     # acceptance commit and must not stop the walk as one; the student's work
     # under it has no workflow, so the answer is the same red remedy as above,

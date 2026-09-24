@@ -235,8 +235,7 @@ func resolveFeedbackTemplateRef(entry assignment.AssignmentEntry) *feedbackTempl
 }
 
 // ensureOne runs the idempotent ensure flow for one repo and classifies the
-// result into a summary bucket. markerless (no_autograder) anchors the base on
-// the root commit when the repo has no marker.
+// result into a summary bucket.
 func ensureOne(client githubapi.Client, org, repo, branch, mode string, body feedbackBodySpec, markerless bool) repoResult {
 	err := ensureFeedbackPullRequest(client, org, repo, branch, mode, body, markerless)
 	switch {

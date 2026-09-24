@@ -238,7 +238,7 @@ export function updateRef(
 }
 
 // The accept-time tree entries for a student repo: the marker, the autograde
-// shim unless the assignment has none, and any paths the accept removes.
+// shim, and any paths the accept removes.
 export function assignmentAcceptTree(params: {
   metadataYaml: string
   autogradeYaml: string
@@ -256,10 +256,8 @@ export function assignmentAcceptTree(params: {
       content: metadataYaml,
     },
   ]
-  // A no-shim accept (empty_repo or no_autograder) passes an empty shim: commit
-  // only the marker, never an empty .github/workflows/autograde.yaml. Landing
-  // an empty workflow file would make the runner shape ambiguous and churn the
-  // teacher's own CI path. Mirrors the CLI's classroomcfg.DropFiles.
+  // Never land an empty workflow file: it would make the runner shape ambiguous
+  // and churn the teacher's own CI path. Mirrors the CLI's classroomcfg.DropFiles.
   if (autogradeYaml !== "") {
     tree.push({
       path: ".github/workflows/autograde.yaml",

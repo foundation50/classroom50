@@ -41,8 +41,8 @@ function fakeClient(opts: {
   shimExists?: boolean
   // Body served at the shim path when shimExists; defaults to a default shim.
   shimContent?: string
-  // Whether `.classroom50.yaml` already exists at HEAD (defaults to present,
-  // the shape of a repo accepted while the marker was still written).
+  // Whether `.classroom50.yaml` exists at HEAD (defaults to present, the
+  // built-in shape).
   markerExists?: boolean
   contentsStatus?: number
   workflowScope404?: boolean

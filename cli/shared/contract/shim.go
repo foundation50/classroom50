@@ -83,14 +83,11 @@ func ShimBackfillCommitMessage() string {
 	return PrefixCommit("Add autograde workflow (enable-autograder)") + "\n\n[skip ci]"
 }
 
-// ShimBackfillCommitSubject is ShimBackfillCommitMessage's first line. Every
-// baseline reader compares the marker's introducing commit against it: a
-// marker the backfill added belongs to a repo accepted without one
-// (no_autograder), whose baseline is the ROOT commit, and moving the baseline
-// onto the backfill would strand a Feedback PR frozen at the root behind the
-// runner's base check for the repo's whole life. Hand-mirrored in runner.py
-// and collect_scores.py (SHIM_BACKFILL_COMMIT_SUBJECT) and the web
-// (getMarkerBaseline).
+// ShimBackfillCommitSubject is ShimBackfillCommitMessage's first line, the
+// value baseline readers compare a marker's introducing commit against (see
+// IsShimBackfillCommit). Hand-mirrored in runner.py, collect_scores.py and
+// regrade_repos.py (SHIM_BACKFILL_COMMIT_SUBJECT) and the web
+// (web/src/util/commit.ts, isShimBackfillCommit).
 func ShimBackfillCommitSubject() string {
 	return CommitSubject(ShimBackfillCommitMessage())
 }

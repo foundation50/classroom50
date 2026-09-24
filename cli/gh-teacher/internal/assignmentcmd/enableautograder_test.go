@@ -105,7 +105,7 @@ func TestRunEnableAutograder_AddsMissingMarkerWithShim(t *testing.T) {
 		classroom: string(classroomBody),
 		repos: map[string]string{
 			"dst-hello-alice": "", // markerless: accepted while off
-			"dst-hello-bob":   "", // accepted while off, but before the marker was dropped
+			"dst-hello-bob":   "", // accepted while off, marker present
 		},
 		markerless: map[string]bool{"dst-hello-alice": true},
 	})

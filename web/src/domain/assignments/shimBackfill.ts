@@ -4,12 +4,9 @@
 // already-accepted repos with no workflow and nothing ever grades them. This is
 // the web twin of `gh teacher assignment enable-autograder`'s per-repo loop.
 //
-// A no_autograder accept also writes no `.classroom50.yaml`, and the runner the
-// shim calls refuses a repo without one, so a missing marker is written in the
-// same commit. Built teacher-side from the assignment entry: the runner reads
-// only classroom/assignment/secret from it, and the template source lets
-// `gh student submit` refresh teacher files. Repos accepted while the marker
-// was still written keep theirs untouched.
+// A no_autograder accept writes no `.classroom50.yaml` either, and the runner
+// refuses a repo without one, so a missing marker lands in the same commit,
+// rebuilt teacher-side from the assignment entry (see buildBackfillMarker).
 //
 // A repo that already carries a default shim is reported present and never
 // rewritten: the submission-mode retrofit (submissionTrigger.ts) owns
@@ -140,14 +137,9 @@ export async function addAutogradeShim(params: {
       ref: head.headSha,
     })) !== null
   if (!hasMarker) {
-    // Landing the marker here does not move the repo's baseline: every reader
-    // (runner.py, collect_scores.py, both CLIs, getMarkerBaseline) recognizes
-    // SHIM_BACKFILL_COMMIT_MESSAGE's subject and keeps the root commit, so a
-    // Feedback PR the no_autograder accept froze there stays valid. A repo
-    // with the shim but no marker (a template that ships the shim, or a
-    // backfill by a release that wrote the shim alone) still gets it here:
-    // without it the runner refuses the repo and the only remedy left would
-    // be a heal re-accept, whose marker commit would move the baseline.
+    // Written under SHIM_BACKFILL_COMMIT_MESSAGE so every reader keeps the root
+    // baseline (see baselineSource): a heal re-accept, the only other way to get
+    // a marker, would move it. Shim-but-no-marker repos need it just the same.
     files.push({
       path: ACCEPT_MARKER_PATH,
       content: await buildBackfillMarker(client, marker),
