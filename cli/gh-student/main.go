@@ -9,7 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghhelp"
+	"github.com/foundation50/classroom50-cli-shared/updatecheck"
 	"github.com/foundation50/gh-student/internal/auth"
 	"github.com/foundation50/gh-student/internal/invitecmd"
 	"github.com/foundation50/gh-student/internal/submitcmd"
@@ -57,8 +59,15 @@ func main() {
 	defer stop()
 
 	if err := root.ExecuteContext(ctx); err != nil {
+		if line := updatecheck.Advice(ctx, err, releaseOptions(), "Ask your teacher"); line != "" {
+			fmt.Fprintln(os.Stderr, line)
+		}
 		os.Exit(1)
 	}
+}
+
+func releaseOptions() updatecheck.Options {
+	return updatecheck.Options{Repo: contract.StudentExtensionRepo, Current: version}
 }
 
 // versionString renders cobra's --version line: a release build shows the

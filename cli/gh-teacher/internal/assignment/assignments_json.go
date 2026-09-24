@@ -24,6 +24,7 @@ import (
 	"unicode"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/updatecheck"
 	"github.com/foundation50/gh-teacher/internal/output"
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
@@ -67,12 +68,14 @@ func (e *UnsupportedValueError) Error() string {
 // UpgradeHint hedges with "if" because a hand-edited typo trips the same check.
 const UpgradeHint = "if a newer Classroom 50 client wrote this value, run `gh extension upgrade " + contract.TeacherExtensionRepo + "`"
 
+// withUpgradeHint also marks the error stale so main can follow the hedged
+// hint with a definite release comparison; the add path never gets here.
 func withUpgradeHint(err error) error {
 	var unsupported *UnsupportedValueError
 	if !errors.As(err, &unsupported) {
 		return err
 	}
-	return fmt.Errorf("%w; %s", err, UpgradeHint)
+	return updatecheck.Mark(fmt.Errorf("%w; %s", err, UpgradeHint))
 }
 
 // ValidateStudentPermission checks an assignment's optional student_permission

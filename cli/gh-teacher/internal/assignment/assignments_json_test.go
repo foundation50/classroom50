@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/updatecheck"
 )
 
 // TestStudentPermissionEnumParity pins the student_permission allow-list across
@@ -1697,6 +1698,10 @@ func TestParseAssignments_UnknownValueNamesUpgrade(t *testing.T) {
 			var unsupported *UnsupportedValueError
 			if got := errors.As(err, &unsupported); got != tc.wantUpgrade {
 				t.Errorf("errors.As(UnsupportedValueError) = %v, want %v", got, tc.wantUpgrade)
+			}
+			// The marker main keys the release lookup on travels with the hint.
+			if got := updatecheck.MaybeStale(err); got != tc.wantUpgrade {
+				t.Errorf("updatecheck.MaybeStale = %v, want %v", got, tc.wantUpgrade)
 			}
 		})
 	}

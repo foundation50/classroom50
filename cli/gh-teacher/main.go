@@ -14,7 +14,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghhelp"
+	"github.com/foundation50/classroom50-cli-shared/updatecheck"
 	"github.com/foundation50/gh-teacher/internal/assignmentcmd"
 	"github.com/foundation50/gh-teacher/internal/audit"
 	"github.com/foundation50/gh-teacher/internal/auth"
@@ -84,8 +86,15 @@ func main() {
 	// Most failures exit 1; a command that reports STATE through its exit code
 	// (`roster sync`'s 0/1/2 contract) rides out on a cliutil.ExitCodeError.
 	if err := root.ExecuteContext(ctx); err != nil {
+		if line := updatecheck.Advice(ctx, err, releaseOptions(), "Fix the value in assignments.json"); line != "" {
+			fmt.Fprintln(os.Stderr, line)
+		}
 		os.Exit(cliutil.ExitCodeFor(err))
 	}
+}
+
+func releaseOptions() updatecheck.Options {
+	return updatecheck.Options{Repo: contract.TeacherExtensionRepo, Current: version}
 }
 
 // versionString renders cobra's --version line. A release build shows the

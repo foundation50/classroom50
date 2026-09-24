@@ -18,6 +18,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghui"
 	"github.com/foundation50/classroom50-cli-shared/ghutil"
+	"github.com/foundation50/classroom50-cli-shared/updatecheck"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
@@ -263,11 +264,12 @@ func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) 
 // checkAcceptableMode rejects an unrecognized mode (which can't map to a repo
 // role). Shape coherence is a separate check (assertModeCoherentForCreate).
 // The teacher's tooling wrote the value, so a stale gh-student is the likely
-// cause and upgrading is the one step the student can take.
+// cause and upgrading is the one step the student can take; the mark lets
+// main follow up with a definite release comparison.
 func checkAcceptableMode(assignment, mode string) error {
 	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup && mode != contract.ModeTeam {
-		return fmt.Errorf("assignment %q uses mode %q, which this version of gh-student does not support. Run `gh extension upgrade %s`, then run accept again; if that does not help, ask your teacher",
-			assignment, mode, contract.StudentExtensionRepo)
+		return updatecheck.Mark(fmt.Errorf("assignment %q uses mode %q, which this version of gh-student does not support. Run `gh extension upgrade %s`, then run accept again; if that does not help, ask your teacher",
+			assignment, mode, contract.StudentExtensionRepo))
 	}
 	return nil
 }
