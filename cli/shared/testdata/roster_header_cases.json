@@ -1,44 +1,89 @@
 {
-  "comment": "Cross-language golden cases for the roster.csv extra-column header rules. Both readers accept any columns after the canonical seven and round-trip them (Go: parseRoster/EncodeRoster in cli/gh-teacher/internal/configrepo/students_csv.go; TS: parseRosterCsv/stringifyStudentsCsv in web/src/util/rosterCsv.ts), and both must refuse the same malformed headers so neither tool writes a file the other rejects. `extra_columns` are appended to the canonical header; `accept` is whether a file with that header and one valid data row parses without a header problem. Scoping: the web trims header names before applying these rules (Papa transformHeader) and the CLI reads them verbatim, so a name that differs only by surrounding whitespace, or a tab/CR-led name, is a known divergence and is deliberately not a case here. Update both readers in lockstep.",
+  "comment": "Cross-language golden cases for the stored roster.csv header rules. Both readers (Go: parseRosterLayout in cli/gh-teacher/internal/configrepo/students_csv.go; TS: parseRosterCsv in web/src/util/rosterCsv.ts) match columns by trimmed header NAME, not position: at least one identity column (github_id, username, email) must be present, every other reserved column is optional and reads as empty when absent, and any other column is preserved verbatim and otherwise ignored, wherever it sits. Both writers always emit the full canonical header. Both readers must refuse the same malformed headers so neither tool writes a file the other rejects: no identity column, a duplicate name (canonical or extra), and an extra name beginning with a spreadsheet formula trigger. `header` is the full header row; `accept` is whether a file with that header and one data row of matching width parses without a header problem. Update both readers in lockstep.",
   "cases": [
     {
+      "why": "the canonical seven",
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role"],
+      "accept": true
+    },
+    {
+      "why": "a pre-role file: role is optional",
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id"],
+      "accept": true
+    },
+    {
       "why": "teacher-added columns after role",
-      "extra_columns": ["student_id", "cohort"],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", "student_id", "cohort"],
+      "accept": true
+    },
+    {
+      "why": "teacher-added columns before and between ours",
+      "header": ["student_id", "username", "cohort", "first_name", "last_name", "email", "section", "github_id", "role"],
+      "accept": true
+    },
+    {
+      "why": "canonical columns in a different order",
+      "header": ["github_id", "email", "username", "last_name", "first_name", "section"],
+      "accept": true
+    },
+    {
+      "why": "whitespace around a header name is trimmed",
+      "header": ["username", " first_name", "last_name ", "email", "section", "github_id", "role"],
       "accept": true
     },
     {
       "why": "an empty header name is accepted",
-      "extra_columns": [""],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", ""],
       "accept": true
     },
     {
+      "why": "non-identity reserved columns are optional (no github_id)",
+      "header": ["username", "first_name", "last_name", "email", "section"],
+      "accept": true
+    },
+    {
+      "why": "a single identity column is enough",
+      "header": ["email"],
+      "accept": true
+    },
+    {
+      "why": "a renamed identity column is just another extra when another identity column remains",
+      "header": ["user", "first_name", "last_name", "email", "section", "github_id", "role"],
+      "accept": true
+    },
+    {
+      "why": "no identity column",
+      "header": ["first_name", "last_name", "section", "student_id"],
+      "accept": false
+    },
+    {
       "why": "a duplicated extra column would clobber on read",
-      "extra_columns": ["note", "note"],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", "note", "note"],
       "accept": false
     },
     {
       "why": "an extra column reusing a canonical name",
-      "extra_columns": ["email"],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", "email"],
       "accept": false
     },
     {
       "why": "formula trigger: =",
-      "extra_columns": ["=HYPERLINK(1)"],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", "=HYPERLINK(1)"],
       "accept": false
     },
     {
       "why": "formula trigger: +",
-      "extra_columns": ["+x"],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", "+x"],
       "accept": false
     },
     {
       "why": "formula trigger: -",
-      "extra_columns": ["-x"],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", "-x"],
       "accept": false
     },
     {
       "why": "formula trigger: @",
-      "extra_columns": ["@x"],
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", "@x"],
       "accept": false
     }
   ]

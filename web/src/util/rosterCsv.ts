@@ -26,6 +26,15 @@ export const STUDENT_CSV_FIELDS = [
 ] as const
 type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 
+// The reserved columns that can identify a student, in the precedence order the
+// import resolves them (a github_id addresses an immutable account; a username
+// is what an SIS export produces; an email routes to an invitation). A stored
+// roster or an upload must carry at least one; every other reserved column is
+// optional on read (absent reads as "") because stringifyStudentsCsv always
+// writes the full header, so a file only lacks a column when hand-edited or
+// written before that column existed. Mirrors the CLI's identityColumns.
+export const IDENTITY_CSV_FIELDS = ["github_id", "username", "email"] as const
+
 // Cells of the header columns beyond the canonical seven, keyed by the verbatim
 // header name. A teacher may widen roster.csv by hand or via the CLI, and
 // every read-modify-write here must round-trip those cells like the CLI's
@@ -154,7 +163,7 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
     )
 
   const problems: RosterCsvProblem[] = [
-    ...extraColumnProblems(extraColumns, parsed.meta.renamedHeaders),
+    ...headerProblems(fields, extraColumns, parsed.meta.renamedHeaders),
     ...parsed.errors
       .filter(
         (error) =>
@@ -187,20 +196,42 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
   return { rows, problems, columns: [...STUDENT_CSV_FIELDS, ...extraColumns] }
 }
 
-// Header-level problems for the extra columns, mirroring the CLI's parseRoster
-// rejections so neither tool writes a file the other refuses: a duplicate name
-// (Papa renames it to `name_1` and records the original in renamedHeaders; the
-// CLI clobbers on read), a name reusing a canonical column, and a name leading
-// with a formula trigger (header names are written verbatim, so it would
-// re-inject a formula). An empty name is accepted, as in the CLI. Header names
-// arrive trimmed (transformHeader), a web-side leniency the CLI doesn't share.
-function extraColumnProblems(
+// Header-level problems, mirroring the CLI's parseRosterLayout rejections so
+// neither tool writes a file the other refuses. Columns are matched by NAME, so
+// only the reserved names are interpreted and everything else is a teacher's
+// own column: a header with no identity column at all (nothing could address a
+// student, so every row would be noise), a duplicate name (Papa renames it to
+// `name_1` and records the original in renamedHeaders; the CLI clobbers on
+// read), and a name leading with a formula trigger (header names are written
+// verbatim, so it would re-inject a formula). An empty name is accepted, as in
+// the CLI. Header names arrive trimmed (transformHeader), as the CLI trims too.
+function headerProblems(
+  fields: readonly string[],
   extraColumns: string[],
   renamedHeaders: Record<string, string> | undefined,
 ): RosterCsvProblem[] {
   const problems: RosterCsvProblem[] = []
   const headerProblem = (key: string, name: string) =>
     problems.push({ line: 1, message: { key, params: { name } } })
+  // No header row at all (a zero-byte file): name the fix. The CLI rejects
+  // this file too.
+  if (fields.length === 0) {
+    return [
+      {
+        line: 1,
+        message: {
+          key: "students.rosterProblemEmptyFile",
+          params: { header: STUDENT_CSV_FIELDS.join(",") },
+        },
+      },
+    ]
+  }
+  if (!IDENTITY_CSV_FIELDS.some((name) => fields.includes(name))) {
+    problems.push({
+      line: 1,
+      message: { key: "students.rosterProblemNoIdentityColumn" },
+    })
+  }
   for (const [, original] of Object.entries(renamedHeaders ?? {})) {
     headerProblem(
       isCanonicalColumn(original)

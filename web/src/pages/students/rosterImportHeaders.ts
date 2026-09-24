@@ -1,3 +1,5 @@
+import { IDENTITY_CSV_FIELDS } from "@/util/rosterCsv"
+
 // The single source of truth for the roster-import header vocabulary, shared by
 // the parser (parseRosterImportFile) and the empty-result diagnostic
 // (detectImportHeaderIssue). Keeping one exported set is what lets those two
@@ -6,17 +8,9 @@
 
 // Columns that can identify a row, in PRECEDENCE order: a `github_id` wins over
 // a `username`, which wins over an `email`. A row needs at least one of them.
-//
-// The order encodes provenance, not a general id-over-login rule: a `github_id`
-// column is produced only by Classroom 50's own roster.csv, so it addresses an
-// immutable account, while a `username` column is what an SIS export or a
-// hand-typed list produces. `email` identifies a student who has no GitHub
-// account on file yet, and routes to an email invitation instead of an enroll.
-export const IDENTITY_IMPORT_HEADERS = [
-  "github_id",
-  "username",
-  "email",
-] as const
+// The same set gates the stored roster.csv reader (parseRosterCsv), so the two
+// header policies can't diverge.
+export const IDENTITY_IMPORT_HEADERS = IDENTITY_CSV_FIELDS
 
 // Columns the import reads as metadata once a row's identity is established.
 // `name` is an alias split into first/last. `email` is deliberately NOT here: it

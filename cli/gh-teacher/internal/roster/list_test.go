@@ -374,7 +374,7 @@ func TestRunRosterList(t *testing.T) {
 		// Wrong header -> parseRoster rejects; loadRoster wraps with the
 		// repo path; runRosterList must propagate it.
 		mock := &rosterListMock{files: map[string]string{
-			"cs-principles/roster.csv": "name,email\nalice,alice@example.edu\n",
+			"cs-principles/roster.csv": "name,student_id\nalice,S1\n",
 		}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)

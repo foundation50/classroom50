@@ -66,7 +66,7 @@ func TestLoadRoster_MissingErrorsNamingRosterCSV(t *testing.T) {
 
 func TestLoadRoster_MalformedRosterCSVNamesRosterPath(t *testing.T) {
 	server := httptest.NewServer(rosterContentsMux(t, map[string]string{
-		"cs/roster.csv": "name,email\nalice,alice@uni.edu\n", // wrong header
+		"cs/roster.csv": "name,student_id\nalice,S1\n", // no identity column
 	}))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
