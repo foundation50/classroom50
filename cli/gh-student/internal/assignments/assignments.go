@@ -37,10 +37,8 @@ const PagesFetchTimeout = 15 * time.Second
 // future shape additions work without a flag day.
 type Entry struct {
 	Slug string `json:"slug"`
-	// RenamedFrom is the slug this assignment had before a one-shot
-	// `gh teacher assignment rename`. Repos a partially completed rename left
-	// behind still carry the old prefix, so name-based resolution matches it
-	// too. Absent for a never-renamed assignment.
+	// RenamedFrom is the slug before a one-shot `gh teacher assignment
+	// rename`; repos a partial rename left behind still carry it.
 	RenamedFrom  string       `json:"renamed_from,omitempty"`
 	Name         string       `json:"name"`
 	Mode         string       `json:"mode"`
@@ -345,20 +343,16 @@ func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, e
 	}
 }
 
-// fetchManifestFromURL is the HTTP-bearing core. Returns actionable messages
-// for network failures, 404, and schema mismatches.
+// fetchManifestFromURL fetches and decodes a manifest, checking its schema
+// sentinel so a future shape surfaces as "update gh-student" rather than as
+// silently dropped entries.
 func fetchManifestFromURL(ctx context.Context, rawURL string) ([]Entry, error) {
-	body, err := getPagesJSON(ctx, rawURL)
-	if err != nil {
+	var file assignmentsFile
+	if err := getPagesJSON(ctx, rawURL, &file); err != nil {
 		if errors.Is(err, errPagesNotFound) {
 			return nil, fmt.Errorf("%s returned 404: the classroom may not exist yet, or its publish-pages workflow may not have run; ask your teacher to confirm the classroom is published: %w", rawURL, ErrManifestNotFound)
 		}
 		return nil, err
-	}
-
-	var file assignmentsFile
-	if err := json.Unmarshal(body, &file); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", rawURL, err)
 	}
 	if file.Schema != assignmentsSchemaV1 {
 		return nil, fmt.Errorf("%s: schema = %q, want %q; this version of gh-student is too old to read the classroom's assignment list, so update gh-student and try again",
@@ -367,13 +361,11 @@ func fetchManifestFromURL(ctx context.Context, rawURL string) ([]Entry, error) {
 	return file.Assignments, nil
 }
 
-// ClassroomSummary is one row of classrooms-index.json. Only the public
-// fields publish-pages.yaml emits are typed; the index never carries a
-// classroom's secret, so a protected classroom is listed but its manifest
-// still needs the key.
+// ClassroomSummary is one row of classrooms-index.json. Only the field the
+// student CLI consumes is typed; the index never carries a classroom's secret,
+// so a protected classroom is listed but its manifest still needs the key.
 type ClassroomSummary struct {
 	ShortName string `json:"short_name"`
-	Name      string `json:"name"`
 }
 
 // classroomsIndexFile is the top-level shape of classrooms-index.json.
@@ -389,32 +381,40 @@ func FetchClassroomsIndex(ctx context.Context, org string) ([]ClassroomSummary, 
 }
 
 func fetchClassroomsIndexFromURL(ctx context.Context, rawURL string) ([]ClassroomSummary, error) {
-	body, err := getPagesJSON(ctx, rawURL)
-	if err != nil {
+	var file classroomsIndexFile
+	if err := getPagesJSON(ctx, rawURL, &file); err != nil {
 		if errors.Is(err, errPagesNotFound) {
 			return nil, fmt.Errorf("%s returned 404: the organization has no published Classroom 50 site; ask your teacher to check that the publish-pages workflow has run", rawURL)
 		}
 		return nil, err
 	}
-	var file classroomsIndexFile
-	if err := json.Unmarshal(body, &file); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", rawURL, err)
-	}
 	return file.Classrooms, nil
 }
 
-// errPagesNotFound is getPagesJSON's raw 404 signal; each caller rewraps it
-// with a message naming what was missing.
+// errPagesNotFound is getPages's raw 404 signal; each caller rewraps it with
+// a message naming what was missing.
 var errPagesNotFound = errors.New("not found (404)")
 
-// getPagesJSON GETs one public Pages document, bounded by PagesFetchTimeout
-// and a 4 MiB body cap.
-func getPagesJSON(ctx context.Context, rawURL string) ([]byte, error) {
+// getPagesJSON GETs one public Pages document and decodes it into dst.
+func getPagesJSON(ctx context.Context, rawURL string, dst any) error {
+	body, err := getPages(ctx, rawURL, "application/json")
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, dst); err != nil {
+		return fmt.Errorf("parse %s: %w", rawURL, err)
+	}
+	return nil
+}
+
+// getPages GETs one public Pages document, bounded by PagesFetchTimeout and a
+// 4 MiB body cap. No auth: the Pages site is public by design.
+func getPages(ctx context.Context, rawURL, accept string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build GET %s: %w", rawURL, err)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 
 	client := &http.Client{Timeout: PagesFetchTimeout}
 	resp, err := client.Do(req)
@@ -489,29 +489,12 @@ func FetchAutograderWorkflow(ctx context.Context, org, classroom, secret, name s
 // "deployment still in flight, retry". YAML is validated before returning so
 // malformed bodies fail at fetch time instead of inside Actions logs.
 func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (AutogradeWorkflow, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	body, err := getPages(ctx, rawURL, "text/yaml, text/plain, */*;q=0.5")
 	if err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("build GET %s: %w", rawURL, err)
-	}
-	req.Header.Set("Accept", "text/yaml, text/plain, */*;q=0.5")
-
-	client := &http.Client{Timeout: PagesFetchTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("GET %s: %w (the classroom's published site may not be live yet; ask your teacher to check that the publish-pages workflow has run)", rawURL, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404); ask your teacher to confirm the file exists in the classroom50 repository and that the publish-pages workflow has run", name, rawURL)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return AutogradeWorkflow{}, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
-	if err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("read %s: %w", rawURL, err)
+		if errors.Is(err, errPagesNotFound) {
+			return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404); ask your teacher to confirm the file exists in the classroom50 repository and that the publish-pages workflow has run", name, rawURL)
+		}
+		return AutogradeWorkflow{}, err
 	}
 	if len(bytes.TrimSpace(body)) == 0 {
 		return AutogradeWorkflow{}, fmt.Errorf("GET %s: empty body; the site may still be deploying, so retry in a minute", rawURL)

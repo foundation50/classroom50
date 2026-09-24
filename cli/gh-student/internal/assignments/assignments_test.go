@@ -279,8 +279,14 @@ func fetchOneTestEntry(t *testing.T, body, slug string) (Entry, func()) {
 // assignments.json path; other paths 404 (pins the URL shape).
 func newPagesServer(t *testing.T, body string, status int) (*httptest.Server, func()) {
 	t.Helper()
+	return newPagesServerAt(t, "/cs-principles/assignments.json", body, status)
+}
+
+// newPagesServerAt mounts `body`/`status` at one Pages path; other paths 404.
+func newPagesServerAt(t *testing.T, path, body string, status int) (*httptest.Server, func()) {
+	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/cs-principles/assignments.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
@@ -359,14 +365,8 @@ func TestPagesClassroomsIndexURL(t *testing.T) {
 func TestFetchClassroomsIndexFromURL(t *testing.T) {
 	newIndexServer := func(t *testing.T, body string, status int) *httptest.Server {
 		t.Helper()
-		mux := http.NewServeMux()
-		mux.HandleFunc("/classrooms-index.json", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			_, _ = w.Write([]byte(body))
-		})
-		server := httptest.NewServer(mux)
-		t.Cleanup(server.Close)
+		server, cleanup := newPagesServerAt(t, "/classrooms-index.json", body, status)
+		t.Cleanup(cleanup)
 		return server
 	}
 

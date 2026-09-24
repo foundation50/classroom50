@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,21 +16,30 @@ import (
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
+	"github.com/foundation50/gh-student/internal/githubtest"
 	"github.com/foundation50/gh-student/internal/ui"
 )
+
+// stubIndex replaces only the classrooms-index reader for one test.
+func stubIndex(t *testing.T, fn func(context.Context, string) ([]assignments.ClassroomSummary, error)) {
+	t.Helper()
+	orig := fetchClassroomsIndexFn
+	t.Cleanup(func() { fetchClassroomsIndexFn = orig })
+	fetchClassroomsIndexFn = fn
+}
 
 // stubPages installs fake classrooms-index and per-classroom manifest readers
 // for one test. manifests maps classroom -> entries; a classroom absent from
 // it answers a whole-manifest 404 (unlisted or unpublished).
 func stubPages(t *testing.T, index []assignments.ClassroomSummary, manifests map[string][]assignments.Entry) *[]string {
 	t.Helper()
-	origIndex, origManifest := fetchClassroomsIndexFn, fetchManifestFn
-	t.Cleanup(func() { fetchClassroomsIndexFn, fetchManifestFn = origIndex, origManifest })
+	stubIndex(t, func(context.Context, string) ([]assignments.ClassroomSummary, error) {
+		return index, nil
+	})
+	origManifest := fetchManifestFn
+	t.Cleanup(func() { fetchManifestFn = origManifest })
 
 	var fetched []string
-	fetchClassroomsIndexFn = func(context.Context, string) ([]assignments.ClassroomSummary, error) {
-		return index, nil
-	}
 	fetchManifestFn = func(_ context.Context, _, classroom, secret string) ([]assignments.Entry, error) {
 		fetched = append(fetched, classroom+"?key="+secret)
 		entries, ok := manifests[classroom]
@@ -312,11 +323,9 @@ func TestResolveFromRepoName_LookupErrorPropagates(t *testing.T) {
 }
 
 func TestResolveFromRepoName_IndexErrorPropagates(t *testing.T) {
-	orig := fetchClassroomsIndexFn
-	t.Cleanup(func() { fetchClassroomsIndexFn = orig })
-	fetchClassroomsIndexFn = func(context.Context, string) ([]assignments.ClassroomSummary, error) {
+	stubIndex(t, func(context.Context, string) ([]assignments.ClassroomSummary, error) {
 		return nil, errors.New("returned 404: the organization has no published Classroom 50 site")
-	}
+	})
 
 	_, _, err := resolveFromRepoName(context.Background(), "org", "cs50-hello-alice", "", testUI(), false)
 	if err == nil || !strings.Contains(err.Error(), "no published Classroom 50 site") {
@@ -335,12 +344,10 @@ func TestReadOrResolveConfig(t *testing.T) {
 	t.Run("marker present: read as before, resolver never runs", func(t *testing.T) {
 		dir := t.TempDir()
 		writeMarker(t, dir, "classroom: cs50\nassignment: hello\n")
-		orig := fetchClassroomsIndexFn
-		t.Cleanup(func() { fetchClassroomsIndexFn = orig })
-		fetchClassroomsIndexFn = func(context.Context, string) ([]assignments.ClassroomSummary, error) {
+		stubIndex(t, func(context.Context, string) ([]assignments.ClassroomSummary, error) {
 			t.Fatal("resolver must not run when the marker exists")
 			return nil, nil
-		}
+		})
 
 		cfg, entry, err := readOrResolveConfig(context.Background(), dir, "org", "cs50-hello-alice", "", testUI(), false)
 		if err != nil {
@@ -424,11 +431,11 @@ func TestReadConfigMissingFileIsErrNotExist(t *testing.T) {
 func TestRefuseStaleMarkerlessClone(t *testing.T) {
 	stub := func(t *testing.T, exists bool, err error) *[]string {
 		t.Helper()
-		orig := remoteFileExistsFn
-		t.Cleanup(func() { remoteFileExistsFn = orig })
+		orig := remoteMarkerExistsFn
+		t.Cleanup(func() { remoteMarkerExistsFn = orig })
 		var probed []string
-		remoteFileExistsFn = func(_ githubapi.Client, owner, repo, path string) (bool, error) {
-			probed = append(probed, owner+"/"+repo+":"+path)
+		remoteMarkerExistsFn = func(_ context.Context, _ githubapi.Client, owner, repo string) (bool, error) {
+			probed = append(probed, owner+"/"+repo)
 			return exists, err
 		}
 		return &probed
@@ -439,27 +446,60 @@ func TestRefuseStaleMarkerlessClone(t *testing.T) {
 		// shim to the remote; a snapshot push from this stale clone would
 		// delete both and report success.
 		probed := stub(t, true, nil)
-		err := refuseStaleMarkerlessClone(nil, "org", "cs50-hello-alice")
+		err := refuseStaleMarkerlessClone(context.Background(), nil, "org", "cs50-hello-alice")
 		if err == nil || !strings.Contains(err.Error(), "git pull") {
 			t.Fatalf("err = %v, want a git pull instruction", err)
 		}
-		if got := strings.Join(*probed, " "); got != "org/cs50-hello-alice:"+classroomcfg.MetadataPath {
-			t.Errorf("probed %q, want the marker path on the clone's remote", got)
+		if got := strings.Join(*probed, " "); got != "org/cs50-hello-alice" {
+			t.Errorf("probed %q, want the clone's remote", got)
 		}
 	})
 
 	t.Run("remote has no marker either: proceed", func(t *testing.T) {
 		stub(t, false, nil)
-		if err := refuseStaleMarkerlessClone(nil, "org", "cs50-hello-alice"); err != nil {
+		if err := refuseStaleMarkerlessClone(context.Background(), nil, "org", "cs50-hello-alice"); err != nil {
 			t.Fatalf("a genuinely markerless repo must submit, got %v", err)
 		}
 	})
 
 	t.Run("probe fails: stop rather than guess", func(t *testing.T) {
 		stub(t, false, errors.New("GET repos/...: 502"))
-		err := refuseStaleMarkerlessClone(nil, "org", "cs50-hello-alice")
+		err := refuseStaleMarkerlessClone(context.Background(), nil, "org", "cs50-hello-alice")
 		if err == nil || !strings.Contains(err.Error(), "502") {
 			t.Fatalf("err = %v, want the probe error surfaced", err)
+		}
+	})
+}
+
+func TestRemoteMarkerExists(t *testing.T) {
+	newClient := func(t *testing.T, status int) githubapi.Client {
+		t.Helper()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/repos/o/r/contents/"+classroomcfg.MetadataPath {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		t.Cleanup(server.Close)
+		return githubtest.NewTestClient(t, server)
+	}
+
+	t.Run("200 means the marker is on the remote", func(t *testing.T) {
+		got, err := remoteMarkerExists(context.Background(), newClient(t, http.StatusOK), "o", "r")
+		if err != nil || !got {
+			t.Fatalf("got (%v, %v), want (true, nil)", got, err)
+		}
+	})
+	t.Run("404 means it is absent, not an error", func(t *testing.T) {
+		got, err := remoteMarkerExists(context.Background(), newClient(t, http.StatusNotFound), "o", "r")
+		if err != nil || got {
+			t.Fatalf("got (%v, %v), want (false, nil)", got, err)
+		}
+	})
+	t.Run("other statuses propagate", func(t *testing.T) {
+		if _, err := remoteMarkerExists(context.Background(), newClient(t, http.StatusBadGateway), "o", "r"); err == nil {
+			t.Fatal("expected an error on 502")
 		}
 	})
 }

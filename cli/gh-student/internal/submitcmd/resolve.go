@@ -1,11 +1,14 @@
 package submitcmd
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"net/url"
+	"slices"
 	"strings"
 
+	"github.com/foundation50/classroom50-cli-shared/ghutil"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
@@ -18,7 +21,7 @@ import (
 var (
 	fetchClassroomsIndexFn = assignments.FetchClassroomsIndex
 	fetchManifestFn        = assignments.FetchManifest
-	remoteFileExistsFn     = classroomcfg.FileExists
+	remoteMarkerExistsFn   = remoteMarkerExists
 )
 
 // markerlessErr prefixes every resolver failure with the one fact the student
@@ -26,6 +29,12 @@ var (
 // heading on this lead-in.
 func markerlessErr(format string, args ...any) error {
 	return fmt.Errorf(classroomcfg.MetadataPath+" not found in this clone, and "+format, args...)
+}
+
+// wrongKeyMessage is the one text for "the --key you passed opens nothing",
+// shared by the resolver and the marker path so the two can't drift.
+func wrongKeyMessage(classroom string) string {
+	return fmt.Sprintf("classroom %q has no assignment list under the access key you passed; double-check the key your teacher gave you, or omit --key if the classroom isn't unlisted", classroom)
 }
 
 // repoNameMatch is one (classroom, assignment) pair whose repo-name prefix the
@@ -58,7 +67,7 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 	repoLower := strings.ToLower(repo)
 	var candidates []string
 	for _, room := range index {
-		short := strings.ToLower(strings.TrimSpace(room.ShortName))
+		short := strings.ToLower(room.ShortName)
 		if short != "" && strings.HasPrefix(repoLower, short+"-") {
 			candidates = append(candidates, room.ShortName)
 		}
@@ -109,7 +118,7 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 	case lookupErr != nil:
 		return nil, nil, markerlessErr("the assignment couldn't be looked up from the repository name: %w", lookupErr)
 	case len(wrongKey) > 0:
-		return nil, nil, markerlessErr("classroom %q has no assignment list under the access key you passed; double-check the key your teacher gave you, or omit --key if the classroom isn't unlisted", wrongKey[0])
+		return nil, nil, markerlessErr("%s", wrongKeyMessage(wrongKey[0]))
 	case len(unlisted) > 0:
 		return nil, nil, markerlessErr("classroom %q uses an unlisted URL, so its assignment list needs the access key your teacher gave you; run `gh student submit --key <key>`", unlisted[0])
 	default:
@@ -123,8 +132,8 @@ func resolveFromRepoName(ctx context.Context, org, repo, key string, u *ui.UI, v
 // clone of the remote, so pushing would delete the backfilled marker and
 // autograde workflow and report success. A plain `git push` from the same
 // clone would conflict; this is the equivalent stop.
-func refuseStaleMarkerlessClone(client githubapi.Client, owner, repo string) error {
-	exists, err := remoteFileExistsFn(client, owner, repo, classroomcfg.MetadataPath)
+func refuseStaleMarkerlessClone(ctx context.Context, client githubapi.Client, owner, repo string) error {
+	exists, err := remoteMarkerExistsFn(ctx, client, owner, repo)
 	if err != nil {
 		return fmt.Errorf("check whether %s/%s already has %s: %w", owner, repo, classroomcfg.MetadataPath, err)
 	}
@@ -132,6 +141,20 @@ func refuseStaleMarkerlessClone(client githubapi.Client, owner, repo string) err
 		return fmt.Errorf("this repository was updated by your teacher (it now carries %s), but your clone doesn't have that change yet; run `git pull`, then `gh student submit` again", classroomcfg.MetadataPath)
 	}
 	return nil
+}
+
+// remoteMarkerExists probes the default branch for the marker through the
+// same bounded GET every other API read in submit uses, so a stalled
+// connection fails instead of hanging before the snapshot starts.
+func remoteMarkerExists(ctx context.Context, client githubapi.Client, owner, repo string) (bool, error) {
+	path := fmt.Sprintf("repos/%s/%s/contents/%s", url.PathEscape(owner), url.PathEscape(repo), classroomcfg.EscapeContentPath(classroomcfg.MetadataPath))
+	if _, err := getBounded(ctx, client, path, defaultBranchTimeout); err != nil {
+		if ghutil.IsHTTPNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // matchAssignmentRepo returns every entry of one classroom whose repo-name
@@ -162,8 +185,8 @@ func longestPrefixMatches(matches []repoNameMatch) []repoNameMatch {
 	if len(matches) < 2 {
 		return matches
 	}
-	sort.SliceStable(matches, func(i, j int) bool {
-		return len(matches[i].prefix) > len(matches[j].prefix)
+	slices.SortStableFunc(matches, func(a, b repoNameMatch) int {
+		return cmp.Compare(len(b.prefix), len(a.prefix))
 	})
 	best := len(matches[0].prefix)
 	end := 1

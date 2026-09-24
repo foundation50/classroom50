@@ -100,16 +100,17 @@ func NewCmd() *cobra.Command {
 
 // readOrResolveConfig reads the clone's `.classroom50.yaml`, falling back to
 // the repo-name resolver when the file is absent (see resolveFromRepoName).
-// The Entry is non-nil only on the fallback path, where the resolver already
-// fetched the manifest row; any other read error passes through unchanged.
+// The Entry is non-nil only on the fallback path; any other read error passes
+// through unchanged.
 func readOrResolveConfig(ctx context.Context, root, org, repo, key string, u *ui.UI, verbose bool) (*classroomcfg.Config, *assignments.Entry, error) {
 	config, err := classroomcfg.ReadConfig(filepath.Join(root, classroomcfg.MetadataPath))
 	if err == nil {
-		if key != "" && config.Secret != "" && key != config.Secret {
-			return nil, nil, fmt.Errorf("--key does not match the access key recorded in %s; omit --key, since this repository already knows its classroom", classroomcfg.MetadataPath)
-		}
-		if key != "" && config.Secret == "" {
+		switch {
+		case key == "" || key == config.Secret:
+		case config.Secret == "":
 			config.Secret = key
+		default:
+			return nil, nil, fmt.Errorf("--key does not match the access key recorded in %s; omit --key, since this repository already knows its classroom", classroomcfg.MetadataPath)
 		}
 		return config, nil, nil
 	}
@@ -149,9 +150,28 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		return err
 	}
 	if entry != nil {
-		if err := refuseStaleMarkerlessClone(client, repoOwner, repoName); err != nil {
+		if err := refuseStaleMarkerlessClone(ctx, client, repoOwner, repoName); err != nil {
 			return err
 		}
+	}
+
+	// Resolve the manifest entry once (best-effort): allowed_files fails open
+	// (the runner enforces authoritatively at grade time); submission_mode
+	// failing to resolve is warned about after the push (a tag-mode
+	// assignment would then need a re-run to grade).
+	var entryErr error
+	if entry == nil {
+		entry, entryErr = fetchSubmitEntry(ctx, repoOwner, config, u, verbose)
+		// A key the student typed that opens nothing is a wrong key, not a
+		// Pages blip: stop here as the markerless path does, rather than push
+		// a submission whose tag-mode grading would silently be skipped.
+		if entryErr != nil && key != "" && assignments.IsManifestNotFound(entryErr) {
+			return errors.New(wrongKeyMessage(config.Classroom))
+		}
+	}
+	var allowedFiles []string
+	if entry != nil {
+		allowedFiles = entry.AllowedFiles
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("Submit %s", config.Assignment))
@@ -191,26 +211,6 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 
 	if verbose {
 		u.Detail("Preparing submission snapshot from %s", root)
-	}
-
-	// Resolve the manifest entry once (best-effort): allowed_files fails open
-	// (the runner enforces authoritatively at grade time); submission_mode
-	// failing to resolve is warned about after the push (a tag-mode
-	// assignment would then need a re-run to grade). The repo-name resolver
-	// already fetched the row for a markerless clone.
-	var entryErr error
-	if entry == nil {
-		entry, entryErr = fetchSubmitEntry(ctx, repoOwner, config, u, verbose)
-		// A key the student typed that opens nothing is a wrong key, not a
-		// Pages blip: stop here as the markerless path does, rather than push
-		// a submission whose tag-mode grading would silently be skipped.
-		if entryErr != nil && key != "" && assignments.IsManifestNotFound(entryErr) {
-			return fmt.Errorf("classroom %q has no assignment list under the access key you passed; double-check the key your teacher gave you, or omit --key if the classroom isn't unlisted", config.Classroom)
-		}
-	}
-	var allowedFiles []string
-	if entry != nil {
-		allowedFiles = entry.AllowedFiles
 	}
 
 	if err := copySubmittableFiles(root, workTree, allowedFiles, u, verbose); err != nil {
@@ -295,7 +295,7 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		// Confirmation on stdout: the assignment's full name (falls back to
 		// the slug — see resolveAssignmentName), the local submission time,
 		// then a link to the submitted commit.
-		displayName := resolveAssignmentName(ctx, repoOwner, config.Classroom, config.Secret, config.Assignment)
+		displayName := resolveAssignmentName(ctx, entry, repoOwner, config.Classroom, config.Secret, config.Assignment)
 		localTime := time.Now().Local().Format("2006-01-02 15:04:05 MST")
 		_, _ = fmt.Fprintf(out, "Submitted assignment %q at %s\n", displayName, localTime)
 		_, _ = fmt.Fprintf(out, "View your submission at: %s/commit/%s\n", repoHTMLURL, sha)
@@ -437,15 +437,22 @@ func existingSubmitTagAt(ctx context.Context, gitDir, sha string) (string, error
 // timeNow is stubbed in tests to pin the generated tag name.
 var timeNow = time.Now
 
-// resolveAssignmentName returns the assignment's full name from the published
-// manifest, falling back to the slug on any error/timeout. The fetch is
-// bounded (assignmentNameTimeout) and runs after the push succeeded, so submit
-// never fails — or stalls — over cosmetics.
-func resolveAssignmentName(ctx context.Context, org, classroom, secret, slug string) string {
-	ctx, cancel := context.WithTimeout(ctx, assignmentNameTimeout)
-	defer cancel()
-	entry, err := assignments.FetchEntry(ctx, org, classroom, secret, slug)
-	if err != nil || strings.TrimSpace(entry.Name) == "" {
+// resolveAssignmentName returns the assignment's full name, from the manifest
+// row already in hand when the pre-push fetch or the repo-name resolver
+// produced one, else from a bounded (assignmentNameTimeout) Pages fetch. Falls
+// back to the slug on any error/timeout: this runs after the push succeeded,
+// so submit never fails or stalls over cosmetics.
+func resolveAssignmentName(ctx context.Context, entry *assignments.Entry, org, classroom, secret, slug string) string {
+	if entry == nil {
+		ctx, cancel := context.WithTimeout(ctx, assignmentNameTimeout)
+		defer cancel()
+		fetched, err := assignments.FetchEntry(ctx, org, classroom, secret, slug)
+		if err != nil {
+			return slug
+		}
+		entry = &fetched
+	}
+	if strings.TrimSpace(entry.Name) == "" {
 		return slug
 	}
 	return entry.Name
