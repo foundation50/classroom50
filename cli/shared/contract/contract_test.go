@@ -612,6 +612,17 @@ func TestFeedbackTemplateContract(t *testing.T) {
 	}
 }
 
+// TestExtensionRepos pins the `gh extension upgrade` targets the CLIs print in
+// stale-binary errors to the repos .github/workflows/cli-release.yaml publishes.
+func TestExtensionRepos(t *testing.T) {
+	if TeacherExtensionRepo != "foundation50/gh-teacher" {
+		t.Errorf("TeacherExtensionRepo = %q, want foundation50/gh-teacher", TeacherExtensionRepo)
+	}
+	if StudentExtensionRepo != "foundation50/gh-student" {
+		t.Errorf("StudentExtensionRepo = %q, want foundation50/gh-student", StudentExtensionRepo)
+	}
+}
+
 // TestScopesSatisfy pins the single OAuth scope-hierarchy source both CLIs
 // share (the shared auto-login probe and gh-teacher's init preflight): a
 // superset satisfies, and GitHub's org implications (admin:org ⊇ write:org ⊇

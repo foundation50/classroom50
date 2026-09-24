@@ -2,6 +2,7 @@ package assignment
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1616,6 +1617,106 @@ func TestParseAssignments_Rejects(t *testing.T) {
 				t.Errorf("err = %q, want substring %q", err.Error(), tc.wantErrPart)
 			}
 		})
+	}
+}
+
+// TestParseAssignments_UnknownValueNamesUpgrade covers #1055: a stale
+// gh-teacher meeting a value a newer client wrote (there, `mode: team`) failed
+// the whole manifest, so every command for the classroom died with an error
+// that read like a corrupt file. The parse stays strict, but the error must
+// now name the upgrade. Structural errors keep their plain message: no
+// upgrade fixes an empty name.
+func TestParseAssignments_UnknownValueNamesUpgrade(t *testing.T) {
+	const upgrade = "gh extension upgrade " + contract.TeacherExtensionRepo
+	valid := `{"slug":"travail-pratique-1","name":"TP1","mode":"individual","autograder":"default"}`
+	cases := []struct {
+		name        string
+		entry       string
+		wantErrPart string
+		wantUpgrade bool
+	}{
+		{
+			name:        "mode from a newer release blocks an unrelated assignment",
+			entry:       `{"slug":"travail-pratique-3","name":"TP3","mode":"squad","max_group_size":3,"autograder":"default"}`,
+			wantErrPart: `assignments[1]: entry "travail-pratique-3": invalid mode "squad"`,
+			wantUpgrade: true,
+		},
+		{
+			name:        "team_formation",
+			entry:       `{"slug":"proj","name":"Project","mode":"team","max_group_size":3,"team_formation":"lottery","autograder":"default"}`,
+			wantErrPart: `invalid team_formation "lottery"`,
+			wantUpgrade: true,
+		},
+		{
+			name:        "submission_mode",
+			entry:       `{"slug":"hw","name":"HW","mode":"individual","submission_mode":"release","autograder":"default"}`,
+			wantErrPart: `invalid submission_mode "release"`,
+			wantUpgrade: true,
+		},
+		{
+			name:        "repo_visibility",
+			entry:       `{"slug":"hw","name":"HW","mode":"individual","repo_visibility":"internal","autograder":"default"}`,
+			wantErrPart: `invalid repo_visibility "internal"`,
+			wantUpgrade: true,
+		},
+		{
+			name:        "student_permission",
+			entry:       `{"slug":"hw","name":"HW","mode":"individual","student_permission":"owner","autograder":"default"}`,
+			wantErrPart: `invalid student_permission "owner"`,
+			wantUpgrade: true,
+		},
+		{
+			name:        "grading.mode",
+			entry:       `{"slug":"hw","name":"HW","mode":"individual","grading":{"mode":"peer"},"autograder":"default"}`,
+			wantErrPart: `invalid grading.mode "peer"`,
+			wantUpgrade: true,
+		},
+		{
+			name:        "structural error stays plain",
+			entry:       `{"slug":"hw","mode":"individual","autograder":"default"}`,
+			wantErrPart: "empty name",
+			wantUpgrade: false,
+		},
+		{
+			name:        "shape drift on a known mode stays plain",
+			entry:       `{"slug":"hw","name":"HW","mode":"individual","max_group_size":3,"autograder":"default"}`,
+			wantErrPart: "individual mode but sets max_group_size",
+			wantUpgrade: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := `{"schema":"classroom50/assignments/v1","assignments":[` + valid + "," + tc.entry + `]}`
+			_, err := ParseAssignments([]byte(in))
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.wantErrPart)
+			}
+			if !strings.Contains(err.Error(), tc.wantErrPart) {
+				t.Errorf("err = %q, want substring %q", err.Error(), tc.wantErrPart)
+			}
+			if got := strings.Contains(err.Error(), upgrade); got != tc.wantUpgrade {
+				t.Errorf("err = %q, upgrade hint present = %v, want %v", err.Error(), got, tc.wantUpgrade)
+			}
+			var unsupported *UnsupportedValueError
+			if got := errors.As(err, &unsupported); got != tc.wantUpgrade {
+				t.Errorf("errors.As(UnsupportedValueError) = %v, want %v", got, tc.wantUpgrade)
+			}
+		})
+	}
+}
+
+// The add path validates the teacher's own flag value, so the upgrade hint
+// would be misleading there; only the parse path appends it.
+func TestValidateAssignmentEntry_UnknownModeHasNoUpgradeHint(t *testing.T) {
+	err := ValidateAssignmentEntry(AssignmentEntry{Slug: "hw", Name: "HW", Mode: "pair", Autograder: "default"})
+	if err == nil {
+		t.Fatal("expected an error for mode \"pair\"")
+	}
+	if !strings.Contains(err.Error(), `invalid mode "pair"`) {
+		t.Errorf("err = %q, want the invalid mode message", err)
+	}
+	if strings.Contains(err.Error(), "gh extension upgrade") {
+		t.Errorf("err = %q, add path must not suggest an upgrade", err)
 	}
 }
 
