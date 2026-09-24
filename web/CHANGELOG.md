@@ -17,6 +17,22 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.56.0](https://github.com/foundation50/classroom50/compare/web-v1.55.0...web-v1.56.0) (2026-09-24)
+
+
+### Features
+
+* skip .classroom50.yaml for no_autograder assignments ([#1049](https://github.com/foundation50/classroom50/issues/1049)) ([0c49903](https://github.com/foundation50/classroom50/commit/0c499034f24703425496698992fedc41fbc1162f))
+
+
+### Bug Fixes
+
+* **cli:** show the stdin an io test fed in its failure details ([#1068](https://github.com/foundation50/classroom50/issues/1068)) ([2357926](https://github.com/foundation50/classroom50/commit/2357926102056552dba6dc41343f6b52fd51fe05)), closes [#1044](https://github.com/foundation50/classroom50/issues/1044)
+* fail regrade red on a permission 403 and say which commit it grades ([#1054](https://github.com/foundation50/classroom50/issues/1054)) ([9f6a770](https://github.com/foundation50/classroom50/commit/9f6a77018805ff084d9b86a8c7fd2e5d8faa8585))
+* keep root baseline for backfill-introduced markers in all readers ([#1057](https://github.com/foundation50/classroom50/issues/1057)) ([98758ee](https://github.com/foundation50/classroom50/commit/98758ee7f9552613a3618be7ad7dd0db088e3c20))
+* let org owners accept a teacher-assigned group assignment ([#1066](https://github.com/foundation50/classroom50/issues/1066)) ([9bfbaf8](https://github.com/foundation50/classroom50/commit/9bfbaf8c66a0e7861fdd6291fd641179b50e2caa))
+* **web:** explain when TAs gain access to student repositories ([#1067](https://github.com/foundation50/classroom50/issues/1067)) ([28ddc84](https://github.com/foundation50/classroom50/commit/28ddc848ea10e33e53e884552f674c9d70c594f3))
+
 ## [1.55.0](https://github.com/foundation50/classroom50/compare/web-v1.54.0...web-v1.55.0) (2026-09-22)
 
 
