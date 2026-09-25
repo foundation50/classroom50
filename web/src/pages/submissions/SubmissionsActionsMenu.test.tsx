@@ -188,6 +188,8 @@ describe("SubmissionsActionsMenu — Download groups item", () => {
     )
     const item = screen.getByText("submissions.downloadGroups.menuLabel")
     expect((item.closest("button") as HTMLButtonElement).disabled).toBe(false)
+    item.click()
+    expect(onDownloadGroups).toHaveBeenCalledTimes(1)
     const scores = screen.getByText("submissions.downloadCsv")
     // Document order: the groups export sits directly after the scores export.
     expect(
@@ -199,16 +201,33 @@ describe("SubmissionsActionsMenu — Download groups item", () => {
     ).toBeTruthy()
   })
 
-  it("disables the item while membership is still loading", () => {
-    render(
+  it("disables the item with a reason-specific tooltip and does not fire", () => {
+    const onDownloadGroups = vi.fn()
+    const { rerender } = render(
       <SubmissionsActionsMenu
         {...baseProps}
-        onDownloadGroups={() => {}}
-        downloadGroupsDisabled
+        onDownloadGroups={onDownloadGroups}
+        downloadGroupsDisabledReason="loading"
       />,
     )
-    const item = screen.getByText("submissions.downloadGroups.menuLabel")
-    expect((item.closest("button") as HTMLButtonElement).disabled).toBe(true)
+    const button = () =>
+      screen
+        .getByText("submissions.downloadGroups.menuLabel")
+        .closest("button") as HTMLButtonElement
+    expect(button().disabled).toBe(true)
+    expect(button().title).toBe("submissions.downloadGroups.titleLoading")
+    button().click()
+    expect(onDownloadGroups).not.toHaveBeenCalled()
+
+    rerender(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        onDownloadGroups={onDownloadGroups}
+        downloadGroupsDisabledReason="empty"
+      />,
+    )
+    expect(button().disabled).toBe(true)
+    expect(button().title).toBe("submissions.downloadGroups.titleEmpty")
   })
 })
 

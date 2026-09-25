@@ -43,7 +43,7 @@ export function SubmissionsActionsMenu({
   onDownloadCsv,
   downloadDisabled,
   onDownloadGroups,
-  downloadGroupsDisabled = false,
+  downloadGroupsDisabledReason,
   onDownloadAll,
   downloadAllDisabled,
   onBulkAccess,
@@ -89,9 +89,10 @@ export function SubmissionsActionsMenu({
   // Group-membership export (one row per member, roster-joined). Omitted (item
   // hidden) for an individual assignment, which has no groups to list.
   onDownloadGroups?: () => void
-  // Disabled while the live membership is still loading, so the file can't be
-  // downloaded with every group marked unreadable.
-  downloadGroupsDisabled?: boolean
+  // Why the item is disabled: the roster or membership reads are still
+  // loading (an early file would flag every member unrostered), or the
+  // assignment has no groups yet.
+  downloadGroupsDisabledReason?: "loading" | "empty"
   // Read-only (any viewer), so not owner-gated like Open-all-PRs; hidden only
   // when there's nothing to fetch (via downloadAllDisabled).
   onDownloadAll: () => void
@@ -420,15 +421,17 @@ export function SubmissionsActionsMenu({
           <DropdownMenu.Item
             icon={PeopleIcon}
             label={t("submissions.downloadGroups.menuLabel")}
-            disabled={downloadGroupsDisabled}
+            disabled={downloadGroupsDisabledReason !== undefined}
             title={
-              downloadGroupsDisabled
-                ? t("submissions.downloadGroups.titleDisabled")
-                : t("submissions.downloadGroups.title")
+              downloadGroupsDisabledReason === "loading"
+                ? t("submissions.downloadGroups.titleLoading")
+                : downloadGroupsDisabledReason === "empty"
+                  ? t("submissions.downloadGroups.titleEmpty")
+                  : t("submissions.downloadGroups.title")
             }
             onSelect={onDownloadGroups}
           />
-        )}{" "}
+        )}
         <DropdownMenu.Item
           icon={FileZipIcon}
           label={t("submissions.downloadAll.menuLabel")}

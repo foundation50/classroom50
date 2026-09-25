@@ -1225,9 +1225,12 @@ columns. Each row carries:
   (team assignments only) and its repository, blank for a team whose
   repository hasn't been created yet.
 - `username`, `first_name`, `last_name`, `email`, `section`, `github_id`,
-  `role`: the member, as `roster.csv` records them.
+  `role`: the member, as `roster.csv` records them. A member is matched to
+  the roster by GitHub id first, then by username, so a student who renamed
+  their GitHub account keeps their roster row.
 - `in_roster`: `no` for a collaborator or team member the roster doesn't
-  know, so an extra account on a repository stands out.
+  know, so an extra account on a repository stands out. The item stays
+  disabled until the roster and every group's membership have loaded.
 - `note`: set when a group's membership could not be read, so it is never
   mistaken for an empty group.
 
