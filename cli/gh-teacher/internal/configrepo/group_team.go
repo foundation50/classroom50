@@ -93,13 +93,15 @@ func VerifyGroupDescription(slug string, rec GroupDescription) bool {
 
 // GroupTeamInfo is one live group team as the teacher tooling sees it: the
 // addressing slug/id, the counter recovered from the slug, the parsed AND
-// verified description record, and the current member logins.
+// verified description record, and the current members (logins, plus the
+// same members with their GitHub ids for a join that must survive a rename).
 type GroupTeamInfo struct {
-	ID      int64
-	Slug    string
-	Counter int
-	Record  GroupDescription
-	Members []string
+	ID         int64
+	Slug       string
+	Counter    int
+	Record     GroupDescription
+	Members    []string
+	MemberRefs []TeamMemberRef
 }
 
 // groupTeamPayload is the org-teams / team-GET shape the group paths decode.
@@ -304,16 +306,21 @@ func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 		if !ok || !VerifyGroupDescription(t.Slug, record) {
 			continue
 		}
-		members, err := ListTeamMembers(client, org, t.Slug)
+		refs, err := ListTeamMembersWithIDs(client, org, t.Slug)
 		if err != nil {
 			return nil, err
 		}
+		members := make([]string, 0, len(refs))
+		for _, m := range refs {
+			members = append(members, m.Login)
+		}
 		out = append(out, GroupTeamInfo{
-			ID:      t.ID,
-			Slug:    t.Slug,
-			Counter: counter,
-			Record:  record,
-			Members: members,
+			ID:         t.ID,
+			Slug:       t.Slug,
+			Counter:    counter,
+			Record:     record,
+			Members:    members,
+			MemberRefs: refs,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Counter < out[j].Counter })

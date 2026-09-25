@@ -15,9 +15,9 @@ type GroupRepoRef = { owner: string; repoName: string }
 
 type GroupRepoMembers = {
   logins: Set<string>
-  // Lowercased member logins per repo name. A repo whose read failed has no
+  // Direct collaborators per repo name. A repo whose read failed has no
   // entry, so callers can tell "unknown" from "no members".
-  membersByRepo: Map<string, string[]>
+  membersByRepo: Map<string, GitHubUser[]>
 }
 
 // Eagerly (but bounded) fetch collaborators for the given group repos and return
@@ -50,7 +50,7 @@ export function useGroupRepoMemberLogins(
     queryKey: [...githubKeys.all, "group-collaborators", org, repoKey] as const,
     queryFn: async (): Promise<GroupRepoMembers> => {
       const logins = new Set<string>()
-      const membersByRepo = new Map<string, string[]>()
+      const membersByRepo = new Map<string, GitHubUser[]>()
       await mapWithConcurrency(
         repoNames,
         REPO_READ_CONCURRENCY,
@@ -79,10 +79,7 @@ export function useGroupRepoMemberLogins(
               collaborators,
             )
             for (const c of collaborators) logins.add(c.login.toLowerCase())
-            membersByRepo.set(
-              repo,
-              collaborators.map((c) => c.login.toLowerCase()),
-            )
+            membersByRepo.set(repo, collaborators)
           } catch {
             // Leave this repo's members out of the union; other repos still count.
           }

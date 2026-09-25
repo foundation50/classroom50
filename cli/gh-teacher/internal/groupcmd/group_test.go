@@ -23,10 +23,13 @@ func TestBuildRows_JoinsRosterAndOrders(t *testing.T) {
 		{Username: "Cat", FirstName: "Cat", LastName: "Curry", Role: "ta"},
 	}
 	rows := buildRows([]groupSource{
-		{Group: "group-10", Name: "Tens", TeamSlug: "slug-10", Repo: "cs-hw1-group-10", Members: []string{"bob"}},
-		// Founder repeats as a collaborator; case differs.
-		{Group: "group-2", Name: "Twos", TeamSlug: "slug-2", Repo: "cs-hw1-group-2", Members: []string{"bob", "Alice", "alice", "cat", "stranger"}},
-		{Group: "group-3", Name: "Empty", TeamSlug: "slug-3", Members: []string{}},
+		{Group: "group-10", Name: "Tens", TeamSlug: "slug-10", Repo: "cs-hw1-group-10", Members: logins("bob")},
+		// Founder repeats as a collaborator; case differs. Alice renamed her
+		// account, so her live login no longer matches roster.csv but her id does.
+		{Group: "group-2", Name: "Twos", TeamSlug: "slug-2", Repo: "cs-hw1-group-2", Members: []member{
+			{Login: "bob"}, {Login: "alice"}, {Login: "ada-lovelace", ID: 1}, {Login: "cat"}, {Login: "stranger", ID: 99},
+		}},
+		{Group: "group-3", Name: "Empty", TeamSlug: "slug-3", Members: []member{}},
 		{Group: "group-1", Name: "Broken", TeamSlug: "slug-1", Repo: "cs-hw1-group-1", Members: nil},
 	}, roster)
 
@@ -55,11 +58,20 @@ func TestBuildRows_JoinsRosterAndOrders(t *testing.T) {
 
 func TestBuildRows_LegacyGroupLeavesTeamBlockBlank(t *testing.T) {
 	rows := buildRows([]groupSource{
-		{Group: "alice", Repo: "cs-hw1-alice", Members: []string{"alice", "bob"}},
+		{Group: "alice", Repo: "cs-hw1-alice", Members: logins("alice", "bob")},
 	}, []configrepo.RosterRow{{Username: "alice"}, {Username: "bob"}})
 	if len(rows) != 2 || rows[0].GroupName != "" || rows[0].TeamSlug != "" || rows[0].Repo != "cs-hw1-alice" {
 		t.Fatalf("rows = %+v", rows)
 	}
+}
+
+// logins builds id-less members, as a legacy founder arrives.
+func logins(names ...string) []member {
+	out := make([]member, 0, len(names))
+	for _, n := range names {
+		out = append(out, member{Login: n})
+	}
+	return out
 }
 
 func TestNaturalLess(t *testing.T) {
@@ -121,6 +133,8 @@ type groupServer struct {
 	membersBySlug  map[string][]string
 	collaborators  map[string][]string
 	collabFailures map[string]int
+	// Repos whose collaborator read answers 403 with the primary-quota header.
+	collabThrottled map[string]bool
 }
 
 const (
@@ -180,6 +194,12 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 			_ = json.NewEncoder(w).Encode(members)
 		case strings.HasPrefix(path, "/repos/"+testOrg+"/") && strings.HasSuffix(path, "/collaborators"):
 			repo := strings.TrimSuffix(strings.TrimPrefix(path, "/repos/"+testOrg+"/"), "/collaborators")
+			if s.collabThrottled[repo] {
+				w.Header().Set("X-RateLimit-Remaining", "0")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+				return
+			}
 			if status, ok := s.collabFailures[repo]; ok {
 				w.WriteHeader(status)
 				_, _ = w.Write([]byte(`{"message":"nope"}`))
@@ -265,17 +285,21 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 			"cs101-project-bonus-alice", // sibling slug: excluded
 			"cs101-project",             // bare prefix: excluded
 		},
-		collaborators:  map[string][]string{"cs101-project-alice": {"alice", "bob", "=evil"}},
+		collaborators:  map[string][]string{"cs101-project-alice": {"alice", "bob", "=Evil"}},
 		collabFailures: map[string]int{"cs101-project-zed": http.StatusForbidden},
 	}
 	out, errOut, err := run(t, state, false, false)
 	if err != nil {
 		t.Fatalf("runGroupList: %v", err)
 	}
-	for _, want := range []string{"GROUP", "alice", "bob", "=evil", "no", "(" + contract.GroupMembershipNoteUnreadable + ")"} {
+	for _, want := range []string{"GROUP", "alice", "bob", "(" + contract.GroupMembershipNoteUnreadable + ")"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("table missing %q:\n%s", want, out)
 		}
+	}
+	// The unrostered collaborator is lowercased like the web's collaborator read.
+	if !strings.Contains(out, "=evil") || strings.Contains(out, "=Evil") {
+		t.Errorf("table should lowercase the collaborator login:\n%s", out)
 	}
 	if strings.Contains(out, "bonus") || strings.Contains(out, "\ncs101-project\t") {
 		t.Errorf("sibling or bare-prefix repo leaked into the table:\n%s", out)
@@ -295,6 +319,15 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 	if len(rows) != 4 || rows[0].Group != "alice" || rows[0].TeamSlug != "" || rows[3].Note != contract.GroupMembershipNoteUnreadable {
 		t.Fatalf("rows = %+v", rows)
 	}
+	var unrostered *memberRow
+	for i := range rows {
+		if rows[i].InRoster == "no" {
+			unrostered = &rows[i]
+		}
+	}
+	if unrostered == nil || unrostered.Username != "=evil" {
+		t.Errorf("rows = %+v, want one unrostered row with the lowercased login", rows)
+	}
 
 	// CSV defangs the formula-shaped login the table shows verbatim.
 	csvOut, _, err := run(t, state, false, true)
@@ -303,6 +336,24 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 	}
 	if !strings.Contains(csvOut, ",'=evil,") {
 		t.Errorf("csv should defang =evil:\n%s", csvOut)
+	}
+}
+
+// A throttled collaborator read would fail for every remaining repo too, so the
+// command stops rather than exporting a file where each group looks unreadable.
+func TestRunGroupList_LegacyMode_RateLimitAborts(t *testing.T) {
+	state := &groupServer{
+		mode:            "group",
+		orgRepos:        []string{"cs101-project-alice", "cs101-project-zed"},
+		collaborators:   map[string][]string{"cs101-project-zed": {"zed"}},
+		collabThrottled: map[string]bool{"cs101-project-alice": true},
+	}
+	out, _, err := run(t, state, false, true)
+	if err == nil || !strings.Contains(err.Error(), "cs101-project-alice") {
+		t.Fatalf("err = %v, want a rate-limit failure naming the repo", err)
+	}
+	if out != "" {
+		t.Errorf("no CSV should be written on a rate limit, got:\n%s", out)
 	}
 }
 

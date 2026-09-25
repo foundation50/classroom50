@@ -2,14 +2,10 @@ import type { Student } from "@/types/classroom"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 import { compareStudentsByName, placeholderStudent } from "@/util/students"
 
-// The group-membership export ("Download groups (CSV)"): one row per member of
-// every group of a group/team assignment, joined against the roster so the
-// file matches an LMS group roster without renaming. Column order is the
-// cross-tool contract mirrored by the CLI (`gh teacher group list --csv`,
-// contract.GroupMembershipCSVColumns): the group block is keyed like a
-// scores.json group entry (`group` == its `owner`) so this file joins to the
-// scores export, and the member block is exactly roster.csv's header. Keep
-// both mirrors in lockstep.
+// Header of the group-membership export. Hand-mirrored with NO compile-time
+// link by contract.GroupMembershipCSVColumns (`gh teacher group list --csv`);
+// `group` is the scores.json owner key and columns 4..10 are roster.csv's
+// header verbatim, so the file joins to both without renaming.
 export const GROUP_MEMBERSHIP_CSV_COLUMNS = [
   "group",
   "group_name",
@@ -29,33 +25,42 @@ export const GROUP_MEMBERSHIP_CSV_COLUMNS = [
 type GroupMembershipCsvColumn = (typeof GROUP_MEMBERSHIP_CSV_COLUMNS)[number]
 export type GroupMembershipCsvRow = Record<GroupMembershipCsvColumn, string>
 
-// Mirrors contract.GroupMembershipNoteUnreadable: an unreadable group must not
-// export as an empty one.
+// Mirrors contract.GroupMembershipNoteUnreadable.
 export const GROUP_MEMBERSHIP_NOTE_UNREADABLE = "membership could not be read"
 
-// One group as the page already knows it, mode-neutral. Team mode fills every
-// field; a legacy group leaves `name` and `teamSlug` undefined. `members` is
-// undefined when the live read failed (as opposed to [] for a group with no
-// members yet), which is what the `note` column reports.
+// A live member. `id` is the GitHub account id when the read carried one (a
+// team or collaborator listing); a legacy founder derived from the repo name
+// has only a login.
+export type GroupMember = { login: string; id?: number }
+
 export type GroupMembershipSource = {
   // The scores.json owner key: `group-<n>` (team) or the founder login (legacy).
   group: string
   name?: string
   teamSlug?: string
-  // Blank for a team whose repo hasn't been created yet.
   repoName?: string
-  members: readonly string[] | undefined
+  // undefined when the live read failed, [] for a group with no members yet.
+  members: readonly GroupMember[] | undefined
 }
 
 export function buildGroupMembershipCsvRows(
   groups: readonly GroupMembershipSource[],
   students: readonly Student[],
 ): GroupMembershipCsvRow[] {
+  // Resolve by github_id first so a student who renamed their GitHub account
+  // still joins to their roster row; the login is the fallback for roster
+  // rows without an id.
+  const byId = new Map<string, Student>()
   const byLogin = new Map<string, Student>()
   for (const student of students) {
+    const id = student.github_id.trim()
+    if (id && !byId.has(id)) byId.set(id, student)
     const login = student.username.trim().toLowerCase()
     if (login && !byLogin.has(login)) byLogin.set(login, student)
   }
+  const resolve = (m: GroupMember): Student | undefined =>
+    (m.id !== undefined ? byId.get(String(m.id)) : undefined) ??
+    byLogin.get(m.login.trim().toLowerCase())
   const byName = compareStudentsByName("last")
 
   // Every free-text cell can carry student-influenced content (a login, a
@@ -101,16 +106,18 @@ export function buildGroupMembershipCsvRows(
       rows.push({ ...groupBlock(g), ...emptyMember, note: "" })
       continue
     }
-    // Dedupe case-insensitively (a legacy founder is also a collaborator) and
-    // order members like every other roster view.
+    // Dedupe on the resolved identity (a legacy founder is also a collaborator,
+    // possibly under a renamed login) and order members like every other
+    // roster view.
     const seen = new Set<string>()
     const members: { login: string; student: Student; known: boolean }[] = []
     for (const raw of g.members) {
-      const login = raw.trim()
-      const key = login.toLowerCase()
-      if (!key || seen.has(key)) continue
+      const login = raw.login.trim()
+      if (!login) continue
+      const student = resolve(raw)
+      const key = (student?.username ?? login).trim().toLowerCase()
+      if (seen.has(key)) continue
       seen.add(key)
-      const student = byLogin.get(key)
       members.push({
         login,
         student: student ?? placeholderStudent(login),

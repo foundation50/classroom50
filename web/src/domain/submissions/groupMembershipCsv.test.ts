@@ -23,6 +23,9 @@ const student = (
   ...extra,
 })
 
+// Live members by login only, as a legacy founder arrives.
+const m = (...logins: string[]) => logins.map((login) => ({ login }))
+
 const roster = [
   student("alice", "Alice", "Ada", { github_id: "1" }),
   student("bob", "Bob", "Babbage", { github_id: "2", section: "B" }),
@@ -49,7 +52,7 @@ describe("buildGroupMembershipCsvRows", () => {
           name: "The Sharks",
           teamSlug: "classroom50-group-abcdef0123456789-1",
           repoName: "cs-hw1-group-1",
-          members: ["bob", "alice"],
+          members: m("bob", "alice"),
         },
       ],
       roster,
@@ -100,7 +103,7 @@ describe("buildGroupMembershipCsvRows", () => {
         {
           group: "alice",
           repoName: "cs-hw1-alice",
-          members: ["alice", "Alice", "bob"],
+          members: m("alice", "Alice", "bob"),
         },
       ],
       roster,
@@ -116,7 +119,7 @@ describe("buildGroupMembershipCsvRows", () => {
 
   it("flags a member the roster does not know and uses the roster's login spelling", () => {
     const rows = buildGroupMembershipCsvRows(
-      [{ group: "group-2", members: ["cat", "stranger"] }],
+      [{ group: "group-2", members: m("cat", "stranger") }],
       roster,
     )
     expect(rows).toEqual([
@@ -136,6 +139,29 @@ describe("buildGroupMembershipCsvRows", () => {
         role: "",
         in_roster: "no",
       }),
+    ])
+  })
+
+  it("joins a renamed student by github_id and dedupes them against their founder login", () => {
+    // alice renamed her GitHub account to "ada-l" after enrolling; the live
+    // team read carries her id, the legacy founder segment still says "alice".
+    const rows = buildGroupMembershipCsvRows(
+      [
+        {
+          group: "alice",
+          repoName: "cs-hw1-alice",
+          members: [
+            { login: "alice" },
+            { login: "ada-l", id: 1 },
+            { login: "bob", id: 2 },
+          ],
+        },
+      ],
+      roster,
+    )
+    expect(rows.map((r) => [r.username, r.github_id, r.in_roster])).toEqual([
+      ["alice", "1", "yes"],
+      ["bob", "2", "yes"],
     ])
   })
 
@@ -167,8 +193,8 @@ describe("buildGroupMembershipCsvRows", () => {
   it("orders groups naturally (group-2 before group-10) and members by last name", () => {
     const rows = buildGroupMembershipCsvRows(
       [
-        { group: "group-10", members: ["alice"] },
-        { group: "group-2", members: ["bob", "alice"] },
+        { group: "group-10", members: m("alice") },
+        { group: "group-2", members: m("bob", "alice") },
       ],
       roster,
     )
@@ -187,7 +213,7 @@ describe("buildGroupMembershipCsvRows", () => {
           name: "+SUM(1)",
           teamSlug: "-slug",
           repoName: "@repo",
-          members: ["=evil"],
+          members: m("=evil"),
         },
       ],
       [

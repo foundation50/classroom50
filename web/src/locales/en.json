@@ -3291,7 +3291,8 @@
     "downloadGroups": {
       "menuLabel": "Download groups (CSV)",
       "title": "Download one row per group member, with roster names, email, and section",
-      "titleDisabled": "Waiting for group membership to load"
+      "titleLoading": "Waiting for the roster and group membership to load",
+      "titleEmpty": "No groups yet"
     },
     "downloadAll": {
       "menuLabel": "Download all submissions",

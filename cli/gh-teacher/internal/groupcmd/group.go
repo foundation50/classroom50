@@ -13,6 +13,7 @@ import (
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/assignment"
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/membership"
@@ -115,25 +116,28 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, asJSO
 	}
 	idx, ok := assignment.FindAssignment(file.Assignments, s.Assignment)
 	if !ok {
-		return fmt.Errorf("assignment %q is not registered in %s/%s/%s", s.Assignment, s.Org, configrepo.ConfigRepoName, assignment.AssignmentsFilePath(s.Classroom))
+		return fmt.Errorf("assignment %q is not registered in %s/%s/%s: run `gh teacher assignment list %s %s` to see the registered slugs",
+			s.Assignment, s.Org, configrepo.ConfigRepoName, assignment.AssignmentsFilePath(s.Classroom), s.Org, s.Classroom)
 	}
 	entry := file.Assignments[idx]
-
-	var groups []groupSource
-	switch entry.Mode {
-	case assignment.ModeTeam:
-		groups, err = teamGroups(client, s)
-	case assignment.ModeGroup:
-		groups, err = legacyGroups(client, errOut, s, siblingPrefixes(file.Assignments, s))
-	default:
+	if entry.Mode != assignment.ModeTeam && entry.Mode != assignment.ModeGroup {
 		return fmt.Errorf("assignment %q is an individual assignment (mode %s); it has no groups to list", entry.Slug, entry.Mode)
 	}
+
+	// The roster is the join target, so unlike a display-only read it is not
+	// best-effort: without it every member would export as unrostered. Read it
+	// first so a missing roster fails before the membership fan-out.
+	roster, err := configrepo.LoadRosterLenient(client, s.Org, s.Classroom, branch)
 	if err != nil {
 		return err
 	}
-	// The roster is the join target, so unlike a display-only read it is not
-	// best-effort: without it every member would export as unrostered.
-	roster, err := configrepo.LoadRosterLenient(client, s.Org, s.Classroom, branch)
+
+	var groups []groupSource
+	if entry.Mode == assignment.ModeTeam {
+		groups, err = teamGroups(client, s)
+	} else {
+		groups, err = legacyGroups(client, errOut, s, siblingPrefixes(file.Assignments, s))
+	}
 	if err != nil {
 		return err
 	}
@@ -166,9 +170,9 @@ func teamGroups(client githubapi.Client, s scope) ([]groupSource, error) {
 			// Mirrors the web's default display name (groupTeams.defaultName).
 			name = fmt.Sprintf("Group %d", t.Counter)
 		}
-		members := t.Members
-		if members == nil {
-			members = []string{}
+		members := make([]member, 0, len(t.MemberRefs))
+		for _, m := range t.MemberRefs {
+			members = append(members, member{Login: m.Login, ID: m.ID})
 		}
 		groups = append(groups, groupSource{
 			Group:    fmt.Sprintf("%s%d", contract.GroupRepoSegment, t.Counter),
@@ -184,7 +188,9 @@ func teamGroups(client githubapi.Client, s scope) ([]groupSource, error) {
 // legacyGroups resolves a legacy group assignment's groups from its existing
 // repos: `<classroom>-<assignment>-<founder>`, each with the founder plus its
 // direct collaborators. A repo whose collaborator read fails is kept with nil
-// members (reported as unreadable) rather than dropped or emptied.
+// members rather than dropped, except on a rate limit: every later read would
+// fail the same way, so the command stops instead of exporting a file where
+// every remaining group looks unreadable.
 func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings []string) ([]groupSource, error) {
 	names, err := orgrepos.ListNames(client, s.Org)
 	if err != nil {
@@ -200,10 +206,15 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings [
 		}
 		g := groupSource{Group: founder, Repo: lower}
 		collaborators, err := listDirectCollaborators(client, s.Org, name)
-		if err != nil {
+		switch {
+		case cliutil.IsRateLimited(err):
+			return nil, fmt.Errorf("%s: %w", lower, err)
+		case err != nil:
 			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", lower, err)
-		} else {
-			g.Members = append([]string{founder}, collaborators...)
+		default:
+			// Collaborators first so the founder (login only, from the repo
+			// name) dedupes onto their id-bearing collaborator entry.
+			g.Members = append(collaborators, member{Login: founder})
 		}
 		groups = append(groups, g)
 	}
@@ -237,12 +248,15 @@ func hasAnyPrefix(name string, prefixes []string) bool {
 }
 
 // listDirectCollaborators reads a repo's direct collaborators (org-inherited
-// access excluded, matching the web's group membership read).
-func listDirectCollaborators(client githubapi.Client, org, repo string) ([]string, error) {
+// access excluded, matching the web's group membership read). Logins are
+// lowercased like the founder segment and the web's collaborator read, so an
+// unrostered member exports with the same spelling from both surfaces.
+func listDirectCollaborators(client githubapi.Client, org, repo string) ([]member, error) {
 	base := fmt.Sprintf("repos/%s/%s/collaborators?affiliation=direct", url.PathEscape(org), url.PathEscape(repo))
 	subject := org + "/" + repo
 	collabs, err := githubapi.PaginateAll[struct {
 		Login string `json:"login"`
+		ID    int64  `json:"id"`
 	}](client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
 			return fmt.Sprintf("%s&per_page=%d&page=%d", base, githubapi.ListPerPage, page)
@@ -253,11 +267,11 @@ func listDirectCollaborators(client githubapi.Client, org, repo string) ([]strin
 	if err != nil {
 		return nil, err
 	}
-	logins := make([]string, 0, len(collabs))
+	members := make([]member, 0, len(collabs))
 	for _, c := range collabs {
-		logins = append(logins, c.Login)
+		members = append(members, member{Login: strings.ToLower(c.Login), ID: c.ID})
 	}
-	return logins, nil
+	return members, nil
 }
 
 func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberRow, asJSON, asCSV bool) error {

@@ -1,8 +1,6 @@
 // Package groupcmd implements `gh teacher group`: read-only views of who
 // belongs to which group of a group or team assignment, joined against the
-// roster, so a teacher can reconcile groups with an LMS. Only NewCmd is
-// exported. The CSV shape is the cross-tool contract shared with the web app's
-// "Download groups (CSV)" action (contract.GroupMembershipCSVColumns).
+// roster. Only NewCmd is exported.
 package groupcmd
 
 import (
@@ -14,18 +12,23 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 )
 
-// groupSource is one group as either mode resolves it. Team mode fills every
-// field; a legacy group leaves Name and TeamSlug empty. Members is nil when the
-// live read failed (as opposed to empty for a group with no members yet), which
-// the `note` column reports.
+// member is one live group member. ID is 0 when the read carried no id (a
+// legacy founder derived from the repo name).
+type member struct {
+	Login string
+	ID    int64
+}
+
+// groupSource is one group as either mode resolves it; a legacy group leaves
+// Name and TeamSlug empty.
 type groupSource struct {
 	// The scores.json owner key: `group-<n>` (team) or the founder login (legacy).
 	Group    string
 	Name     string
 	TeamSlug string
-	// Empty for a team whose repo hasn't been created yet.
-	Repo    string
-	Members []string
+	Repo     string
+	// nil when the live read failed, empty for a group with no members yet.
+	Members []member
 }
 
 // memberRow is one export row. Field order == contract.GroupMembershipCSVColumns
@@ -55,14 +58,20 @@ func (r memberRow) cells() []string {
 	}
 }
 
-// buildRows expands groups to one row per member, joined against the roster by
-// lowercased login. Groups order naturally (group-2 before group-10; founder
-// logins alphabetically); members by the web's last-name sort key, so both
-// exports order identically. A group with no members, or whose members could
+// buildRows expands groups to one row per member. A member joins to the roster
+// by GitHub id first (so a renamed account keeps its row), then by lowercased
+// login. Groups order naturally (group-2 before group-10); members by the
+// web's last-name sort key. A group with no members, or whose members could
 // not be read, still yields one row so it stays visible.
 func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow {
+	byID := make(map[int64]configrepo.RosterRow, len(roster))
 	byLogin := make(map[string]configrepo.RosterRow, len(roster))
 	for _, r := range roster {
+		if r.GitHubID != 0 {
+			if _, dup := byID[r.GitHubID]; !dup {
+				byID[r.GitHubID] = r
+			}
+		}
 		login := strings.ToLower(strings.TrimSpace(r.Username))
 		if login == "" {
 			continue
@@ -70,6 +79,15 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 		if _, dup := byLogin[login]; !dup {
 			byLogin[login] = r
 		}
+	}
+	resolve := func(m member) (configrepo.RosterRow, bool) {
+		if m.ID != 0 {
+			if r, ok := byID[m.ID]; ok {
+				return r, true
+			}
+		}
+		r, ok := byLogin[strings.ToLower(strings.TrimSpace(m.Login))]
+		return r, ok
 	}
 
 	ordered := append([]groupSource(nil), groups...)
@@ -89,25 +107,30 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			rows = append(rows, base)
 			continue
 		}
-		type member struct {
+		type resolved struct {
 			row   configrepo.RosterRow
 			key   string
 			known bool
 		}
+		// Dedupe on the resolved identity: a legacy founder is also a
+		// collaborator, possibly under a renamed login.
 		seen := map[string]bool{}
-		members := make([]member, 0, len(g.Members))
-		for _, raw := range g.Members {
-			login := strings.TrimSpace(raw)
-			lower := strings.ToLower(login)
-			if lower == "" || seen[lower] {
+		members := make([]resolved, 0, len(g.Members))
+		for _, m := range g.Members {
+			login := strings.TrimSpace(m.Login)
+			if login == "" {
 				continue
 			}
-			seen[lower] = true
-			r, known := byLogin[lower]
+			r, known := resolve(m)
 			if !known {
 				r = configrepo.RosterRow{Username: login}
 			}
-			members = append(members, member{row: r, key: sortKey(r), known: known})
+			key := strings.ToLower(strings.TrimSpace(r.Username))
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			members = append(members, resolved{row: r, key: sortKey(r), known: known})
 		}
 		sort.SliceStable(members, func(i, j int) bool {
 			if members[i].key != members[j].key {

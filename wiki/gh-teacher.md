@@ -1139,8 +1139,10 @@ Prints one row per member of every group. For a team assignment the groups are
 its live GitHub Teams (a team with no members or no repository yet still gets a
 row); for a legacy group assignment they are the existing group repositories,
 each with its founder and direct collaborators. Each member is joined against
-`<classroom>/roster.csv` by username, and `in_roster` is `no` for a member the
-roster doesn't know, so an extra account on a repository stands out.
+`<classroom>/roster.csv` by GitHub id, falling back to username, so a student
+who renamed their GitHub account still matches their roster row; `in_roster` is
+`no` for a member the roster doesn't know, so an extra account on a repository
+stands out.
 
 The default output is a table with a one-line summary on stderr. `--csv`
 writes the same rows the web app's **Download groups (CSV)** action produces,
