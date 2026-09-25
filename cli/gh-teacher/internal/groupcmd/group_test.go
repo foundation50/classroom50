@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
@@ -70,18 +71,43 @@ func TestNaturalLess(t *testing.T) {
 	}
 }
 
-func TestMatchesSibling(t *testing.T) {
-	siblings := []string{"hw1-bonus", "hw2"}
-	if !matchesSibling("cs-hw1-bonus-alice", "cs", "hw1", siblings) {
-		t.Error("hw1-bonus repo must be excluded from hw1")
+func TestSiblingPrefixes(t *testing.T) {
+	entries := []assignment.AssignmentEntry{
+		{Slug: "hw1"}, {Slug: "hw1-bonus"}, {Slug: "hw2"}, {Slug: "h"},
 	}
-	if matchesSibling("cs-hw1-alice", "cs", "hw1", siblings) {
-		t.Error("hw1's own repo must not be excluded")
+	got := siblingPrefixes(entries, scope{Classroom: "cs", Assignment: "hw1"})
+	// Only a sibling whose prefix EXTENDS ours can over-match; hw2 and h can't.
+	if len(got) != 1 || got[0] != "cs-hw1-bonus-" {
+		t.Fatalf("siblingPrefixes = %v, want [cs-hw1-bonus-]", got)
 	}
-	if matchesSibling("cs-hw1-bonus", "cs", "hw1", siblings) {
-		// Bare sibling prefix without a founder is not a sibling repo; the
-		// caller already drops it as a founder-less name.
-		t.Error("bare prefix is not a sibling repo")
+	if !hasAnyPrefix("cs-hw1-bonus-alice", got) || hasAnyPrefix("cs-hw1-alice", got) {
+		t.Error("hw1-bonus repo must be excluded and hw1's own repo kept")
+	}
+}
+
+// The column order lives in three places (the contract slice, the struct's
+// JSON tags, cells()); pin that they agree.
+func TestMemberRow_ColumnOrderMatchesContract(t *testing.T) {
+	row := memberRow{
+		Group: "group", GroupName: "group_name", TeamSlug: "team_slug", Repo: "repo",
+		Username: "username", FirstName: "first_name", LastName: "last_name", Email: "email",
+		Section: "section", GitHubID: "github_id", Role: "role", InRoster: "in_roster", Note: "note",
+	}
+	if got, want := strings.Join(row.cells(), ","), strings.Join(contract.GroupMembershipCSVColumns, ","); got != want {
+		t.Fatalf("cells() = %q, want %q", got, want)
+	}
+	data, err := json.Marshal(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keyed map[string]string
+	if err := json.Unmarshal(data, &keyed); err != nil {
+		t.Fatal(err)
+	}
+	for _, col := range contract.GroupMembershipCSVColumns {
+		if keyed[col] != col {
+			t.Errorf("json key %q missing or mis-tagged (got %q)", col, keyed[col])
+		}
 	}
 }
 

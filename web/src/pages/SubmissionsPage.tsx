@@ -1228,47 +1228,39 @@ const SubmissionsPageContent = () => {
     downloadBlob(blob, `${classroom}-${assignment}-scores.csv`)
   }
 
-  // Every group the page knows, mode-neutral, for the membership export. Team
-  // mode lists every live team (including one with no repo or no members yet)
-  // with its repo when created; legacy lists every existing group repo with
-  // its founder plus collaborators. `members` stays undefined for a group
+  // Every group the page knows, mode-neutral, for the membership export,
+  // reusing the owner-keyed team and member maps built above. Team mode lists
+  // every live team (including one with no repo or no members yet); legacy
+  // lists every existing group repo. `members` stays undefined for a group
   // whose live read failed, so the export marks it unreadable rather than
   // empty.
   const groupMembershipSources = useMemo<GroupMembershipSource[]>(() => {
+    if (!isGroupFlavor) return []
+    const repoByOwner = new Map(
+      groupRepoList.map((repo) => [repo.owner, repo.repoName]),
+    )
     if (isTeamAssignment) {
-      const repoByOwner = new Map(
-        groupRepoList.map((repo) => [repo.owner, repo.repoName]),
-      )
-      return (groupTeams ?? []).map((team) => {
-        const owner = `${GROUP_REPO_SEGMENT}${team.n}`
-        return {
-          group: owner,
-          name: groupDisplayName(team, t),
-          teamSlug: team.slug,
-          repoName: repoByOwner.get(owner),
-          members: teamMembersBySlug.get(team.slug)?.map((m) => m.login),
-        }
-      })
+      return [...teamByOwner].map(([owner, team]) => ({
+        group: owner,
+        name: groupDisplayNames?.get(owner),
+        teamSlug: team.slug,
+        repoName: repoByOwner.get(owner),
+        members: groupMemberLogins?.get(owner),
+      }))
     }
-    if (isGroupAssignment) {
-      return groupRepoList.map((repo) => {
-        const collaborators = groupCollabByRepo.get(repo.repoName)
-        return {
-          group: repo.owner,
-          repoName: repo.repoName,
-          members: collaborators && [repo.owner, ...collaborators],
-        }
-      })
-    }
-    return []
+    return groupRepoList.map((repo) => ({
+      group: repo.owner,
+      repoName: repo.repoName,
+      members: legacyGroupMembers?.get(repo.owner.toLowerCase()),
+    }))
   }, [
+    isGroupFlavor,
     isTeamAssignment,
-    isGroupAssignment,
-    groupTeams,
+    teamByOwner,
+    groupDisplayNames,
+    groupMemberLogins,
+    legacyGroupMembers,
     groupRepoList,
-    teamMembersBySlug,
-    groupCollabByRepo,
-    t,
   ])
 
   const downloadGroupsCsv = () => {
