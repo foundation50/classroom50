@@ -1475,6 +1475,79 @@ func TestParseRosterLenient_ReordersPreservedRawRow(t *testing.T) {
 	}
 }
 
+func TestEncodeRoster_RefusesRawRowThatWouldRealign(t *testing.T) {
+	// A header that omits a reserved column is rewritten wider. A malformed row
+	// preserved verbatim with exactly that many surplus cells would read back
+	// as a VALID row on the next parse, with every cell under the wrong column
+	// (here first/last swapped), so the write must refuse and name the line
+	// rather than silently realign it.
+	in := []byte("username,last_name,first_name,email,section,github_id\n" +
+		"alice,Ada,Alice,a@x.edu,s1,1\n" +
+		"bob,Bee,Bob,b@x.edu,s1,2,student\n") // 7 cells under a 6-column header
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	_, err = EncodeRoster(rows)
+	if err == nil || !strings.Contains(err.Error(), "line 3") || !strings.Contains(err.Error(), "wrong columns") {
+		t.Fatalf("EncodeRoster: err = %v, want a line 3 refusal", err)
+	}
+
+	// The same row under a header the rewrite does not widen stays a plain
+	// width mismatch and round-trips as before.
+	in = []byte(FullRosterHeader + "\n" +
+		"alice,Alice,Ada,a@x.edu,s1,1,\n" +
+		"bob,Bob,Bee,b@x.edu,s1,2,student,extra\n")
+	rows, err = ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	out, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	if want := FullRosterHeader + "\nalice,Alice,Ada,a@x.edu,s1,1,\nbob,Bob,Bee,b@x.edu,s1,2,student,extra\n"; string(out) != want {
+		t.Fatalf("encoded:\n%s\nwant:\n%s", out, want)
+	}
+
+	// A pre-role file (a shape older CLI releases wrote) with a 7-cell row
+	// pasted from a newer roster is NOT refused: its header is a prefix of the
+	// rewritten one, so the verbatim row lands under the same names and the
+	// rewrite heals it into a valid row, exactly as before this guard existed.
+	in = []byte("username,first_name,last_name,email,section,github_id\n" +
+		"alice,Alice,Ada,a@x.edu,s1,1\n" +
+		"bob,Bob,Bee,b@x.edu,s1,2,student\n")
+	rows, err = ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	out, err = EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster (pre-role prefix): %v", err)
+	}
+	if want := FullRosterHeader + "\nalice,Alice,Ada,a@x.edu,s1,1,\nbob,Bob,Bee,b@x.edu,s1,2,student\n"; string(out) != want {
+		t.Fatalf("encoded:\n%s\nwant:\n%s", out, want)
+	}
+	healed, err := ParseRoster(out)
+	if err != nil || len(healed) != 2 || healed[1].FirstName != "Bob" || healed[1].Role != "student" {
+		t.Fatalf("healed rows = %+v, err = %v", healed, err)
+	}
+
+	// But a pre-role file with a teacher column is not a prefix: the rewrite
+	// inserts `role` before it, so an 8-cell row's cohort cell would land under
+	// role. Refused.
+	in = []byte("username,first_name,last_name,email,section,github_id,cohort\n" +
+		"alice,Alice,Ada,a@x.edu,s1,1,c-a\n" +
+		"bob,Bob,Bee,b@x.edu,s1,2,c-b,stray\n")
+	rows, err = ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if _, err = EncodeRoster(rows); err == nil || !strings.Contains(err.Error(), "line 3") {
+		t.Fatalf("EncodeRoster (pre-role + extra): err = %v, want a line 3 refusal", err)
+	}
+}
+
 func TestParseRoster_RejectsDuplicateCanonicalColumn(t *testing.T) {
 	in := []byte("username,first_name,last_name,email,section,github_id,username\nalice,A,A,a@x,s,1,dup\n")
 	_, err := ParseRoster(in)
@@ -1508,8 +1581,9 @@ func TestParseRoster_RejectsFormulaTriggerExtraColumnName(t *testing.T) {
 	// header name would round-trip raw into a CLI-written file and re-introduce
 	// CSV-injection in Excel. Reject it at parse time alongside the other
 	// malformed-header guards. A tab- or CR-led name is not a case: header
-	// names are trimmed first (as the web reader does), so it reads as "x".
-	for _, name := range []string{"=HYPERLINK(1)", "+x", "-x", "@x"} {
+	// names are trimmed first (as the web reader does), so it reads as "x"; a
+	// trigger AFTER that whitespace is still caught.
+	for _, name := range []string{"=HYPERLINK(1)", "+x", "-x", "@x", " =x", "\t+x"} {
 		in := []byte("username,first_name,last_name,email,section,github_id," + name + "\nalice,A,A,a@x,s,1,v\n")
 		_, err := ParseRoster(in)
 		if err == nil || !strings.Contains(err.Error(), "formula trigger") {
@@ -1548,17 +1622,23 @@ func TestParseRoster_SharedHeaderRuleParity(t *testing.T) {
 
 	// One data row of matching width, valid whatever the column order: a
 	// header-keyed reader takes identity from the `username` cell, so give
-	// every cell a username-shaped value.
+	// every cell a username-shaped value (github_id must stay numeric, and is
+	// matched trimmed exactly as the reader matches it).
 	for _, tc := range doc.Cases {
 		t.Run(tc.Why, func(t *testing.T) {
 			record := slices.Repeat([]string{"alice"}, len(tc.Header))
-			if i := slices.Index(tc.Header, "github_id"); i >= 0 {
-				record[i] = "1"
+			for i, name := range tc.Header {
+				if trimHeaderName(name) == "github_id" {
+					record[i] = "1"
+				}
 			}
 			in := strings.Join(tc.Header, ",") + "\n" + strings.Join(record, ",") + "\n"
-			_, err := ParseRoster([]byte(in))
+			rows, err := ParseRoster([]byte(in))
 			if tc.Accept && err != nil {
 				t.Fatalf("ParseRoster rejected a header the shared rules accept: %v\ninput: %q", err, in)
+			}
+			if tc.Accept && len(rows) != 1 {
+				t.Fatalf("ParseRoster accepted the header but produced %d rows, want 1\ninput: %q", len(rows), in)
 			}
 			if !tc.Accept && err == nil {
 				t.Fatalf("ParseRoster accepted a header the shared rules reject: %q", in)

@@ -13,7 +13,7 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "./rosterCsv"
-import { FORMULA_LEAD_SOURCE } from "./csv"
+import { FORMULA_LEAD_SOURCE, trimCsvHeader } from "./csv"
 
 // Characterization tests for the roster.csv parse/serialize layer that every
 // roster import, sync, and write goes through.
@@ -254,6 +254,23 @@ describe("parseRosterCsv", () => {
       { line: 1, message: { key: "students.rosterProblemNoIdentityColumn" } },
     ])
     expect(() => parseStudentsCsv(csv)).toThrow(/line 1:/)
+  })
+
+  // JS trim() strips U+FEFF but not U+0085; Go's strings.TrimSpace does the
+  // reverse. Both readers strip both, or a stray BOM inside a header makes
+  // `email` an identity column for one tool and an extra column for the other.
+  it("trims a BOM or NEL around a header name exactly as the CLI does", () => {
+    const { rows, problems, columns } = parseRosterCsv(
+      "\u0085username,\uFEFFemail,cohort\nalice,a@x.edu,c-a\n",
+    )
+    expect(problems).toEqual([])
+    expect(rows[0]).toMatchObject({
+      username: "alice",
+      email: "a@x.edu",
+      extra: { cohort: "c-a" },
+    })
+    expect(columns).toEqual([...COLUMNS, "cohort"])
+    expect(trimCsvHeader("\u0085\uFEFF x \uFEFF\u0085")).toBe("x")
   })
 
   it("honors quoted fields containing commas and trims padded headers", () => {
@@ -666,11 +683,13 @@ describe("extra (non-canonical) columns", () => {
         // every cell a username-shaped value (github_id must stay numeric).
         const header = c.header.join(",")
         const record = c.header
-          .map((name) => (name.trim() === "github_id" ? "1" : "alice"))
+          .map((name) => (trimCsvHeader(name) === "github_id" ? "1" : "alice"))
           .join(",")
-        const { problems } = parseRosterCsv(`${header}\n${record}\n`)
+        const { rows, problems } = parseRosterCsv(`${header}\n${record}\n`)
         expect(problems.length === 0).toBe(c.accept)
-        if (!c.accept) {
+        if (c.accept) {
+          expect(rows).toHaveLength(1)
+        } else {
           expect(problems.every((p) => p.line === 1)).toBe(true)
           expect(() => parseStudentsCsv(`${header}\n${record}\n`)).toThrow(
             /line 1:/,

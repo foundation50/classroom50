@@ -32,6 +32,21 @@
       "accept": true
     },
     {
+      "why": "a byte-order mark inside a header cell is trimmed like whitespace (Papa strips it per cell; the CLI must too)",
+      "header": ["student_id", "\ufeffemail"],
+      "accept": true
+    },
+    {
+      "why": "a next-line control (U+0085) around a header name is trimmed (Go's unicode.IsSpace strips it; the web must too)",
+      "header": ["student_id", "\u0085username"],
+      "accept": true
+    },
+    {
+      "why": "formula trigger after leading whitespace: names are trimmed before the check",
+      "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", " =x"],
+      "accept": false
+    },
+    {
       "why": "an empty header name is accepted",
       "header": ["username", "first_name", "last_name", "email", "section", "github_id", "role", ""],
       "accept": true

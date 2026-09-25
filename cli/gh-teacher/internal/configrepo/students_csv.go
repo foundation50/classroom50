@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
@@ -34,9 +35,22 @@ var identityColumns = []string{"github_id", "username", "email"}
 
 // FullRosterHeader is the on-disk roster.csv header (RosterColumns,
 // comma-joined). The single shared fixture the Go, Python, and web suites
-// assert against, so column-order drift is caught by CI. A legacy trailing
-// column on an existing file still round-trips via RosterRow.Extra.
+// assert against, so column-order drift is caught by CI. Any other column on an
+// existing file, wherever it sits, round-trips via RosterRow.Extra.
 var FullRosterHeader = strings.Join(RosterColumns, ",")
+
+// trimHeaderName strips the whitespace both readers ignore around a header
+// name. Go's unicode.IsSpace and JS's `\s` differ by exactly two code points
+// (U+0085 is only in Go's set, U+FEFF only in JS's), and Papa also strips a BOM
+// from every header cell, so the CLI adds U+FEFF and the web adds U+0085
+// (util/csv.ts trimCsvHeader). Without that, a stray BOM inside a header made
+// `email` an identity column for the web and an extra column for the CLI, and a
+// CLI rewrite then emitted a file the web refused.
+func trimHeaderName(raw string) string {
+	return strings.TrimFunc(raw, func(r rune) bool {
+		return unicode.IsSpace(r) || r == '\uFEFF'
+	})
+}
 
 // isCanonicalColumn reports whether name is a CLI-managed RosterColumn (the
 // rest are carried through RosterRow.Extra).
@@ -75,7 +89,7 @@ func parseRosterLayout(header []string) (rosterLayout, error) {
 	layout := rosterLayout{width: len(header), canonical: make(map[string]int, len(RosterColumns))}
 	seenExtra := make(map[string]bool)
 	for i, raw := range header {
-		name := strings.TrimSpace(raw)
+		name := trimHeaderName(raw)
 		if isCanonicalColumn(name) {
 			if _, dup := layout.canonical[name]; dup {
 				return rosterLayout{}, fmt.Errorf("unexpected header: reserved column %q appears more than once", name)
@@ -149,6 +163,30 @@ func (l rosterLayout) canonicalize(record []string) []string {
 	return out
 }
 
+// prefixOfRewrite reports whether every source column sits at the same index
+// in EncodeRoster's header (RosterColumns, then extras). True for a canonical
+// file and for a pre-role file that stops at github_id: a verbatim raw row
+// then reads back under the same names it was written under, so a rewrite that
+// widens the header is safe for it. False once a column is reordered, skipped,
+// or an extra precedes a reserved column.
+func (l rosterLayout) prefixOfRewrite() bool {
+	rewritten := append(append([]string(nil), RosterColumns...), l.extraNames...)
+	if l.width > len(rewritten) {
+		return false
+	}
+	for name, idx := range l.canonical {
+		if rewritten[idx] != name {
+			return false
+		}
+	}
+	for k, idx := range l.extraIndex {
+		if rewritten[idx] != l.extraNames[k] {
+			return false
+		}
+	}
+	return true
+}
+
 // maxFieldBytes caps each cell at RFC 5321's email max so a hand-edit can't
 // push the file past the contents API's 1 MB ceiling.
 const maxFieldBytes = 320
@@ -189,8 +227,8 @@ func NormalizeTeacherText(data []byte) (out []byte, transcoded bool) {
 }
 
 // RosterRow is one student in the roster. GitHubID == 0 means unresolved — a
-// pending email-invite row, a 5-column import row before
-// GET /users/{username}, or a cell we couldn't use.
+// pending email-invite row, an import row whose file had no github_id column
+// (before GET /users/{username}), or a cell we couldn't use.
 type RosterRow struct {
 	Username  string
 	FirstName string
@@ -205,9 +243,9 @@ type RosterRow struct {
 	// or "" (unknown / a pre-role file). Never consulted for enrollment
 	// decisions — the classroom's teams are the authority.
 	Role string
-	// Line is the 1-based CSV line this row was read from, recorded only by
-	// ParseImportCSV: an import reports failures per line, and a file with a
-	// bad line has no row for it, so position can't stand in for line number.
+	// Line is the 1-based CSV line this row was read from. Recorded by
+	// ParseImportCSV (an import reports failures per line, and a file with a bad
+	// line has no row for it) and on a raw row (so a refused rewrite can name it).
 	Line int
 	// Extra carries non-canonical columns keyed by header name, so a
 	// read/modify/write round-trips them. nil for a plain canonical file.
@@ -220,6 +258,10 @@ type RosterRow struct {
 	// of dropping a student. When set, the parsed fields are unpopulated:
 	// EncodeRoster writes raw verbatim; mutation helpers skip it (no username).
 	raw []string
+	// rawUnaligned marks a raw row whose width didn't match the header AND
+	// whose source header is not a prefix of the rewritten one, so its cells
+	// would land under different names if the rewritten header were as wide.
+	rawUnaligned bool
 }
 
 // isRaw reports whether the row is a preserved-but-unparsed record.
@@ -306,150 +348,16 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 		row, err := recordToRow(record, layout, line)
 		if err != nil {
 			if lenient {
-				rows = append(rows, RosterRow{raw: layout.canonicalize(record)})
+				rows = append(rows, RosterRow{
+					raw:          layout.canonicalize(record),
+					rawUnaligned: len(record) != layout.width && !layout.prefixOfRewrite(),
+					Line:         line,
+				})
 				continue
 			}
 			return nil, err
 		}
 		rows = append(rows, row)
-	}
-	return rows, nil
-}
-
-// importMetadataColumns are read when present. `name` is split into first/last
-// for a file that lacks those columns. Every other column is ignored: an SIS or
-// LMS export carries plenty the import has no use for. Mirrors the web's
-// rosterImportHeaders.ts.
-var importMetadataColumns = []string{"first_name", "last_name", "name", "section", "role"}
-
-// parseImportLayout validates a teacher-supplied import header. Names are
-// trimmed and lowercased so a spreadsheet's `Username` or `EMAIL` reads as
-// ours. A recognized name appearing twice is ambiguous and rejected; unknown
-// names are ignored.
-func parseImportLayout(header []string) (map[string]int, error) {
-	recognized := make(map[string]int, len(identityColumns)+len(importMetadataColumns))
-	for i, raw := range header {
-		name := strings.ToLower(strings.TrimSpace(raw))
-		if !slices.Contains(identityColumns, name) && !slices.Contains(importMetadataColumns, name) {
-			continue
-		}
-		if _, dup := recognized[name]; dup {
-			return nil, fmt.Errorf("unexpected header: column %q appears more than once", name)
-		}
-		recognized[name] = i
-	}
-	if !hasIdentityColumn(recognized) {
-		return nil, fmt.Errorf("unexpected header: no identity column; add at least one of %s (got %v; other columns are ignored)", strings.Join(identityColumns, ", "), header)
-	}
-	return recognized, nil
-}
-
-// importRecordToCanonical projects an import record onto RosterColumns order,
-// reading only the recognized columns. `name` fills first_name/last_name only
-// when that split column is ABSENT from the header (not merely empty), so a
-// deliberately blank first_name is never overwritten.
-func importRecordToCanonical(record []string, columns map[string]int) []string {
-	cells := make(map[string]string, len(columns))
-	for name, idx := range columns {
-		cells[name] = record[idx]
-	}
-	if full, ok := cells["name"]; ok {
-		first, last := splitFullName(full)
-		if _, ok := columns["first_name"]; !ok {
-			cells["first_name"] = first
-		}
-		if _, ok := columns["last_name"]; !ok {
-			cells["last_name"] = last
-		}
-	}
-	out := make([]string, len(RosterColumns))
-	for i, name := range RosterColumns {
-		out[i] = cells[name]
-	}
-	return out
-}
-
-// splitFullName splits on whitespace: the first token is the first name, the
-// rest the last name. Mirrors the web's splitName.
-func splitFullName(name string) (first, last string) {
-	parts := strings.Fields(name)
-	if len(parts) == 0 {
-		return "", ""
-	}
-	return parts[0], strings.Join(parts[1:], " ")
-}
-
-// ParseImportCSV decodes a teacher-supplied import CSV under the header rules
-// of parseImportLayout, so a roster.csv the web wrote (including pending
-// email-only invite rows) imports as-is, and so does an SIS export carrying its
-// own columns. github_id and role are parsed onto the returned rows so the
-// import command can cross-check the id against the resolved account and
-// round-trip role; neither is applied here.
-//
-// Row errors are collected across the whole file and returned joined (one
-// `line %d: ...` per bad row), ALONGSIDE the rows that did parse, so the caller
-// can add its own per-row failures (a username that resolves to no account) to
-// them and refuse once with every unusable line named.
-func ParseImportCSV(data []byte) ([]RosterRow, error) {
-	data = TrimUTF8BOM(data)
-	r := csv.NewReader(bytes.NewReader(data))
-	r.FieldsPerRecord = -1
-
-	header, err := r.Read()
-	if err == io.EOF {
-		return nil, errors.New("import CSV is empty (expected at least a header row)")
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read header: %w", err)
-	}
-	columns, err := parseImportLayout(header)
-	if err != nil {
-		return nil, err
-	}
-	r.FieldsPerRecord = len(header)
-
-	var (
-		rows    []RosterRow
-		rowErrs []error
-	)
-	for line := 2; ; line++ {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
-			continue
-		}
-		// Project onto the canonical width so recordToRow stays the single
-		// source of the identity rule and github_id/role parsing.
-		record = importRecordToCanonical(record, columns)
-		row, err := recordToRow(record, canonicalLayout, line)
-		if err != nil {
-			rowErrs = append(rowErrs, err)
-			continue
-		}
-		// Import input must IDENTIFY a student: the stored-file keep-rule also
-		// admits name-only/unlinked rows (recordToRow), but the CLI import has
-		// no action for a row it can't address, so those stay per-line errors
-		// here rather than silently passing through.
-		if row.Username == "" && row.Email == "" && strings.TrimSpace(canonicalLayout.cell(record, "github_id")) == "" {
-			rowErrs = append(rowErrs, fmt.Errorf("line %d: row has no username, github_id, or email; at least one is required to identify a student", line))
-			continue
-		}
-		// Canonicalize rather than only validate: the parsed address is what a
-		// later invite, join, or team-name hash uses.
-		canonical, err := CanonicalRosterEmail(row.Email)
-		if err != nil {
-			rowErrs = append(rowErrs, fmt.Errorf("line %d: %w", line, err))
-			continue
-		}
-		row.Email = canonical
-		row.Line = line
-		rows = append(rows, row)
-	}
-	if len(rowErrs) > 0 {
-		return rows, errors.Join(rowErrs...)
 	}
 	return rows, nil
 }
@@ -529,8 +437,15 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 		if row.isRaw() {
 			// Preserve a lenient-parsed malformed row verbatim (defanged). It was
 			// reordered into this header's column order at parse time when its
-			// width allowed; otherwise its width differs from the header, and the
-			// write path re-reads leniently so the mismatch round-trips.
+			// width allowed; otherwise its cells are still in the source header's
+			// order and the write path re-reads leniently so the mismatch
+			// round-trips. That only holds while the widths keep differing: a
+			// header that omitted reserved columns is rewritten wider, and a row
+			// with exactly that many surplus cells would read back as a valid row
+			// with every cell under the wrong column. Refuse rather than realign.
+			if row.rawUnaligned && len(row.raw) == len(header) {
+				return nil, fmt.Errorf("line %d: malformed row has %d fields, the same as the rewritten %d-column header, so it would be read back as a valid row with cells under the wrong columns; fix or delete that row in roster.csv first", row.Line, len(row.raw), len(header))
+			}
 			record := make([]string, len(row.raw))
 			for i, cell := range row.raw {
 				record[i] = defangCSVCell(cell)

@@ -4,6 +4,7 @@ import Papa from "papaparse"
 import type { GitHubClient } from "../client"
 import type { GitHubCommit } from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { trimCsvHeader } from "@/util/csv"
 import { tolerateGitHubError } from "../errors"
 import { decodeBase64Utf8 } from "@/util/github"
 import type { GetAssignmentsFileInput } from "@/domain/queries/assignments"
@@ -154,7 +155,7 @@ export function csvFileQuery<T>(
       const csvParse = Papa.parse<T>(raw, {
         header: true,
         skipEmptyLines: true,
-        transformHeader: (header: string) => header.trim(),
+        transformHeader: trimCsvHeader,
         transform: (value: string) => value.trim(),
       })
 

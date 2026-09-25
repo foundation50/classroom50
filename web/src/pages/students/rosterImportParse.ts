@@ -5,6 +5,7 @@ import {
   splitName,
 } from "@/domain/students"
 import { resolveGitHubId } from "@/util/identity"
+import { trimCsvHeader } from "@/util/csv"
 import { isValidEmail, normalizeEmail } from "@/util/orgMembership"
 import type { ClassroomRole } from "@/util/teamRoster"
 import type { UploadKind } from "@/pages/students/uploadClassify"
@@ -119,7 +120,7 @@ const PAPA_OPTIONS = {
   header: true as const,
   delimiter: "",
   skipEmptyLines: "greedy" as const,
-  transformHeader: (header: string) => header.trim().toLowerCase(),
+  transformHeader: (header: string) => trimCsvHeader(header).toLowerCase(),
 }
 
 // Papa emits a benign "Delimiter" warning for single-column input (a bare
@@ -130,6 +131,19 @@ const PAPA_OPTIONS = {
 const structuralErrorOf = (
   errors: Papa.ParseError[],
 ): Papa.ParseError | undefined => errors.find((e) => e.type !== "Delimiter")
+
+// The first recognized header name that appears more than once after
+// transformHeader (`email` and `Email`, or `username` and ` username`). Papa
+// keeps the first and renames the rest (`email_1`), recording the original in
+// renamedHeaders; reading the first silently would import from whichever copy
+// happened to come first, so the file is refused instead. Mirrors the CLI's
+// parseImportLayout, which rejects the same shape.
+const duplicateRecognizedHeader = (
+  renamedHeaders: Record<string, string> | undefined,
+): string | undefined =>
+  Object.values(renamedHeaders ?? {}).find((original) =>
+    (RECOGNIZED_IMPORT_HEADERS as readonly string[]).includes(original),
+  )
 
 const stripMailto = (value: string) => value.replace(/^mailto:/i, "").trim()
 
@@ -194,7 +208,12 @@ const parseRowsWithLines = (text: string) => {
     const unterminated = text.charCodeAt(cursor - 1) !== endCode
     rows.push({ raw, line: lines + (unterminated ? 1 : 0) })
   }
-  return { rows, fields: parsed.meta.fields ?? [], errors }
+  return {
+    rows,
+    fields: parsed.meta.fields ?? [],
+    renamedHeaders: parsed.meta.renamedHeaders,
+    errors,
+  }
 }
 
 // Read a row's identity cells in precedence order, reporting any cell whose
@@ -371,11 +390,21 @@ export const parseRosterImportFile = (
 
   // Parse the un-trimmed text, so each row's cursor is an offset into the file the
   // teacher is looking at and a leading blank line still counts.
-  const { rows: rawRows, fields, errors } = parseRowsWithLines(text)
+  const {
+    rows: rawRows,
+    fields,
+    renamedHeaders,
+    errors,
+  } = parseRowsWithLines(text)
   const structural = structuralErrorOf(errors)
   // A structural error means the columns can't be trusted, so don't quietly
   // re-read the file as a bare list — the caller surfaces `malformed` instead.
   if (structural) return { rows: [], dropped: [], unlinked: [] }
+  // Likewise an ambiguous header: yield nothing and let detectImportHeaderIssue
+  // name the duplicated column.
+  if (duplicateRecognizedHeader(renamedHeaders)) {
+    return { rows: [], dropped: [], unlinked: [] }
+  }
 
   const hasIdentityColumn = IDENTITY_IMPORT_HEADERS.some((header) =>
     fields.includes(header),
@@ -455,9 +484,12 @@ export const parseRosterImportFile = (
 //     can be addressed to anyone.
 //   - malformed: Papa reported a structural parse error (ragged rows, unclosed
 //     quote, ...), so the columns can't be trusted.
+//   - duplicate-header: a recognized column name appears more than once, so
+//     the import can't tell which copy to read (the CLI refuses the same file).
 export type ImportHeaderIssue =
   | { kind: "missing-identity-header"; present: string[]; identity: string[] }
   | { kind: "malformed"; detail: string }
+  | { kind: "duplicate-header"; name: string }
 
 // Whether a file's first row is a HEADER row rather than the first of a bare list:
 // more than one column (a delimiter was found), or a single recognized column name.
@@ -483,6 +515,8 @@ export const detectImportHeaderIssue = (
   const parsed = Papa.parse<Record<string, string>>(trimmed, PAPA_OPTIONS)
   const structural = structuralErrorOf(parsed.errors)
   if (structural) return { kind: "malformed", detail: structural.message }
+  const duplicate = duplicateRecognizedHeader(parsed.meta.renamedHeaders)
+  if (duplicate) return { kind: "duplicate-header", name: duplicate }
 
   const fields = (parsed.meta.fields ?? []).map((f) => f.trim()).filter(Boolean)
   if (IDENTITY_IMPORT_HEADERS.some((header) => fields.includes(header))) {

@@ -405,10 +405,11 @@ zeros are tolerated and rewritten without them. Any other spelling, including a
 leading `+` or a minus sign, stays unresolved, so that both tools read the row the
 same way. Only a cell the CLI can't read as a number fails the line outright.
 
-A copy of the stored `roster.csv` needs no trimming. `import` accepts the full
-stored header (`username,first_name,last_name,email,section,github_id,role`), the
-same header without `role`, and the first five columns alone, so a roster exported
-from a web-managed classroom imports verbatim. A pending row for a student invited
+No file needs trimming before `import`. Columns are matched by header name in
+any order and any letter case, the file needs only one identity column
+(`github_id`, `username`, or `email`), and every unrecognized column is ignored,
+so a roster exported from a web-managed classroom or from your student
+information system imports as-is. A pending row for a student invited
 by email is read too: its name and section are updated, matched by address, and
 the invitation itself is never sent or cancelled. A row identified **solely** by
 `github_id` is skipped, because `import` resolves students by username and has no

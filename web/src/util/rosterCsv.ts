@@ -3,6 +3,7 @@ import Papa from "papaparse"
 import {
   escapeCsvFormulaInjection,
   hasCsvFormulaLead,
+  trimCsvHeader,
   unescapeCsvFormulaInjection,
 } from "@/util/csv"
 import {
@@ -34,11 +35,11 @@ type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 // CLI's identityColumns.
 export const IDENTITY_CSV_FIELDS = ["github_id", "username", "email"] as const
 
-// Cells of the header columns beyond the canonical seven, keyed by the verbatim
-// header name. A teacher may widen roster.csv by hand or via the CLI, and
-// every read-modify-write here must round-trip those cells like the CLI's
-// RosterRow.Extra does. Optional so a row built from the seven canonical fields
-// still type-checks; an absent key writes as "".
+// Cells of the non-canonical header columns, wherever they sit in the header,
+// keyed by the trimmed header name. A teacher may widen roster.csv by hand or
+// via the CLI, and every read-modify-write here must round-trip those cells like
+// the CLI's RosterRow.Extra does. Optional so a row built from the seven
+// canonical fields still type-checks; an absent key writes as "".
 export type StudentCsvRow = Record<StudentCsvField, string> & {
   extra?: Record<string, string>
 }
@@ -135,7 +136,7 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
     header: true,
     delimiter: ",",
     skipEmptyLines: "greedy",
-    transformHeader: (header) => header.trim(),
+    transformHeader: trimCsvHeader,
   })
   const fields = parsed.meta.fields ?? []
   const extraColumns = fields.filter((name) => !isCanonicalColumn(name))

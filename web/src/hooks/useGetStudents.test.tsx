@@ -72,5 +72,22 @@ describe("useGetStudents error-vs-empty split", () => {
     })
     await waitFor(() => expect(result.current.students).toHaveLength(1))
     expect(result.current.isError).toBe(false)
+    expect(result.current.parseProblems).toEqual([])
+  })
+
+  it("surfaces a zero-byte roster.csv as the missing-header problem", async () => {
+    // "" is falsy, so a truthiness guard would treat the file as "nothing to
+    // check" and the banner would never show the one problem it carries.
+    responseBody = ""
+    const { result } = renderHook(() => useGetStudents("acme", "cs50"), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.parseProblems).toHaveLength(1))
+    expect(result.current.parseProblems[0]).toMatchObject({
+      line: 1,
+      message: { key: "students.rosterProblemEmptyFile" },
+    })
+    expect(result.current.isError).toBe(false)
+    expect(result.current.students).toEqual([])
   })
 })

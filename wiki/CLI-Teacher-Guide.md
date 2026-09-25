@@ -327,10 +327,12 @@ address.
 gh teacher roster import <org> <classroom> <path-to-csv>
 ```
 
-Accepts three header shapes: the stored roster header
-(`username,first_name,last_name,email,section,github_id,role`), the same without
-`role`, and the first five columns alone, so a `roster.csv` exported from a
-web-managed classroom imports verbatim. The column-by-column reference is in
+Columns are matched by header name, in any order and any letter case. The file
+needs at least one identity column (`github_id`, `username`, or `email`) and may
+carry `first_name`, `last_name`, `name`, `section`, and `role` (`name` is split
+into first and last when the split columns are absent). Every other column is
+ignored, so an export from your student information system, or a `roster.csv`
+from a web-managed classroom, imports as-is. The column-by-column reference is in
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
 
 Every username is resolved up front, and a `github_id` cell naming a different

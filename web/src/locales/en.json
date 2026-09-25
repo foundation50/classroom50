@@ -750,6 +750,7 @@
     "missingIdentityHeader": "This file has no column that identifies a student.",
     "expectedHeaders": "Add a header row with at least one of these columns: {{headers}}. You can also include first_name, last_name, name, section, and role. Or upload a text file with one GitHub username or email address per line.",
     "malformedCsv": "This file couldn't be parsed as CSV.",
+    "duplicateImportHeader": "The column \"{{name}}\" appears more than once in this file. Keep one and remove the others, then upload it again.",
     "importBlocked_one": "{{count}} row can't be imported, so nothing has been changed yet.",
     "importBlocked_other": "{{count}} rows can't be imported, so nothing has been changed yet.",
     "importBlockedHint": "Fix these lines and upload the file again. Importing it a second time is safe: students already in the classroom are left alone.",
