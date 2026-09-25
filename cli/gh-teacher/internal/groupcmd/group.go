@@ -124,7 +124,7 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, asJSO
 	case assignment.ModeTeam:
 		groups, err = teamGroups(client, s)
 	case assignment.ModeGroup:
-		groups, err = legacyGroups(client, errOut, s, siblingSlugs(file.Assignments, s.Assignment))
+		groups, err = legacyGroups(client, errOut, s, siblingPrefixes(file.Assignments, s))
 	default:
 		return fmt.Errorf("assignment %q is an individual assignment (mode %s); it has no groups to list", entry.Slug, entry.Mode)
 	}
@@ -195,7 +195,7 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings [
 	for _, name := range names {
 		lower := strings.ToLower(name)
 		founder, ok := strings.CutPrefix(lower, prefix)
-		if !ok || founder == "" || matchesSibling(lower, s.Classroom, s.Assignment, siblings) {
+		if !ok || founder == "" || hasAnyPrefix(lower, siblings) {
 			continue
 		}
 		g := groupSource{Group: founder, Repo: lower}
@@ -210,25 +210,26 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings [
 	return groups, nil
 }
 
-// siblingSlugs returns the other assignment slugs of the classroom, for the
-// slug-extending guard (`hw1` must not claim `hw1-bonus`'s repos).
-func siblingSlugs(entries []assignment.AssignmentEntry, self string) []string {
+// siblingPrefixes returns the repo-name prefixes of the classroom's other
+// assignments that EXTEND this assignment's own prefix, so `hw1` never claims
+// `hw1-bonus`'s repos. Mirrors the web's existingAssignmentRepos guard.
+func siblingPrefixes(entries []assignment.AssignmentEntry, s scope) []string {
+	own := contract.AssignmentRepoPrefix(s.Classroom, s.Assignment)
 	var out []string
 	for _, e := range entries {
-		if e.Slug != self {
-			out = append(out, e.Slug)
+		if e.Slug == s.Assignment {
+			continue
+		}
+		if p := contract.AssignmentRepoPrefix(s.Classroom, e.Slug); strings.HasPrefix(p, own) {
+			out = append(out, p)
 		}
 	}
 	return out
 }
 
-// matchesSibling reports whether a repo name belongs to a sibling assignment
-// whose prefix extends ours. Mirrors the web's existingAssignmentRepos guard.
-func matchesSibling(lowerName, classroom, assignment string, siblings []string) bool {
-	own := contract.AssignmentRepoPrefix(classroom, assignment)
-	for _, slug := range siblings {
-		sibling := contract.AssignmentRepoPrefix(classroom, slug)
-		if strings.HasPrefix(sibling, own) && strings.HasPrefix(lowerName, sibling) {
+func hasAnyPrefix(name string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(name, p) {
 			return true
 		}
 	}

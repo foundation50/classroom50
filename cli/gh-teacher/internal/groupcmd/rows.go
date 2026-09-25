@@ -6,8 +6,8 @@
 package groupcmd
 
 import (
-	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
@@ -57,10 +57,9 @@ func (r memberRow) cells() []string {
 
 // buildRows expands groups to one row per member, joined against the roster by
 // lowercased login. Groups order naturally (group-2 before group-10; founder
-// logins alphabetically); members by last name, first name, then login, the
-// same order every roster view uses. A group with no members, or whose members
-// could not be read, still yields one row so it stays visible. Pure so the
-// shape is unit-testable without HTTP.
+// logins alphabetically); members by the web's last-name sort key, so both
+// exports order identically. A group with no members, or whose members could
+// not be read, still yields one row so it stays visible.
 func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow {
 	byLogin := make(map[string]configrepo.RosterRow, len(roster))
 	for _, r := range roster {
@@ -91,31 +90,30 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			continue
 		}
 		type member struct {
-			login string
 			row   configrepo.RosterRow
+			key   string
 			known bool
 		}
 		seen := map[string]bool{}
 		members := make([]member, 0, len(g.Members))
 		for _, raw := range g.Members {
 			login := strings.TrimSpace(raw)
-			key := strings.ToLower(login)
-			if key == "" || seen[key] {
+			lower := strings.ToLower(login)
+			if lower == "" || seen[lower] {
 				continue
 			}
-			seen[key] = true
-			r, known := byLogin[key]
+			seen[lower] = true
+			r, known := byLogin[lower]
 			if !known {
 				r = configrepo.RosterRow{Username: login}
 			}
-			members = append(members, member{login: login, row: r, known: known})
+			members = append(members, member{row: r, key: sortKey(r), known: known})
 		}
 		sort.SliceStable(members, func(i, j int) bool {
-			a, b := sortKey(members[i].row, members[i].login), sortKey(members[j].row, members[j].login)
-			if a != b {
-				return a < b
+			if members[i].key != members[j].key {
+				return members[i].key < members[j].key
 			}
-			return strings.ToLower(members[i].login) < strings.ToLower(members[j].login)
+			return strings.ToLower(members[i].row.Username) < strings.ToLower(members[j].row.Username)
 		})
 		for _, m := range members {
 			row := base
@@ -126,7 +124,7 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			row.Section = strings.TrimSpace(m.row.Section)
 			row.Role = strings.TrimSpace(m.row.Role)
 			if m.row.GitHubID != 0 {
-				row.GitHubID = fmt.Sprintf("%d", m.row.GitHubID)
+				row.GitHubID = strconv.FormatInt(m.row.GitHubID, 10)
 			}
 			if m.known {
 				row.InRoster = "yes"
@@ -140,12 +138,11 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 }
 
 // sortKey is the web's last-name sort key (studentSortKeyByLastName): "Last
-// First", falling back to the login, then the email, for a nameless row, so
-// both exports order members identically.
-func sortKey(r configrepo.RosterRow, login string) string {
+// First", falling back to the login, then the email, for a nameless row.
+func sortKey(r configrepo.RosterRow) string {
 	name := strings.TrimSpace(strings.TrimSpace(r.LastName) + " " + strings.TrimSpace(r.FirstName))
 	if name == "" {
-		name = strings.TrimSpace(login)
+		name = strings.TrimSpace(r.Username)
 	}
 	if name == "" {
 		name = strings.TrimSpace(r.Email)
@@ -158,12 +155,12 @@ func sortKey(r configrepo.RosterRow, login string) string {
 func naturalLess(a, b string) bool {
 	a, b = strings.ToLower(a), strings.ToLower(b)
 	for a != "" && b != "" {
-		ad, bd := isDigit(a[0]), isDigit(b[0])
-		if ad && bd {
+		if isDigit(a[0]) && isDigit(b[0]) {
 			an, arest := leadingNumber(a)
 			bn, brest := leadingNumber(b)
 			if an != bn {
-				return an < bn
+				// Shorter digit run = smaller number; same length compares lexically.
+				return len(an) < len(bn) || (len(an) == len(bn) && an < bn)
 			}
 			a, b = arest, brest
 			continue
@@ -178,17 +175,16 @@ func naturalLess(a, b string) bool {
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-// leadingNumber splits a digit run off the front of s. Digits are compared by
-// length-then-value so a run too long for an int still orders correctly.
-func leadingNumber(s string) (string, string) {
+// leadingNumber splits the digit run off the front of s, stripped of leading
+// zeros ("0" for an all-zero run).
+func leadingNumber(s string) (digits, rest string) {
 	i := 0
 	for i < len(s) && isDigit(s[i]) {
 		i++
 	}
-	num := strings.TrimLeft(s[:i], "0")
-	if num == "" {
-		num = "0"
+	digits = strings.TrimLeft(s[:i], "0")
+	if digits == "" {
+		digits = "0"
 	}
-	// Pad to a fixed width so lexical compare equals numeric compare.
-	return fmt.Sprintf("%030s", num), s[i:]
+	return digits, s[i:]
 }
