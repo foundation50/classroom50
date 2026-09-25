@@ -34,7 +34,7 @@ func NewCmd() *cobra.Command {
 			"  sync     sync the roster with GitHub (dry run; --write applies)\n" +
 			"  update   correct fields on an existing student (roster-only; never invites)\n" +
 			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
-			"  import   bulk upsert from a local CSV (the stored 7-column roster.csv, or 6/5-column forms)\n\n" +
+			"  import   bulk upsert from a local CSV (any column order; unknown columns are ignored)\n\n" +
 			"All writes use a single commit on <org>/classroom50's\n" +
 			"default branch and retry with an optimistic rebase loop\n" +
 			"(up to 5 attempts) so concurrent edits don't silently lose\n" +
@@ -279,12 +279,16 @@ func rosterImportCmd() *cobra.Command {
 		Use:   "import <org> <classroom> <path-to-csv>",
 		Short: "Bulk upsert roster.csv from a local CSV",
 		Long: "Read <path-to-csv> and upsert every row into\n" +
-			"<org>/classroom50/<classroom>/roster.csv. The header may be\n" +
-			"the stored roster shape\n" +
-			"`username,first_name,last_name,email,section,github_id,role`,\n" +
-			"the same without `role`, or just the first five columns, so\n" +
-			"a roster.csv exported from the web app imports as-is. The\n" +
-			"`email` column may be empty per row.\n\n" +
+			"<org>/classroom50/<classroom>/roster.csv. Columns are matched\n" +
+			"by header name, in any order and any letter case. The file\n" +
+			"needs at least one identity column:\n\n" +
+			"  github_id, username, email\n\n" +
+			"and may carry these metadata columns:\n\n" +
+			"  first_name, last_name, name, section, role\n\n" +
+			"(`name` is split into first and last when the split columns\n" +
+			"are absent). Every other column is ignored, so an export from\n" +
+			"your student information system, or a roster.csv the web app\n" +
+			"wrote, imports as-is. The `email` column may be empty per row.\n\n" +
 			"github_id is re-resolved from `GET /users/{username}` so the\n" +
 			"on-disk roster always carries the GitHub-authoritative ID; a\n" +
 			"github_id cell that names a different account than the\n" +

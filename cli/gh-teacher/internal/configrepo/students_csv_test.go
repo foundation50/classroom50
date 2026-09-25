@@ -401,9 +401,7 @@ func TestParseRoster_RejectsBadInputs(t *testing.T) {
 		wantErrPart string
 	}{
 		{"empty input", "", "empty"},
-		{"missing github_id column", "username,first_name,last_name,email,section\nalice,A,A,a@x,s\n", "unexpected header"},
-		{"missing email column", "username,first_name,last_name,section,github_id\nalice,A,A,s,1\n", "unexpected header"},
-		{"renamed first column", "user,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,1,student\n", "unexpected header"},
+		{"no identity column", "first_name,last_name,section\nA,A,s\n", "no identity column"},
 		{"no identity or name columns", "username,first_name,last_name,email,section,github_id,role\n,,,,s,,student\n", "no username, github_id, email, or name"},
 		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,nope,student\n", "invalid github_id"},
 		{"wrong field count", "username,first_name,last_name,email,section,github_id,role\nalice,A,A\n", "wrong number"},
@@ -493,7 +491,6 @@ func TestParseImportCSV_Rejects(t *testing.T) {
 	}{
 		{"empty input", "", "empty"},
 		{"wrong header", "user,first,last,section\nalice,A,A,s\n", "unexpected header"},
-		{"4-column without email", "username,first_name,last_name,section\nalice,A,A,s\n", "unexpected header"},
 		{"no identity columns", "username,first_name,last_name,email,section\n,A,A,,s\n", "no username, github_id, or email"},
 		{"no identity columns 7-wide", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,,student\n", "no username, github_id, or email"},
 		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id\nalice,A,A,,s,nope\n", "invalid github_id"},
@@ -1045,25 +1042,89 @@ func TestParseImportCSV_Windows1252ViaNormalize(t *testing.T) {
 	}
 }
 
-func TestParseImportCSV_RejectsWidenedExportWithGuidance(t *testing.T) {
-	// A roster CSV widened past the canonical role column (legacy web exports
-	// carried enrollment bookkeeping columns) is still rejected: import
-	// carries no extra-column state, so the tail would be silently dropped.
-	// The error must name the accepted header forms.
+func TestParseImportCSV_IgnoresUnknownColumns(t *testing.T) {
+	// A roster CSV widened past the canonical columns (an SIS/LMS export, or a
+	// legacy web export carrying enrollment bookkeeping) imports: only the
+	// recognized columns are read and everything else is ignored, so a teacher
+	// never has to strip their own columns first.
 	in := []byte("username,first_name,last_name,email,section,github_id,role," +
 		"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n" +
 		"alice,Alice,A,a@x.edu,s1,123,student,enrolled,github,abcd,,2026-01-01T00:00:00Z,\n")
-	_, err := ParseImportCSV(in)
-	if err == nil {
-		t.Fatal("expected ParseImportCSV to reject a widened export")
+	rows, err := ParseImportCSV(in)
+	if err != nil {
+		t.Fatalf("ParseImportCSV: %v", err)
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "unexpected header") {
-		t.Fatalf("expected a header error, got %v", err)
+	if len(rows) != 1 || rows[0].Username != "alice" || rows[0].GitHubID != 123 || rows[0].Section != "s1" {
+		t.Fatalf("rows = %+v, want alice/123/s1", rows)
 	}
-	// The accepted forms are named so the teacher knows which shapes work.
-	if !strings.Contains(msg, "role") || !strings.Contains(msg, "github_id") || !strings.Contains(msg, "section") {
-		t.Fatalf("error should name the accepted header forms, got %v", err)
+	if rows[0].Extra != nil {
+		t.Fatalf("import must not carry unknown columns, got Extra %v", rows[0].Extra)
+	}
+}
+
+func TestParseImportCSV_HeaderVocabularyMirrorsWeb(t *testing.T) {
+	// Header names are matched case-insensitively and in any order, and a
+	// `name` column splits into first/last when the split columns are absent,
+	// exactly like the web app's roster upload (rosterImportHeaders.ts).
+	t.Run("case and order insensitive", func(t *testing.T) {
+		in := []byte("Student ID,Section, EMAIL ,Username,Last_Name,First_Name\n" +
+			"S1,s-2,A@X.EDU,alice,Ada,Alice\n")
+		rows, err := ParseImportCSV(in)
+		if err != nil {
+			t.Fatalf("ParseImportCSV: %v", err)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("got %d rows, want 1", len(rows))
+		}
+		got := rows[0]
+		if got.Username != "alice" || got.FirstName != "Alice" || got.LastName != "Ada" || got.Section != "s-2" || got.Email != "a@x.edu" {
+			t.Fatalf("row = %+v", got)
+		}
+	})
+	t.Run("name alias fills absent split columns", func(t *testing.T) {
+		in := []byte("username,name\nalice,Alice van Ada\n")
+		rows, err := ParseImportCSV(in)
+		if err != nil {
+			t.Fatalf("ParseImportCSV: %v", err)
+		}
+		if rows[0].FirstName != "Alice" || rows[0].LastName != "van Ada" {
+			t.Fatalf("name split = %q/%q, want Alice/van Ada", rows[0].FirstName, rows[0].LastName)
+		}
+	})
+	t.Run("name alias never overrides a present split column", func(t *testing.T) {
+		in := []byte("username,name,first_name\nalice,Alice van Ada,\n")
+		rows, err := ParseImportCSV(in)
+		if err != nil {
+			t.Fatalf("ParseImportCSV: %v", err)
+		}
+		if rows[0].FirstName != "" || rows[0].LastName != "van Ada" {
+			t.Fatalf("first/last = %q/%q, want \"\"/van Ada", rows[0].FirstName, rows[0].LastName)
+		}
+	})
+	t.Run("email-only header is an identity column", func(t *testing.T) {
+		rows, err := ParseImportCSV([]byte("email\npending@x.edu\n"))
+		if err != nil || len(rows) != 1 || rows[0].Email != "pending@x.edu" {
+			t.Fatalf("rows=%+v err=%v", rows, err)
+		}
+	})
+}
+
+func TestParseImportCSV_RejectsAmbiguousHeaders(t *testing.T) {
+	cases := []struct {
+		name        string
+		in          string
+		wantErrPart string
+	}{
+		{"no identity column", "first_name,last_name,section\nA,B,s\n", "no identity column"},
+		{"duplicate recognized column", "username,email,Email\nalice,a@x,b@x\n", "appears more than once"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseImportCSV([]byte(tc.in))
+			if err == nil || !strings.Contains(err.Error(), tc.wantErrPart) {
+				t.Fatalf("error = %v, want substring %q", err, tc.wantErrPart)
+			}
+		})
 	}
 }
 
@@ -1318,13 +1379,180 @@ func TestUpsertRosterRow_IncomingExtraWins(t *testing.T) {
 	}
 }
 
-func TestParseRoster_RejectsWrongCanonicalPrefixEvenWithExtras(t *testing.T) {
-	// A renamed canonical column must still be rejected — tolerance applies
-	// only to columns AFTER the canonical six.
-	in := []byte("user,first_name,last_name,email,section,github_id,enrollment_status\nalice,A,A,,s,1,invited\n")
+func TestParseRoster_OnlyAnIdentityColumnIsRequired(t *testing.T) {
+	// Any reserved column but the identity ones may be absent: the reader fills
+	// "" and the rewrite emits the full header, so the file heals to canonical
+	// shape without a teacher having to add columns by hand.
+	t.Run("username only, plus a teacher column", func(t *testing.T) {
+		rows, err := ParseRoster([]byte("username,cohort\nalice,c-a\n"))
+		if err != nil {
+			t.Fatalf("ParseRoster: %v", err)
+		}
+		if rows[0].Username != "alice" || rows[0].Extra["cohort"] != "c-a" {
+			t.Fatalf("row = %+v", rows[0])
+		}
+		out, err := EncodeRoster(rows)
+		if err != nil {
+			t.Fatalf("EncodeRoster: %v", err)
+		}
+		if want := FullRosterHeader + ",cohort\nalice,,,,,,,c-a\n"; string(out) != want {
+			t.Fatalf("encoded:\n%s\nwant:\n%s", out, want)
+		}
+	})
+	t.Run("a renamed identity column is just another teacher column", func(t *testing.T) {
+		// `user` is not a reserved name, so it is preserved as an extra; the row
+		// still identifies alice through github_id.
+		rows, err := ParseRoster([]byte("user,first_name,last_name,email,section,github_id,enrollment_status\nalice,A,A,,s,1,invited\n"))
+		if err != nil {
+			t.Fatalf("ParseRoster: %v", err)
+		}
+		if rows[0].Username != "" || rows[0].GitHubID != 1 || rows[0].Extra["user"] != "alice" {
+			t.Fatalf("row = %+v", rows[0])
+		}
+	})
+	t.Run("no identity column at all", func(t *testing.T) {
+		_, err := ParseRoster([]byte("first_name,last_name,email_address\nA,A,a@x\n"))
+		if err == nil || !strings.Contains(err.Error(), "no identity column") {
+			t.Fatalf("expected no-identity-column error, got %v", err)
+		}
+	})
+}
+
+func TestParseRoster_HeaderKeyedNotPositional(t *testing.T) {
+	// Only the reserved names are interpreted, wherever they sit: a teacher may
+	// reorder columns, insert their own between ours, or leave a stray space in
+	// a header name (the web reader trims too). The rewrite emits the canonical
+	// order first and the extras after, in their original relative order.
+	in := []byte("student_id, username ,section,first_name,cohort,github_id,last_name,email\n" +
+		"S1,alice,s-1,Alice,c-a,1,Ada,a@x.edu\n")
+	rows, err := ParseRoster(in)
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	got := rows[0]
+	if got.Username != "alice" || got.FirstName != "Alice" || got.LastName != "Ada" || got.Email != "a@x.edu" ||
+		got.Section != "s-1" || got.GitHubID != 1 || got.Role != "" {
+		t.Fatalf("row = %+v", got)
+	}
+	if got.Extra["student_id"] != "S1" || got.Extra["cohort"] != "c-a" || !slices.Equal(got.ExtraOrder, []string{"student_id", "cohort"}) {
+		t.Fatalf("extras = %v / %v", got.Extra, got.ExtraOrder)
+	}
+	out, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	want := FullRosterHeader + ",student_id,cohort\nalice,Alice,Ada,a@x.edu,s-1,1,,S1,c-a\n"
+	if string(out) != want {
+		t.Fatalf("encoded:\n%s\nwant:\n%s", out, want)
+	}
+}
+
+func TestParseRosterLenient_ReordersPreservedRawRow(t *testing.T) {
+	// A malformed row preserved raw must land under the REWRITTEN header's
+	// column order, or the rewrite would scramble its cells. A row whose width
+	// doesn't match the header can't be mapped and stays verbatim.
+	in := []byte("cohort,username,first_name,last_name,email,section,github_id\n" +
+		"c-a,alice,Alice,A,a@x.edu,s,1\n" +
+		"c-b,,,,,s,\n" + // no identity or name: preserved raw, same width
+		"c-c,bob\n") // wrong width: preserved verbatim
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	out, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	want := FullRosterHeader + ",cohort\n" +
+		"alice,Alice,A,a@x.edu,s,1,,c-a\n" +
+		",,,,s,,,c-b\n" +
+		"c-c,bob\n"
+	if string(out) != want {
+		t.Fatalf("encoded:\n%s\nwant:\n%s", out, want)
+	}
+}
+
+func TestEncodeRoster_RefusesRawRowThatWouldRealign(t *testing.T) {
+	// A header that omits a reserved column is rewritten wider. A malformed row
+	// preserved verbatim with exactly that many surplus cells would read back
+	// as a VALID row on the next parse, with every cell under the wrong column
+	// (here first/last swapped), so the write must refuse and name the line
+	// rather than silently realign it.
+	in := []byte("username,last_name,first_name,email,section,github_id\n" +
+		"alice,Ada,Alice,a@x.edu,s1,1\n" +
+		"bob,Bee,Bob,b@x.edu,s1,2,student\n") // 7 cells under a 6-column header
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	_, err = EncodeRoster(rows)
+	if err == nil || !strings.Contains(err.Error(), "line 3") || !strings.Contains(err.Error(), "wrong columns") {
+		t.Fatalf("EncodeRoster: err = %v, want a line 3 refusal", err)
+	}
+
+	// The same row under a header the rewrite does not widen stays a plain
+	// width mismatch and round-trips as before.
+	in = []byte(FullRosterHeader + "\n" +
+		"alice,Alice,Ada,a@x.edu,s1,1,\n" +
+		"bob,Bob,Bee,b@x.edu,s1,2,student,extra\n")
+	rows, err = ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	out, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	if want := FullRosterHeader + "\nalice,Alice,Ada,a@x.edu,s1,1,\nbob,Bob,Bee,b@x.edu,s1,2,student,extra\n"; string(out) != want {
+		t.Fatalf("encoded:\n%s\nwant:\n%s", out, want)
+	}
+
+	// A pre-role file (a shape older CLI releases wrote) with a 7-cell row
+	// pasted from a newer roster is NOT refused: its header is a prefix of the
+	// rewritten one, so the verbatim row lands under the same names and the
+	// rewrite heals it into a valid row, exactly as before this guard existed.
+	in = []byte("username,first_name,last_name,email,section,github_id\n" +
+		"alice,Alice,Ada,a@x.edu,s1,1\n" +
+		"bob,Bob,Bee,b@x.edu,s1,2,student\n")
+	rows, err = ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	out, err = EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster (pre-role prefix): %v", err)
+	}
+	if want := FullRosterHeader + "\nalice,Alice,Ada,a@x.edu,s1,1,\nbob,Bob,Bee,b@x.edu,s1,2,student\n"; string(out) != want {
+		t.Fatalf("encoded:\n%s\nwant:\n%s", out, want)
+	}
+	healed, err := ParseRoster(out)
+	if err != nil || len(healed) != 2 || healed[1].FirstName != "Bob" || healed[1].Role != "student" {
+		t.Fatalf("healed rows = %+v, err = %v", healed, err)
+	}
+
+	// But a pre-role file with a teacher column is not a prefix: the rewrite
+	// inserts `role` before it, so an 8-cell row's cohort cell would land under
+	// role. Refused.
+	in = []byte("username,first_name,last_name,email,section,github_id,cohort\n" +
+		"alice,Alice,Ada,a@x.edu,s1,1,c-a\n" +
+		"bob,Bob,Bee,b@x.edu,s1,2,c-b,stray\n")
+	rows, err = ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if _, err = EncodeRoster(rows); err == nil || !strings.Contains(err.Error(), "line 3") {
+		t.Fatalf("EncodeRoster (pre-role + extra): err = %v, want a line 3 refusal", err)
+	}
+}
+
+func TestParseRoster_RejectsDuplicateCanonicalColumn(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,username\nalice,A,A,a@x,s,1,dup\n")
 	_, err := ParseRoster(in)
-	if err == nil || !strings.Contains(err.Error(), "unexpected header") {
-		t.Fatalf("expected unexpected-header error for renamed canonical column, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "appears more than once") {
+		t.Fatalf("expected duplicate-reserved-column error, got %v", err)
 	}
 }
 
@@ -1343,8 +1571,8 @@ func TestParseRoster_RejectsExtraColumnReusingCanonicalName(t *testing.T) {
 	// file other tools (the web app) mis-read — reject it.
 	in := []byte("username,first_name,last_name,email,section,github_id,email\nalice,A,A,a@x,s,1,dup\n")
 	_, err := ParseRoster(in)
-	if err == nil || !strings.Contains(err.Error(), "reserved column name") {
-		t.Fatalf("expected reserved-column-name error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "appears more than once") {
+		t.Fatalf("expected duplicate-reserved-column error, got %v", err)
 	}
 }
 
@@ -1352,8 +1580,10 @@ func TestParseRoster_RejectsFormulaTriggerExtraColumnName(t *testing.T) {
 	// EncodeRoster writes column names verbatim, so a formula-trigger extra
 	// header name would round-trip raw into a CLI-written file and re-introduce
 	// CSV-injection in Excel. Reject it at parse time alongside the other
-	// malformed-header guards.
-	for _, name := range []string{"=HYPERLINK(1)", "+x", "-x", "@x", "\tx", "\rx"} {
+	// malformed-header guards. A tab- or CR-led name is not a case: header
+	// names are trimmed first (as the web reader does), so it reads as "x"; a
+	// trigger AFTER that whitespace is still caught.
+	for _, name := range []string{"=HYPERLINK(1)", "+x", "-x", "@x", " =x", "\t+x"} {
 		in := []byte("username,first_name,last_name,email,section,github_id," + name + "\nalice,A,A,a@x,s,1,v\n")
 		_, err := ParseRoster(in)
 		if err == nil || !strings.Contains(err.Error(), "formula trigger") {
@@ -1367,10 +1597,10 @@ func TestParseRoster_RejectsFormulaTriggerExtraColumnName(t *testing.T) {
 // (web/src/util/rosterCsv.test.ts).
 const sharedRosterHeaderCasesPath = "../../../shared/testdata/roster_header_cases.json"
 
-// TestParseRoster_SharedHeaderRuleParity pins the Go reader's extra-column
-// header acceptance to the shared cases so it can't drift from the web reader:
-// both tools rewrite roster.csv, so a header one side accepts and the other
-// refuses locks that classroom out of the refusing tool.
+// TestParseRoster_SharedHeaderRuleParity pins the Go reader's header acceptance
+// to the shared cases so it can't drift from the web reader: both tools rewrite
+// roster.csv, so a header one side accepts and the other refuses locks that
+// classroom out of the refusing tool.
 func TestParseRoster_SharedHeaderRuleParity(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Clean(sharedRosterHeaderCasesPath))
 	if err != nil {
@@ -1378,9 +1608,9 @@ func TestParseRoster_SharedHeaderRuleParity(t *testing.T) {
 	}
 	var doc struct {
 		Cases []struct {
-			Why          string   `json:"why"`
-			ExtraColumns []string `json:"extra_columns"`
-			Accept       bool     `json:"accept"`
+			Why    string   `json:"why"`
+			Header []string `json:"header"`
+			Accept bool     `json:"accept"`
 		} `json:"cases"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
@@ -1390,15 +1620,25 @@ func TestParseRoster_SharedHeaderRuleParity(t *testing.T) {
 		t.Fatal("shared fixture has no cases")
 	}
 
+	// One data row of matching width, valid whatever the column order: a
+	// header-keyed reader takes identity from the `username` cell, so give
+	// every cell a username-shaped value (github_id must stay numeric, and is
+	// matched trimmed exactly as the reader matches it).
 	for _, tc := range doc.Cases {
 		t.Run(tc.Why, func(t *testing.T) {
-			header := append(append([]string(nil), RosterColumns...), tc.ExtraColumns...)
-			record := append([]string{"alice", "A", "A", "a@x.edu", "s", "1", "student"},
-				slices.Repeat([]string{"v"}, len(tc.ExtraColumns))...)
-			in := strings.Join(header, ",") + "\n" + strings.Join(record, ",") + "\n"
-			_, err := ParseRoster([]byte(in))
+			record := slices.Repeat([]string{"alice"}, len(tc.Header))
+			for i, name := range tc.Header {
+				if trimHeaderName(name) == "github_id" {
+					record[i] = "1"
+				}
+			}
+			in := strings.Join(tc.Header, ",") + "\n" + strings.Join(record, ",") + "\n"
+			rows, err := ParseRoster([]byte(in))
 			if tc.Accept && err != nil {
 				t.Fatalf("ParseRoster rejected a header the shared rules accept: %v\ninput: %q", err, in)
+			}
+			if tc.Accept && len(rows) != 1 {
+				t.Fatalf("ParseRoster accepted the header but produced %d rows, want 1\ninput: %q", len(rows), in)
 			}
 			if !tc.Accept && err == nil {
 				t.Fatalf("ParseRoster accepted a header the shared rules reject: %q", in)

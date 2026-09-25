@@ -13,7 +13,7 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "./rosterCsv"
-import { FORMULA_LEAD_SOURCE } from "./csv"
+import { FORMULA_LEAD_SOURCE, trimCsvHeader } from "./csv"
 
 // Characterization tests for the roster.csv parse/serialize layer that every
 // roster import, sync, and write goes through.
@@ -168,10 +168,109 @@ describe("parseRosterCsv", () => {
     })
   })
 
-  it("returns no rows and no problems for an empty or header-only file", () => {
-    const empty = { rows: [], problems: [], columns: COLUMNS }
-    expect(parseRosterCsv("")).toEqual(empty)
-    expect(parseRosterCsv(`${HEADER}\n`)).toEqual(empty)
+  it("returns no rows and no problems for a header-only file", () => {
+    expect(parseRosterCsv(`${HEADER}\n`)).toEqual({
+      rows: [],
+      problems: [],
+      columns: COLUMNS,
+    })
+  })
+
+  it("reports a zero-byte file as one missing-header problem, as the CLI does", () => {
+    const { rows, problems } = parseRosterCsv("")
+    expect(rows).toEqual([])
+    expect(problems).toEqual([
+      {
+        line: 1,
+        message: {
+          key: "students.rosterProblemEmptyFile",
+          params: { header: HEADER },
+        },
+      },
+    ])
+    expect(() => parseStudentsCsv("")).toThrow(/line 1:/)
+  })
+
+  // Only the reserved names are interpreted, wherever they sit; everything else
+  // is the teacher's own column, preserved and otherwise ignored. A rewrite
+  // emits the canonical order first, then the extras in their original
+  // relative order, exactly like the CLI's EncodeRoster.
+  it("matches columns by name: reordered and interleaved headers read and round-trip", () => {
+    const csv =
+      "student_id, username ,section,first_name,cohort,github_id,last_name,email\n" +
+      "S1,alice,s-1,Alice,c-a,1,Ada,a@x.edu\n"
+    const { rows, problems, columns } = parseRosterCsv(csv)
+    expect(problems).toEqual([])
+    expect(rows).toEqual([
+      {
+        username: "alice",
+        first_name: "Alice",
+        last_name: "Ada",
+        email: "a@x.edu",
+        section: "s-1",
+        github_id: "1",
+        role: "",
+        extra: { student_id: "S1", cohort: "c-a" },
+      },
+    ])
+    expect(columns).toEqual([...COLUMNS, "student_id", "cohort"])
+    expect(stringifyStudentsCsv(rows, columns)).toBe(
+      `${HEADER},student_id,cohort\nalice,Alice,Ada,a@x.edu,s-1,1,,S1,c-a\n`,
+    )
+  })
+
+  it("requires only an identity column; other reserved columns are optional", () => {
+    // Absent reserved columns read as "" and the rewrite emits the full
+    // header, so the file heals to canonical shape on its next write.
+    const { rows, problems, columns } = parseRosterCsv(
+      "username,cohort\nalice,c-a\n",
+    )
+    expect(problems).toEqual([])
+    expect(rows).toEqual([
+      {
+        username: "alice",
+        first_name: "",
+        last_name: "",
+        email: "",
+        section: "",
+        github_id: "",
+        role: "",
+        extra: { cohort: "c-a" },
+      },
+    ])
+    expect(stringifyStudentsCsv(rows, columns)).toBe(
+      `${HEADER},cohort\nalice,,,,,,,c-a\n`,
+    )
+    // A renamed identity column is just another teacher column when another
+    // identity column remains.
+    expect(
+      parseRosterCsv("user,first_name,email\nalice,A,a@x.edu\n").problems,
+    ).toEqual([])
+  })
+
+  it("reports a header with no identity column as one line-1 problem", () => {
+    const csv = "first_name,last_name,section,student_id\nA,A,s,S1\n"
+    expect(parseRosterCsv(csv).problems).toEqual([
+      { line: 1, message: { key: "students.rosterProblemNoIdentityColumn" } },
+    ])
+    expect(() => parseStudentsCsv(csv)).toThrow(/line 1:/)
+  })
+
+  // JS trim() strips U+FEFF but not U+0085; Go's strings.TrimSpace does the
+  // reverse. Both readers strip both, or a stray BOM inside a header makes
+  // `email` an identity column for one tool and an extra column for the other.
+  it("trims a BOM or NEL around a header name exactly as the CLI does", () => {
+    const { rows, problems, columns } = parseRosterCsv(
+      "\u0085username,\uFEFFemail,cohort\nalice,a@x.edu,c-a\n",
+    )
+    expect(problems).toEqual([])
+    expect(rows[0]).toMatchObject({
+      username: "alice",
+      email: "a@x.edu",
+      extra: { cohort: "c-a" },
+    })
+    expect(columns).toEqual([...COLUMNS, "cohort"])
+    expect(trimCsvHeader("\u0085\uFEFF x \uFEFF\u0085")).toBe("x")
   })
 
   it("honors quoted fields containing commas and trims padded headers", () => {
@@ -570,7 +669,7 @@ describe("extra (non-canonical) columns", () => {
       import.meta.url,
     )
     const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
-      cases: { why: string; extra_columns: string[]; accept: boolean }[]
+      cases: { why: string; header: string[]; accept: boolean }[]
     }
 
     it("has cases", () => {
@@ -579,14 +678,18 @@ describe("extra (non-canonical) columns", () => {
 
     for (const c of doc.cases) {
       it(`${c.accept ? "accepts" : "rejects"}: ${c.why}`, () => {
-        const header = [...COLUMNS, ...c.extra_columns].join(",")
-        const record = [
-          "alice,A,A,a@x.edu,s,1,student",
-          ...c.extra_columns.map(() => "v"),
-        ].join(",")
-        const { problems } = parseRosterCsv(`${header}\n${record}\n`)
+        // One data row of matching width, valid whatever the column order: a
+        // header-keyed reader takes identity from the `username` cell, so give
+        // every cell a username-shaped value (github_id must stay numeric).
+        const header = c.header.join(",")
+        const record = c.header
+          .map((name) => (trimCsvHeader(name) === "github_id" ? "1" : "alice"))
+          .join(",")
+        const { rows, problems } = parseRosterCsv(`${header}\n${record}\n`)
         expect(problems.length === 0).toBe(c.accept)
-        if (!c.accept) {
+        if (c.accept) {
+          expect(rows).toHaveLength(1)
+        } else {
           expect(problems.every((p) => p.line === 1)).toBe(true)
           expect(() => parseStudentsCsv(`${header}\n${record}\n`)).toThrow(
             /line 1:/,

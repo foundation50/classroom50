@@ -70,8 +70,13 @@ const useGetStudents = (
       rosterPath(classroom ?? ""),
     ),
   )
+  // `typeof` rather than truthiness: a zero-byte roster.csv reads as "", and
+  // its one problem (no header row) is exactly what the banner must show.
   const parseProblems = useMemo(
-    () => (rawRoster ? parseRosterCsv(rawRoster).problems : EMPTY_PROBLEMS),
+    () =>
+      typeof rawRoster === "string"
+        ? parseRosterCsv(rawRoster).problems
+        : EMPTY_PROBLEMS,
     [rawRoster],
   )
 

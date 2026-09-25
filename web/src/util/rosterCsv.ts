@@ -3,6 +3,7 @@ import Papa from "papaparse"
 import {
   escapeCsvFormulaInjection,
   hasCsvFormulaLead,
+  trimCsvHeader,
   unescapeCsvFormulaInjection,
 } from "@/util/csv"
 import {
@@ -26,11 +27,19 @@ export const STUDENT_CSV_FIELDS = [
 ] as const
 type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 
-// Cells of the header columns beyond the canonical seven, keyed by the verbatim
-// header name. A teacher may widen roster.csv by hand or via the CLI, and
-// every read-modify-write here must round-trip those cells like the CLI's
-// RosterRow.Extra does. Optional so a row built from the seven canonical fields
-// still type-checks; an absent key writes as "".
+// The reserved columns that can identify a student, in the precedence order the
+// import resolves them (a github_id addresses an immutable account; a username
+// is what an SIS export produces; an email routes to an invitation). A stored
+// roster or an upload must carry at least one; every other reserved column is
+// optional on read because every writer emits the full header. Mirrors the
+// CLI's identityColumns.
+export const IDENTITY_CSV_FIELDS = ["github_id", "username", "email"] as const
+
+// Cells of the non-canonical header columns, wherever they sit in the header,
+// keyed by the trimmed header name. A teacher may widen roster.csv by hand or
+// via the CLI, and every read-modify-write here must round-trip those cells like
+// the CLI's RosterRow.Extra does. Optional so a row built from the seven
+// canonical fields still type-checks; an absent key writes as "".
 export type StudentCsvRow = Record<StudentCsvField, string> & {
   extra?: Record<string, string>
 }
@@ -127,7 +136,7 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
     header: true,
     delimiter: ",",
     skipEmptyLines: "greedy",
-    transformHeader: (header) => header.trim(),
+    transformHeader: trimCsvHeader,
   })
   const fields = parsed.meta.fields ?? []
   const extraColumns = fields.filter((name) => !isCanonicalColumn(name))
@@ -154,7 +163,7 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
     )
 
   const problems: RosterCsvProblem[] = [
-    ...extraColumnProblems(extraColumns, parsed.meta.renamedHeaders),
+    ...headerProblems(fields, parsed.meta.renamedHeaders),
     ...parsed.errors
       .filter(
         (error) =>
@@ -187,20 +196,36 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
   return { rows, problems, columns: [...STUDENT_CSV_FIELDS, ...extraColumns] }
 }
 
-// Header-level problems for the extra columns, mirroring the CLI's parseRoster
-// rejections so neither tool writes a file the other refuses: a duplicate name
-// (Papa renames it to `name_1` and records the original in renamedHeaders; the
-// CLI clobbers on read), a name reusing a canonical column, and a name leading
-// with a formula trigger (header names are written verbatim, so it would
-// re-inject a formula). An empty name is accepted, as in the CLI. Header names
-// arrive trimmed (transformHeader), a web-side leniency the CLI doesn't share.
-function extraColumnProblems(
-  extraColumns: string[],
+// Header-level problems, mirroring the CLI's parseRosterLayout rejections so
+// neither tool writes a file the other refuses: no identity column, a duplicate
+// name (Papa renames it to `name_1` and records the original in
+// renamedHeaders), and an extra name leading with a formula trigger (header
+// names are written verbatim). Header names arrive trimmed (transformHeader),
+// as the CLI trims too.
+function headerProblems(
+  fields: readonly string[],
   renamedHeaders: Record<string, string> | undefined,
 ): RosterCsvProblem[] {
+  if (fields.length === 0) {
+    return [
+      {
+        line: 1,
+        message: {
+          key: "students.rosterProblemEmptyFile",
+          params: { header: STUDENT_CSV_FIELDS.join(",") },
+        },
+      },
+    ]
+  }
   const problems: RosterCsvProblem[] = []
   const headerProblem = (key: string, name: string) =>
     problems.push({ line: 1, message: { key, params: { name } } })
+  if (!IDENTITY_CSV_FIELDS.some((name) => fields.includes(name))) {
+    problems.push({
+      line: 1,
+      message: { key: "students.rosterProblemNoIdentityColumn" },
+    })
+  }
   for (const [, original] of Object.entries(renamedHeaders ?? {})) {
     headerProblem(
       isCanonicalColumn(original)
@@ -209,8 +234,8 @@ function extraColumnProblems(
       original,
     )
   }
-  for (const name of extraColumns) {
-    if (hasCsvFormulaLead(name)) {
+  for (const name of fields) {
+    if (!isCanonicalColumn(name) && hasCsvFormulaLead(name)) {
       headerProblem("students.rosterProblemFormulaColumn", name)
     }
   }

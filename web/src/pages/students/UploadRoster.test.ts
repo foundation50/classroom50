@@ -408,6 +408,25 @@ describe("detectImportHeaderIssue", () => {
     expect(detectImportHeaderIssue(csv)?.kind).toBe("malformed")
   })
 
+  // Mirrors the CLI's parseImportLayout: a recognized column that appears
+  // twice after trimming and lowercasing is ambiguous, so the file is refused
+  // rather than read from whichever copy came first.
+  it("refuses a recognized header that appears more than once", () => {
+    const csv = "username,email,Email\nada,a@x.io,b@x.io\n"
+    expect(detectImportHeaderIssue(csv)).toEqual({
+      kind: "duplicate-header",
+      name: "email",
+    })
+    const parsed = parseRosterImportFile(csv)
+    expect(parsed.rows).toEqual([])
+    expect(parsed.dropped).toEqual([])
+    // A duplicated UNRECOGNIZED column is just two ignored columns.
+    expect(detectImportHeaderIssue("username,note,note\nada,x,y\n")).toBeNull()
+    expect(
+      parseRosterImportFile("username,note,note\nada,x,y\n").rows,
+    ).toHaveLength(1)
+  })
+
   it("returns null for empty or whitespace-only input", () => {
     expect(detectImportHeaderIssue("")).toBeNull()
     expect(detectImportHeaderIssue("   \n ")).toBeNull()

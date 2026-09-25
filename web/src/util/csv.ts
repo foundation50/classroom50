@@ -28,3 +28,15 @@ export function unescapeCsvFormulaInjection(value: string): string {
     ? value.slice(1)
     : value
 }
+
+// Trim a CSV header name the same way the CLI does. JS `\s` and Go's
+// unicode.IsSpace differ by exactly two code points (U+FEFF is only in JS's set,
+// U+0085 only in Go's), so each side adds the other's: without that, a stray
+// BOM inside a header cell made `email` an identity column for one tool and an
+// extra column for the other, and a rewrite by one produced a file the other
+// refused. Mirrors the CLI's trimHeaderName; the shared header fixture pins it.
+const HEADER_EDGE = /^[\s\u0085]+|[\s\u0085]+$/g
+
+export function trimCsvHeader(header: string): string {
+  return header.replace(HEADER_EDGE, "")
+}

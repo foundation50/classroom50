@@ -1164,6 +1164,10 @@ const UploadRoster = ({
                     </span>
                     <span className="text-sm">{headerIssue.detail}</span>
                   </div>
+                ) : headerIssue?.kind === "duplicate-header" ? (
+                  t("students.duplicateImportHeader", {
+                    name: headerIssue.name,
+                  })
                 ) : (
                   t("students.noUsableRows")
                 )}

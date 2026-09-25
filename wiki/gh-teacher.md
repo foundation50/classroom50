@@ -524,10 +524,11 @@ instead.
 gh teacher roster import <org> <classroom> <path-to-csv>
 ```
 
-Bulk upsert. Accepts three header shapes: the stored roster shape
-(`username,first_name,last_name,email,section,github_id,role`), the same without
-`role`, and the first five columns alone, so a `roster.csv` exported from a
-web-managed classroom imports verbatim. The field reference is in
+Bulk upsert. Columns are matched by header name, in any order and any letter
+case. The file needs at least one identity column (`github_id`, `username`, or
+`email`) and may carry `first_name`, `last_name`, `name`, `section`, and `role`;
+every other column is ignored, so an SIS export or a `roster.csv` from a
+web-managed classroom imports as-is. The field reference is in
 [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields). A file that isn't
 UTF-8 is read as Windows-1252 (Excel's plain "CSV" export), with a notice to
 double-check non-ASCII names.
