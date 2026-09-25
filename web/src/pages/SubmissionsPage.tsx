@@ -114,6 +114,11 @@ import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { downloadBlob } from "@/util/downloadBlob"
+import {
+  GROUP_MEMBERSHIP_CSV_COLUMNS,
+  buildGroupMembershipCsvRows,
+  type GroupMembershipSource,
+} from "@/domain/submissions/groupMembershipCsv"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { isClassroomArchived } from "@/types/classroom"
@@ -192,7 +197,8 @@ const SubmissionsPageContent = () => {
   // member (teacher/TA/HTA, not on the student team) is a gradee only once
   // they've ACCEPTED, matching the collector, which polls the staff teams too
   // but only records a repo that exists.
-  const { students: csvStudents } = useGetStudents(org, classroom)
+  const { students: csvStudents, isLoading: csvStudentsLoading } =
+    useGetStudents(org, classroom)
   // Surface the team fetch's error/loading: a transient or permission failure
   // of the enrolled source of truth must render as error+retry, not an
   // authoritative empty roster. A non-owner off the secret student team reads
@@ -377,7 +383,7 @@ const SubmissionsPageContent = () => {
       const members = groupCollabByRepo.get(repo.repoName)
       if (members) {
         const owner = repo.owner.toLowerCase()
-        map.set(owner, [owner, ...members])
+        map.set(owner, [owner, ...members.map((m) => m.login.toLowerCase())])
       }
     }
     return map
@@ -1223,6 +1229,76 @@ const SubmissionsPageContent = () => {
     downloadBlob(blob, `${classroom}-${assignment}-scores.csv`)
   }
 
+  // Every group the page knows, mode-neutral, for the membership export. Team
+  // mode lists every live team (including one with no repo or no members yet);
+  // legacy lists every existing group repo. Members keep their GitHub id so the
+  // export can join a renamed account to its roster row.
+  const groupMembershipSources = useMemo<GroupMembershipSource[]>(() => {
+    if (!isGroupFlavor) return []
+    const repoByOwner = new Map(
+      groupRepoList.map((repo) => [repo.owner, repo.repoName]),
+    )
+    if (isTeamAssignment) {
+      return [...teamByOwner].map(([owner, team]) => ({
+        group: owner,
+        name: groupDisplayNames?.get(owner),
+        teamSlug: team.slug,
+        repoName: repoByOwner.get(owner),
+        members: teamMembersBySlug
+          .get(team.slug)
+          ?.map((m) => ({ login: m.login, id: m.id })),
+      }))
+    }
+    return groupRepoList.map((repo) => {
+      const collaborators = groupCollabByRepo.get(repo.repoName)
+      return {
+        group: repo.owner,
+        repoName: repo.repoName,
+        // Collaborators first so the founder (login only, from the repo name)
+        // dedupes onto their id-bearing collaborator entry.
+        members: collaborators && [
+          ...collaborators.map((m) => ({ login: m.login, id: m.id })),
+          { login: repo.owner },
+        ],
+      }
+    })
+  }, [
+    isGroupFlavor,
+    isTeamAssignment,
+    teamByOwner,
+    groupDisplayNames,
+    teamMembersBySlug,
+    groupCollabByRepo,
+    groupRepoList,
+  ])
+
+  // The export joins against roster.csv (the same target as the CLI and the
+  // scores export), so it stays disabled until that read and every membership
+  // read have settled; an early click would flag every member unrostered or
+  // blank every team's repo.
+  const groupMembershipLoading =
+    groupMembersPending ||
+    csvStudentsLoading ||
+    (isGroupFlavor && orgReposPending)
+  const downloadGroupsDisabledReason = groupMembershipLoading
+    ? "loading"
+    : groupMembershipSources.length === 0
+      ? "empty"
+      : undefined
+
+  const downloadGroupsCsv = () => {
+    const rows = buildGroupMembershipCsvRows(
+      groupMembershipSources,
+      csvStudents,
+    )
+    const csv = Papa.unparse(
+      { fields: [...GROUP_MEMBERSHIP_CSV_COLUMNS], data: rows },
+      { header: true },
+    )
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    downloadBlob(blob, `${classroom}-${assignment}-groups.csv`)
+  }
+
   if (!org || !classroom || !assignment) {
     return <MissingParams message={t("submissions.missingParams")} />
   }
@@ -1568,6 +1644,8 @@ const SubmissionsPageContent = () => {
                 viewLabel={viewLabel}
                 onDownloadCsv={downloadScoresCsv}
                 downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+                onDownloadGroups={isGroupFlavor ? downloadGroupsCsv : undefined}
+                downloadGroupsDisabledReason={downloadGroupsDisabledReason}
                 onDownloadAll={() => setDownloadAllOpen(true)}
                 downloadAllDisabled={downloadableOwners.length === 0}
                 // Bulk set student repo access: owner-only (needs admin on every

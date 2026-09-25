@@ -97,7 +97,7 @@ describe("useGroupRepoMemberLogins", () => {
     expect([...result.current.membersByRepo.keys()]).toEqual(["cs101-hw1-dave"])
   })
 
-  it("returns each repo's lowercased members by repo name", async () => {
+  it("returns each repo's collaborators by repo name", async () => {
     request.mockImplementation((url: string) =>
       url.includes("cs101-hw1-alice")
         ? Promise.resolve([user("Alice"), user("Bob")])
@@ -112,10 +112,11 @@ describe("useGroupRepoMemberLogins", () => {
       { wrapper: wrapper(makeClient()) },
     )
     await waitFor(() =>
-      expect(result.current.membersByRepo.get("cs101-hw1-alice")).toEqual([
-        "alice",
-        "bob",
-      ]),
+      expect(
+        result.current.membersByRepo
+          .get("cs101-hw1-alice")
+          ?.map((c) => c.login),
+      ).toEqual(["Alice", "Bob"]),
     )
     expect(result.current.membersByRepo.get("cs101-hw1-dave")).toEqual([])
   })

@@ -1121,6 +1121,45 @@ are all skipped is not recreated. A source team over the target's
 `<classroom>/teams.json`. The web app's **Copy groups** dialog is the same
 operation with an editable preview.
 
+## `group`
+
+Read-only views of who belongs to which group of a group or team assignment,
+joined against the roster. Use it to reconcile groups with your LMS or to
+check that every collaborator on a group repository is a rostered student.
+To create or edit the groups of a team assignment, use [`team`](#team).
+
+### `group list`
+
+```sh
+gh teacher group list <org> <classroom> <assignment> [--json | --csv]
+gh teacher group list cs50-fall-2026 cs-principles project --csv > groups.csv
+```
+
+Prints one row per member of every group. For a team assignment the groups are
+its live GitHub Teams (a team with no members or no repository yet still gets a
+row); for a legacy group assignment they are the existing group repositories,
+each with its founder and direct collaborators. Each member is joined against
+`<classroom>/roster.csv` by GitHub id, falling back to username, so a student
+who renamed their GitHub account still matches their roster row; `in_roster` is
+`no` for a member the roster doesn't know, so an extra account on a repository
+stands out.
+
+The default output is a table with a one-line summary on stderr. `--csv`
+writes the same rows the web app's **Download groups (CSV)** action produces,
+with the header
+
+```
+group,group_name,team_slug,repo,username,first_name,last_name,email,section,github_id,role,in_roster,note
+```
+
+`group` is the key the scores export uses for the group (`group-<n>` for a
+team assignment, the founder's login for a legacy group), so the two files
+join; `group_name` and `team_slug` are blank for a legacy group. The member
+columns are exactly `roster.csv`'s, so the file joins against the roster or an
+LMS export without renaming. A group whose membership could not be read gets
+one row with `note` set instead of exporting as empty. `--json` emits an array
+of objects with the same keys and takes precedence over `--csv`.
+
 ## `autograder`
 
 Manage the **classroom default autograder** at `<classroom>/autograder.py` and

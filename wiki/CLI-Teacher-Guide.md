@@ -756,6 +756,23 @@ groups before sharing the invite link: a student who isn't in a group can't
 accept. The web app's **Manage groups** page manages the same teams. See
 [`team`](gh-teacher#team) for every subcommand and flag.
 
+### Export group membership
+
+To see who is in which group, for a team assignment or a legacy group
+assignment, and to reconcile that against your LMS:
+
+```sh
+gh teacher group list cs50-fall-2026 cs-principles project
+gh teacher group list cs50-fall-2026 cs-principles project --csv > groups.csv
+gh teacher group list cs50-fall-2026 cs-principles project --json | jq '.[] | select(.in_roster == "no")'
+```
+
+One row per member, joined against the roster (name, email, section,
+`github_id`), with `in_roster` set to `no` for a collaborator or team member
+the roster doesn't know. The CSV matches the web app's **Download groups
+(CSV)** export and keys each group the way the scores export does, so the two
+files join. See [`group list`](gh-teacher#group-list).
+
 ## 8. Remove people when needed
 
 ```sh
