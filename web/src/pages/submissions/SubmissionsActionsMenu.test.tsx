@@ -168,6 +168,50 @@ describe("SubmissionsActionsMenu — Download all submissions item", () => {
   })
 })
 
+// The group-membership export only exists for a group or team assignment; the
+// page omits the handler for an individual one and the item goes with it.
+describe("SubmissionsActionsMenu — Download groups item", () => {
+  it("hides the item when onDownloadGroups is omitted", () => {
+    render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(
+      screen.queryByText("submissions.downloadGroups.menuLabel"),
+    ).toBeNull()
+  })
+
+  it("shows and enables the item for a group assignment, right after the scores export", () => {
+    const onDownloadGroups = vi.fn()
+    render(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        onDownloadGroups={onDownloadGroups}
+      />,
+    )
+    const item = screen.getByText("submissions.downloadGroups.menuLabel")
+    expect((item.closest("button") as HTMLButtonElement).disabled).toBe(false)
+    const scores = screen.getByText("submissions.downloadCsv")
+    // Document order: the groups export sits directly after the scores export.
+    expect(
+      scores.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    const all = screen.getByText("submissions.downloadAll.menuLabel")
+    expect(
+      item.compareDocumentPosition(all) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it("disables the item while membership is still loading", () => {
+    render(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        onDownloadGroups={() => {}}
+        downloadGroupsDisabled
+      />,
+    )
+    const item = screen.getByText("submissions.downloadGroups.menuLabel")
+    expect((item.closest("button") as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
 describe("SubmissionsActionsMenu — Update autograding triggers item", () => {
   it("shows the item only when onBulkTrigger is provided (owner + default autograder)", () => {
     const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)

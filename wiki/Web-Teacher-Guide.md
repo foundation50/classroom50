@@ -1188,6 +1188,9 @@ order:
   you can create an assignment already locked. See
   [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments).
 - **Download scores (CSV)**: export all submissions as a CSV.
+- **Download groups (CSV)**: for a group or team assignment, export one row
+  per group member joined against the roster. See
+  [Download groups](#download-groups).
 - **Download all submissions**: download each repository's latest submission
   bundled into a single zip, built in the browser one repository at a time.
   For very large classrooms prefer `gh teacher download`, which clones every
@@ -1207,6 +1210,32 @@ order:
 Click **Download scores (CSV)** to export all submissions as a CSV for a
 spreadsheet or external tool. The column-by-column reference is in
 [Score exports](Autograding-Basics#score-exports).
+
+### Download groups
+
+For a group or team assignment, **Download groups (CSV)** exports who is in
+which group: one row per member, with the roster's name, email, section, and
+`github_id`, so the file lines up with an LMS group roster without renaming
+columns. Each row carries:
+
+- `group`: the group's key, `group-<n>` for a team assignment or the founder's
+  username for a legacy group. It is the same key the scores export uses, so
+  the two files join.
+- `group_name`, `team_slug`, `repo`: the group's display name and GitHub Team
+  (team assignments only) and its repository, blank for a team whose
+  repository hasn't been created yet.
+- `username`, `first_name`, `last_name`, `email`, `section`, `github_id`,
+  `role`: the member, as `roster.csv` records them.
+- `in_roster`: `no` for a collaborator or team member the roster doesn't
+  know, so an extra account on a repository stands out.
+- `note`: set when a group's membership could not be read, so it is never
+  mistaken for an empty group.
+
+The export reads live membership (repository collaborators or GitHub Team
+members), not the last collected snapshot, so a group that hasn't submitted
+yet is included. The menu item is disabled until membership has loaded.
+`gh teacher group list --csv` writes the same file from the command line; see
+[`group list`](gh-teacher#group-list).
 
 ## Edit assignments and classrooms
 
