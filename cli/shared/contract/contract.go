@@ -266,6 +266,35 @@ const (
 	ClassroomFilename   = "classroom.json"
 	ScoresFilename      = "scores.json"
 
+	// GroupMembershipNoteUnreadable is the `note` cell the group-membership
+	// export writes when a group's live membership could not be read (a
+	// collaborator or team listing failed), so an unreadable group is never
+	// mistaken for an empty one. Mirrored verbatim in the web GUI
+	// (web/src/domain/submissions/groupMembershipCsv.ts).
+	GroupMembershipNoteUnreadable = "membership could not be read"
+)
+
+// GroupMembershipCSVColumns is the header of the group-membership export
+// (`gh teacher group list --csv`, the web "Download groups (CSV)" action): one
+// row per group member for a group or team assignment. The group block is
+// keyed the way scores.json keys a group entry (`group` == the entry's owner:
+// `group-<n>` for a team assignment, the founder's login for a legacy group)
+// so the file joins to the scores export; `team_slug` and `group_name` are
+// blank for a legacy group. The member block is exactly roster.csv's header so
+// it joins to the roster and an LMS export without renaming; `in_roster` flags
+// a collaborator or team member the roster doesn't know. A group with no
+// readable members exports as one row with a blank member block and `note`
+// set (see GroupMembershipNoteUnreadable). Hand-mirrored with NO compile-time
+// link in the web GUI (GROUP_MEMBERSHIP_CSV_COLUMNS); contract_test.go pins
+// the Go half.
+var GroupMembershipCSVColumns = []string{
+	"group", "group_name", "team_slug", "repo",
+	"username", "first_name", "last_name", "email", "section", "github_id", "role",
+	"in_roster", "note",
+}
+
+const (
+
 	// ServiceTokenSecretName is the repo-level Actions secret on the classroom50 repository
 	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml
 	// consume. Hand-mirrored with NO compile-time link in the collect-scores /

@@ -23,6 +23,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/classroom"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/download"
+	"github.com/foundation50/gh-teacher/internal/groupcmd"
 	"github.com/foundation50/gh-teacher/internal/invite"
 	"github.com/foundation50/gh-teacher/internal/member"
 	"github.com/foundation50/gh-teacher/internal/remove"
@@ -65,6 +66,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(staff.NewCmd())
 	root.AddCommand(assignmentcmd.NewCmd())
 	root.AddCommand(teamcmd.NewCmd())
+	root.AddCommand(groupcmd.NewCmd())
 	root.AddCommand(autograderCmd())
 	root.AddCommand(invite.NewCmd())
 	root.AddCommand(remove.NewCmd())

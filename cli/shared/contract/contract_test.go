@@ -114,6 +114,9 @@ func TestContractLiterals(t *testing.T) {
 		{"AssignmentsFilename", AssignmentsFilename, "assignments.json"},
 		{"ClassroomFilename", ClassroomFilename, "classroom.json"},
 		{"ScoresFilename", ScoresFilename, "scores.json"},
+		// GroupMembershipNoteUnreadable is mirrored, with NO compile-time link,
+		// in the web GUI (groupMembershipCsv.ts). Update both in lockstep.
+		{"GroupMembershipNoteUnreadable", GroupMembershipNoteUnreadable, "membership could not be read"},
 		// ServiceTokenSecretName / ServiceTokenExpiresAtVar / ServiceTokenNameVar
 		// are mirrored, with NO compile-time link, in the collect-scores /
 		// regrade workflow YAML, the gh-teacher servicetoken package
@@ -851,6 +854,22 @@ func TestTeamFormations(t *testing.T) {
 	}
 	if IsValidTeamFormation("") || IsValidTeamFormation("Teacher") {
 		t.Error("IsValidTeamFormation must reject empty and non-canonical case")
+	}
+}
+
+// TestGroupMembershipCSVColumns pins the group-membership export header. The
+// member block must stay exactly roster.csv's header (the file is meant to
+// join against the roster with no renaming), and the whole row is mirrored by
+// the web GUI's GROUP_MEMBERSHIP_CSV_COLUMNS with no compile-time link.
+func TestGroupMembershipCSVColumns(t *testing.T) {
+	const want = "group,group_name,team_slug,repo,username,first_name,last_name,email,section,github_id,role,in_roster,note"
+	if got := strings.Join(GroupMembershipCSVColumns, ","); got != want {
+		t.Fatalf("GroupMembershipCSVColumns = %q, want %q", got, want)
+	}
+	// The roster block is the gh-teacher RosterColumns (username..role) verbatim.
+	const rosterHeader = "username,first_name,last_name,email,section,github_id,role"
+	if got := strings.Join(GroupMembershipCSVColumns[4:11], ","); got != rosterHeader {
+		t.Fatalf("roster block = %q, want %q", got, rosterHeader)
 	}
 }
 

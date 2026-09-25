@@ -114,6 +114,11 @@ import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { downloadBlob } from "@/util/downloadBlob"
+import {
+  GROUP_MEMBERSHIP_CSV_COLUMNS,
+  buildGroupMembershipCsvRows,
+  type GroupMembershipSource,
+} from "@/domain/submissions/groupMembershipCsv"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { isClassroomArchived } from "@/types/classroom"
@@ -1223,6 +1228,59 @@ const SubmissionsPageContent = () => {
     downloadBlob(blob, `${classroom}-${assignment}-scores.csv`)
   }
 
+  // Every group the page knows, mode-neutral, for the membership export. Team
+  // mode lists every live team (including one with no repo or no members yet)
+  // with its repo when created; legacy lists every existing group repo with
+  // its founder plus collaborators. `members` stays undefined for a group
+  // whose live read failed, so the export marks it unreadable rather than
+  // empty.
+  const groupMembershipSources = useMemo<GroupMembershipSource[]>(() => {
+    if (isTeamAssignment) {
+      const repoByOwner = new Map(
+        groupRepoList.map((repo) => [repo.owner, repo.repoName]),
+      )
+      return (groupTeams ?? []).map((team) => {
+        const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+        return {
+          group: owner,
+          name: groupDisplayName(team, t),
+          teamSlug: team.slug,
+          repoName: repoByOwner.get(owner),
+          members: teamMembersBySlug.get(team.slug)?.map((m) => m.login),
+        }
+      })
+    }
+    if (isGroupAssignment) {
+      return groupRepoList.map((repo) => {
+        const collaborators = groupCollabByRepo.get(repo.repoName)
+        return {
+          group: repo.owner,
+          repoName: repo.repoName,
+          members: collaborators && [repo.owner, ...collaborators],
+        }
+      })
+    }
+    return []
+  }, [
+    isTeamAssignment,
+    isGroupAssignment,
+    groupTeams,
+    groupRepoList,
+    teamMembersBySlug,
+    groupCollabByRepo,
+    t,
+  ])
+
+  const downloadGroupsCsv = () => {
+    const rows = buildGroupMembershipCsvRows(groupMembershipSources, students)
+    const csv = Papa.unparse(
+      { fields: [...GROUP_MEMBERSHIP_CSV_COLUMNS], data: rows },
+      { header: true },
+    )
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    downloadBlob(blob, `${classroom}-${assignment}-groups.csv`)
+  }
+
   if (!org || !classroom || !assignment) {
     return <MissingParams message={t("submissions.missingParams")} />
   }
@@ -1568,6 +1626,10 @@ const SubmissionsPageContent = () => {
                 viewLabel={viewLabel}
                 onDownloadCsv={downloadScoresCsv}
                 downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+                onDownloadGroups={isGroupFlavor ? downloadGroupsCsv : undefined}
+                downloadGroupsDisabled={
+                  groupMembersPending || groupMembershipSources.length === 0
+                }
                 onDownloadAll={() => setDownloadAllOpen(true)}
                 downloadAllDisabled={downloadableOwners.length === 0}
                 // Bulk set student repo access: owner-only (needs admin on every
