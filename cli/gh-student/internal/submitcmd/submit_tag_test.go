@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+// _git runs git in dir and returns its trimmed combined output, failing the
+// test on a non-zero exit.
+func _git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // _tagTestRepos builds the fixture pushSubmitTag runs against: a bare
 // "remote" with one commit on main, and a local bare clone of it (the shape
 // commitWorkTreeOnRemoteBranch leaves behind). Returns (localGitDir,
@@ -17,29 +30,18 @@ func _tagTestRepos(t *testing.T) (string, string, string) {
 	t.Helper()
 	tmp := t.TempDir()
 
-	run := func(dir string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-
 	// Seed a work repo, then serve it as a bare remote.
 	seed := filepath.Join(tmp, "seed")
-	run(tmp, "init", "-q", "-b", "main", seed)
-	run(seed, "-c", "user.name=t", "-c", "user.email=t@example.com",
+	_git(t, tmp, "init", "-q", "-b", "main", seed)
+	_git(t, seed, "-c", "user.name=t", "-c", "user.email=t@example.com",
 		"commit", "-q", "--allow-empty", "-m", "Submit hello")
-	sha := run(seed, "rev-parse", "HEAD")
+	sha := _git(t, seed, "rev-parse", "HEAD")
 
 	remote := filepath.Join(tmp, "remote.git")
-	run(tmp, "clone", "-q", "--bare", seed, remote)
+	_git(t, tmp, "clone", "-q", "--bare", seed, remote)
 
 	local := filepath.Join(tmp, "local.git")
-	run(tmp, "clone", "-q", "--bare", remote, local)
+	_git(t, tmp, "clone", "-q", "--bare", remote, local)
 
 	return local, remote, sha
 }

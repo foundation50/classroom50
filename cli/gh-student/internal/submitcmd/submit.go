@@ -275,7 +275,7 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		if sp != nil {
 			sp.Fail(pushMsg)
 		}
-		if tail := lastNonEmptyLine(gitErrBuf.String()); tail != "" {
+		if tail := gitDiagnosticTail(gitErrBuf.String()); tail != "" {
 			return fmt.Errorf("%w: %s", err, tail)
 		}
 		return err
@@ -685,13 +685,14 @@ func commitWorkTreeOnRemoteBranch(ctx context.Context, gitDir string, workTree s
 		return "", fmt.Errorf("stage work tree: %w", err)
 	}
 
-	// `-c` scopes identity to this commit; env vars
+	// `-c` scopes identity and signing config to this commit; env vars
 	// (GIT_AUTHOR_*, GIT_COMMITTER_*) still win.
-	if err := git(
-		"-c", "user.name="+identity.Name,
-		"-c", "user.email="+identity.Email,
-		"commit", "--allow-empty", "-m", message,
-	); err != nil {
+	if err := git(append(identity.ConfigArgs(), "commit", "--allow-empty", "-m", message)...); err != nil {
+		// A local commit cannot stall on the network; the one thing it waits
+		// on is a signing passphrase prompt, which the spinner hides.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", errors.New("git timed out while creating the submission commit; if commit signing waits for a passphrase, run `gh student submit --verbose` to see and answer the prompt")
+		}
 		return "", fmt.Errorf("commit submission: %w", err)
 	}
 
@@ -833,17 +834,33 @@ func isControlPath(rel string) bool {
 	return strings.HasPrefix(rel, ".github/") || strings.HasPrefix(rel, ".git/")
 }
 
-// lastNonEmptyLine returns the last non-empty trimmed line of s, used to
-// surface git's actionable error (e.g., `fatal: ...`) when its stderr was
-// buffered rather than streamed.
-func lastNonEmptyLine(s string) string {
-	lines := strings.Split(s, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if t := strings.TrimSpace(lines[i]); t != "" {
-			return t
+// gitDiagnosticTail returns the actionable part of git's buffered stderr: its
+// non-empty lines from the first diagnostic (`error:` or `fatal:`, also behind
+// a `remote: ` prefix) onward, or the last non-empty line when there is none.
+// The last line alone is not enough: a signing failure ends in a generic
+// "fatal: failed to write commit object" and a rejected push in "error: failed
+// to push some refs", with the cause printed just above.
+func gitDiagnosticTail(s string) string {
+	var lines []string
+	for _, line := range strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == '\r' }) {
+		if t := strings.TrimSpace(line); t != "" {
+			lines = append(lines, t)
 		}
 	}
-	return ""
+	if len(lines) == 0 {
+		return ""
+	}
+	for i, line := range lines {
+		if isGitDiagnostic(line) {
+			return strings.Join(lines[i:], "\n")
+		}
+	}
+	return lines[len(lines)-1]
+}
+
+func isGitDiagnostic(line string) bool {
+	line = strings.TrimPrefix(line, "remote: ")
+	return strings.HasPrefix(line, "error:") || strings.HasPrefix(line, "fatal:")
 }
 
 func copyFilePreservingMode(src string, dst string, mode os.FileMode) error {

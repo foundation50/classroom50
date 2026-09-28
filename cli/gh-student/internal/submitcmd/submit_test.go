@@ -116,3 +116,37 @@ func TestResolveRepoDefaultBranch(t *testing.T) {
 		}
 	})
 }
+
+func TestGitDiagnosticTail(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "  \n\n", ""},
+		{"no diagnostic keeps the last line", "Cloning into bare repository 'x'...\nsome chatter\n", "some chatter"},
+		{
+			"clone failure starts at fatal",
+			"Cloning into bare repository 'x'...\nremote: Repository not found.\nfatal: repository 'https://github.com/o/r.git/' not found\n",
+			"fatal: repository 'https://github.com/o/r.git/' not found",
+		},
+		{
+			"signing failure keeps the cause above the generic fatal",
+			"error: Couldn't load public key /home/a/.ssh/school.pub: No such file or directory?\n\nfatal: failed to write commit object\n",
+			"error: Couldn't load public key /home/a/.ssh/school.pub: No such file or directory?\nfatal: failed to write commit object",
+		},
+		{
+			"rejected push keeps the remote's reason",
+			"remote: error: GH006: Protected branch update failed for refs/heads/main.\nremote: - Commits must have verified signatures.\nTo github.com:o/r.git\n ! [remote rejected] HEAD -> main (protected branch hook declined)\nerror: failed to push some refs to 'github.com:o/r.git'\n",
+			"remote: error: GH006: Protected branch update failed for refs/heads/main.\nremote: - Commits must have verified signatures.\nTo github.com:o/r.git\n! [remote rejected] HEAD -> main (protected branch hook declined)\nerror: failed to push some refs to 'github.com:o/r.git'",
+		},
+		{"progress carriage returns are line breaks", "Receiving objects:  45%\rReceiving objects: 100%\nfatal: early EOF\n", "fatal: early EOF"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := gitDiagnosticTail(tc.in); got != tc.want {
+				t.Fatalf("gitDiagnosticTail = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
