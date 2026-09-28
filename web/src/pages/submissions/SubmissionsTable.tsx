@@ -251,24 +251,27 @@ function buildDetailItems(
 
 // Resolve whether a row's score cell offers override editing, and with what
 // max. Returns null when the row isn't editable (no capability, or a pending
-// group whose members aren't resolved yet). Manual mode is always editable (an
-// ungraded row offers "Add grade") with the configured max. Autograded mode is
-// editable for any non-empty repo: a graded row uses its own max-score, while a
-// pending row (not yet collected, no max-score) returns an undefined max so the
-// modal prompts the teacher to enter it.
+// group whose credited members aren't known yet). Manual mode is always
+// editable (an ungraded row offers "Add grade") with the configured max.
+// Autograded mode is editable for any non-empty repo: a graded row uses its
+// own max-score, while a pending row (not yet collected, no max-score) returns
+// an undefined max so the modal prompts the teacher to enter it.
 //
 // The pending-group guard matters: a pending group row comes from the
 // live/detection overlay before collection, so its usernames is just the
 // founder — grading it would write member_usernames:[founder] and mis-credit
-// the group, so we defer until collection resolves the member list.
+// the group. The caller resolves the members (live team membership, or the
+// legacy repo's on-roster collaborators) and says whether they're still
+// unknown. A collected row already has an entry that keeps its recorded
+// members, so it never waits on this.
 function resolveOverrideCell(
   row: Pick<SubmissionRow, "pending" | "max-score">,
   capability: ScoreOverrideCapability | undefined,
-  isGroup: boolean,
+  membersUnresolved: boolean,
   skipsGrading: boolean,
 ): { hasGrade: boolean; maxPoints?: number } | null {
   if (!capability) return null
-  if (isGroup && row.pending) return null
+  if (row.pending && membersUnresolved) return null
 
   if (capability.mode === "manual") {
     if (typeof capability.maxPoints !== "number") return null
@@ -363,8 +366,13 @@ const SubmissionsTable = ({
   // never offered. isGroup is also true for team rows.
   isTeam?: boolean
   // Team mode: owner segment ("group-<n>", lowercased) -> the team's display
-  // name / live member logins.
+  // name.
   groupDisplayNames?: ReadonlyMap<string, string>
+  // Lowercased owner segment -> the logins a NEW grade entry credits (scores-v1
+  // member_usernames): live team membership in team mode, the founder plus the
+  // repo's on-roster collaborators for a legacy group. An owner with no entry
+  // has unresolved members, which withholds the grade editor on a pending or
+  // unsubmitted group row. Team mode also renders it as the Members column.
   groupMemberLogins?: ReadonlyMap<string, string[]>
   // Lowercased login -> staff roles, for the badge that marks a teacher/head
   // TA/TA row (staff testing the assignment). A student-only login is absent.
@@ -631,10 +639,54 @@ const SubmissionsTable = ({
   const groupLabel = (owner: string, repo: string) =>
     groupDisplayNames?.get(owner.toLowerCase()) ?? repo
 
-  // Team mode: a row's live member logins, or undefined while membership is
-  // still unresolved (which blocks the override editor — see below).
-  const teamMembers = (owner: string) =>
+  // A group row's credited member logins (see groupMemberLogins), or undefined
+  // while membership is still unresolved (which blocks a NEW entry's override
+  // editor — see below).
+  const groupMembers = (owner: string) =>
     groupMemberLogins?.get(owner.toLowerCase())
+
+  // Team mode: a row's team slug, recorded on a new override entry.
+  const teamSlugOf = (owner: string) =>
+    isTeam ? teamsByOwner?.get(owner.toLowerCase())?.slug : undefined
+
+  // The "Add score" cell for a group repo with no entry yet (a repo nobody
+  // pushed to). Manual mode only: like the individual non-submitter row, an
+  // autograded assignment has no per-row value to override before a
+  // submission exists. Withheld until the credited members are known, so the
+  // new entry can't credit the founder alone.
+  const groupRepoScoreCell = (owner: string, repo: string) => {
+    const members = groupMembers(owner)
+    if (
+      overrideGrade?.mode !== "manual" ||
+      typeof overrideGrade.maxPoints !== "number" ||
+      !members
+    ) {
+      return undefined
+    }
+    const maxPoints = overrideGrade.maxPoints
+    return (
+      <ScoreCell
+        owner={owner}
+        hasGrade={false}
+        score={0}
+        max={maxPoints}
+        overridden={false}
+        thresholdFraction={passBar}
+        onEdit={() =>
+          setOverrideRow({
+            owner,
+            displayName: groupLabel(owner, repo),
+            hasGrade: false,
+            score: 0,
+            overridden: false,
+            maxPoints,
+            memberUsernames: members,
+            teamSlug: teamSlugOf(owner),
+          })
+        }
+      />
+    )
+  }
 
   // Team mode: whether a row's owner segment has no live team behind it (the
   // GitHub team was likely deleted). Settled-gated so it can't flash while
@@ -740,7 +792,7 @@ const SubmissionsTable = ({
                 // rows keep the repo name as the label.
                 repoLabel={isTeam ? groupLabel(rest.owner, repo) : repo}
                 memberLoginsOverride={
-                  isTeam ? teamMembers(rest.owner) : undefined
+                  isTeam ? groupMembers(rest.owner) : undefined
                 }
                 // Team mode: members render in their own count column.
                 showAvatars={!isTeam}
@@ -775,7 +827,7 @@ const SubmissionsTable = ({
           // the count button is the only click target inside it.
           <td onClick={(event) => event.stopPropagation()}>
             <TeamMembersCountCell
-              count={teamMembers(rest.owner)?.length}
+              count={groupMembers(rest.owner)?.length}
               max={maxGroupSize}
               label={t("submissions.table.manageMembersLabel", {
                 name: groupLabel(rest.owner, repo),
@@ -801,18 +853,21 @@ const SubmissionsTable = ({
         </td>
         <td>
           {(() => {
+            // A pending group row has no entry yet, so a save writes a NEW one
+            // credited to the members the page resolved (live team membership,
+            // or the legacy repo's on-roster collaborators). Until they're
+            // known the editor is withheld rather than crediting the founder
+            // alone. A collected row's entry keeps its recorded members.
+            const creditedMembers = isGroup
+              ? groupMembers(rest.owner)
+              : undefined
             const cell = resolveOverrideCell(
               { usernames, score, ...rest } as SubmissionRow,
               overrideGrade,
-              isGroup,
+              isGroup && !creditedMembers,
               skipsGrading,
             )
-            // Team rows credit LIVE team members on an override write, so the
-            // editor is blocked until membership resolves — the team analog of
-            // the pending-group guard inside resolveOverrideCell.
-            const liveTeamMembers = isTeam ? teamMembers(rest.owner) : undefined
-            const teamMembersUnresolved = isTeam && !liveTeamMembers
-            if (cell && !teamMembersUnresolved) {
+            if (cell) {
               return (
                 <ScoreCell
                   owner={rest.owner}
@@ -836,11 +891,8 @@ const SubmissionsTable = ({
                       autogradedMax: rest.autogradedMax,
                       autogradedProvenance: rest.autogradedProvenance,
                       maxPoints: cell.maxPoints,
-                      memberUsernames: liveTeamMembers ?? usernames,
-                      teamSlug: isTeam
-                        ? (rest.teamSlug ??
-                          teamsByOwner?.get(rest.owner.toLowerCase())?.slug)
-                        : undefined,
+                      memberUsernames: creditedMembers ?? usernames,
+                      teamSlug: rest.teamSlug ?? teamSlugOf(rest.owner),
                     })
                   }
                 />
@@ -1172,7 +1224,7 @@ const SubmissionsTable = ({
                     label={label}
                     membersCell={
                       <TeamMembersCountCell
-                        count={teamMembers(teamOwner)?.length}
+                        count={groupMembers(teamOwner)?.length}
                         max={maxGroupSize}
                         label={t("submissions.table.manageMembersLabel", {
                           name: label,
@@ -1212,12 +1264,13 @@ const SubmissionsTable = ({
                   students={students}
                   onManage={openManage}
                   publicRepo={isPublicRepo(repoName)}
-                  memberLogins={isTeam ? teamMembers(owner) : undefined}
+                  scoreCell={groupRepoScoreCell(owner, repoName)}
+                  memberLogins={isTeam ? groupMembers(owner) : undefined}
                   label={isTeam ? groupLabel(owner, repoName) : undefined}
                   membersCell={
                     isTeam ? (
                       <TeamMembersCountCell
-                        count={teamMembers(owner)?.length}
+                        count={groupMembers(owner)?.length}
                         max={maxGroupSize}
                         label={t("submissions.table.manageMembersLabel", {
                           name: groupLabel(owner, repoName),

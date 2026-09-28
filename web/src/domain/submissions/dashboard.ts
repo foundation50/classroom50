@@ -1567,6 +1567,36 @@ function ownerSortKey(owner: string, names: Map<string, string>): string {
   return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
 }
 
+// Lowercased founder -> the logins a NEW manual grade on a legacy group repo
+// credits (scores-v1 member_usernames): the founder plus the repo's direct
+// collaborators who are on the roster, mirroring the collector's
+// group_member_usernames so an account added out-of-band is never credited. A
+// repo whose collaborators are unknown (fan-out failed or unsettled) gets no
+// entry, so the caller withholds the editor instead of crediting the founder
+// alone.
+export function legacyGroupCreditedMembers(
+  groupRepos: readonly GroupRepo[],
+  membersByRepo: ReadonlyMap<string, string[]>,
+  students: readonly Student[],
+): Map<string, string[]> {
+  const roster = new Set(students.map((s) => s.username.trim().toLowerCase()))
+  const map = new Map<string, string[]>()
+  for (const repo of groupRepos) {
+    const collaborators = membersByRepo.get(repo.repoName)
+    if (!collaborators) continue
+    const owner = repo.owner.trim().toLowerCase()
+    const members = [owner]
+    for (const login of collaborators) {
+      const key = login.trim().toLowerCase()
+      if (key !== owner && roster.has(key) && !members.includes(key)) {
+        members.push(key)
+      }
+    }
+    map.set(owner, members)
+  }
+  return map
+}
+
 // Group repos that exist but that no row credits: the "team formed, nobody
 // pushed yet" items. Owner match is case-insensitive like every other join.
 export function unsubmittedGroupRepos(

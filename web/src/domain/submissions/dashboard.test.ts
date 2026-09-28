@@ -56,6 +56,7 @@ import {
   assignmentFunnelCounts,
   orgReposReadEnabled,
   unsubmittedGroupRepos,
+  legacyGroupCreditedMembers,
   withSnapshotDetected,
   defaultSubmissionSort,
   nameSortDirections,
@@ -2304,6 +2305,50 @@ describe("withSnapshotDetected", () => {
         (s) => s.username,
       ),
     ).toEqual(["cara"])
+  })
+})
+
+describe("legacyGroupCreditedMembers", () => {
+  const repos = [
+    { owner: "Alice", repoName: "cs101-hw1-alice" },
+    { owner: "dan", repoName: "cs101-hw1-dan" },
+  ]
+  const roster = [
+    student({ username: "alice" }),
+    student({ username: "Bob" }),
+    student({ username: "cara" }),
+  ]
+
+  it("credits the founder plus on-roster collaborators, lowercased and deduped", () => {
+    const map = legacyGroupCreditedMembers(
+      repos,
+      new Map([["cs101-hw1-alice", ["alice", "bob", "BOB", "intruder"]]]),
+      roster,
+    )
+    // Mirrors the collector: a collaborator off the classroom team (an account
+    // added out-of-band) is never credited.
+    expect(map.get("alice")).toEqual(["alice", "bob"])
+  })
+
+  it("keeps the founder even when they are off the roster", () => {
+    const map = legacyGroupCreditedMembers(
+      repos,
+      new Map([["cs101-hw1-dan", ["cara"]]]),
+      roster,
+    )
+    expect(map.get("dan")).toEqual(["dan", "cara"])
+  })
+
+  it("leaves out a repo whose collaborators are unknown", () => {
+    // No entry (rather than [founder]) so the caller withholds the editor
+    // instead of writing a grade credited to the founder alone.
+    const map = legacyGroupCreditedMembers(
+      repos,
+      new Map([["cs101-hw1-alice", []]]),
+      roster,
+    )
+    expect(map.get("alice")).toEqual(["alice"])
+    expect(map.has("dan")).toBe(false)
   })
 })
 

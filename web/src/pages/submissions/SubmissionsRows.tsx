@@ -578,9 +578,10 @@ export const NonSubmitterRow = ({
 }
 
 // A group repo that exists but has no submission yet: repo + members (from the
-// collaborators cache) with an "awaiting submission" badge. The Actions cell is
-// composed by the caller (`actions`) so this stays presentational and avoids a
-// cycle with SubmissionsRowActions (#245 keeps fetching lazy).
+// collaborators cache) with an "awaiting submission" badge. The Actions cell
+// (`actions`) and the manual-grade Score cell (`scoreCell`) are composed by the
+// caller so this stays presentational and avoids a cycle with
+// SubmissionsRowActions (#245 keeps fetching lazy).
 export const GroupRepoRow = ({
   org,
   classroom,
@@ -591,6 +592,7 @@ export const GroupRepoRow = ({
   actions,
   onManage,
   publicRepo = false,
+  scoreCell,
   memberLogins,
   label,
   membersCell,
@@ -608,6 +610,10 @@ export const GroupRepoRow = ({
   // Whether this group repo is currently public — renders the warning badge
   // beside the status chip.
   publicRepo?: boolean
+  // Manual-grade entry for this not-yet-graded group (the group analog of the
+  // individual non-submitter row's "Add score"). Absent, the cell renders an
+  // em-dash.
+  scoreCell?: React.ReactNode
   // Team mode: live team membership + the team's display name.
   memberLogins?: string[]
   label?: string
@@ -642,7 +648,7 @@ export const GroupRepoRow = ({
           {publicRepo ? <PublicRepoBadge /> : null}
         </div>
       </td>
-      <td>—</td>
+      <td>{scoreCell ?? "—"}</td>
       <td>—</td>
       {/* Quarantined from the row's manage click — see the submitter row. */}
       <td onClick={(event) => event.stopPropagation()}>

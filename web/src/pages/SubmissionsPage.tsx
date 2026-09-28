@@ -77,6 +77,7 @@ import {
   existingTeamRepos,
   filterDisplayList,
   latestAssignmentPush,
+  legacyGroupCreditedMembers,
   effectiveCollectedAt,
   mergeDetectedSubmissions,
   mergeLiveRows,
@@ -506,6 +507,29 @@ const SubmissionsPageContent = () => {
   // rather than blanking a populated gradebook (discussion #677: every row
   // filtered out against a roster the viewer couldn't read).
   const rosterReady = !rosterLoading && !rosterError && studentRosterKnown
+  // Owner segment -> the logins a NEW manual grade credits (a group has no
+  // per-student entry to credit until one is written). Team mode: live team
+  // membership. Legacy group: founder + on-roster collaborators, held back
+  // until the roster is known so a transient roster failure can't credit the
+  // founder alone. The table withholds a pending or unsubmitted group's grade
+  // editor while its owner has no entry here.
+  const creditedGroupMembers = useMemo(() => {
+    if (isTeamAssignment) return groupMemberLogins
+    if (!isGroupAssignment || !rosterReady) return undefined
+    return legacyGroupCreditedMembers(
+      groupRepoList,
+      groupCollabByRepo,
+      students,
+    )
+  }, [
+    isTeamAssignment,
+    isGroupAssignment,
+    rosterReady,
+    groupMemberLogins,
+    groupRepoList,
+    groupCollabByRepo,
+    students,
+  ])
   // A background refetch keeps this true, so Refresh never blanks the table.
   const scoresLoaded = scoresData !== undefined
   // Graded entries plus the collector's detected submitters, so a push-mode
@@ -1682,7 +1706,7 @@ const SubmissionsPageContent = () => {
           isGroup={isGroupFlavor}
           isTeam={isTeamAssignment}
           groupDisplayNames={groupDisplayNames}
-          groupMemberLogins={groupMemberLogins}
+          groupMemberLogins={creditedGroupMembers}
           staffRolesByLogin={staffRoles}
           teamsByOwner={isTeamAssignment ? teamByOwner : undefined}
           teamsWithoutRepos={
