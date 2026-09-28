@@ -17,6 +17,14 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.56.1](https://github.com/foundation50/classroom50/compare/web-v1.56.0...web-v1.56.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* match roster.csv columns by header name across CLI and web ([#1074](https://github.com/foundation50/classroom50/issues/1074)) ([43ec144](https://github.com/foundation50/classroom50/commit/43ec1444f87674cd3276e66eadb6439dc0c97668))
+* **web:** offer manual grade entry on group assignment rows ([#1085](https://github.com/foundation50/classroom50/issues/1085)) ([6d329a0](https://github.com/foundation50/classroom50/commit/6d329a0280aec818bf4d92ae188671e6c098d936))
+
 ## [1.56.0](https://github.com/foundation50/classroom50/compare/web-v1.55.0...web-v1.56.0) (2026-09-24)
 
 
