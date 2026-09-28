@@ -1,6 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { githubKeys } from "@/github-core/queries"
+import { invalidateRepoCollaborators } from "@/github-core/queries"
 import { addRepoCollaborator } from "@/github-core/mutations"
 import type { RepoPermission } from "@/types/classroom"
 
@@ -21,9 +21,7 @@ export function useAddRepoCollaborator() {
         ...params,
       }),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.collaborators(variables.org, variables.repo),
-      })
+      invalidateRepoCollaborators(queryClient, variables.org, variables.repo)
     },
   })
 }

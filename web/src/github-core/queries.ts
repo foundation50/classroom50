@@ -10,6 +10,7 @@ export {
   invalidateInviteQueries,
   invalidateClassroomTeam,
   invalidateGroupTeams,
+  invalidateRepoCollaborators,
   invalidateViewerOrgs,
 } from "./queries/keys"
 export {

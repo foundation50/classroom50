@@ -158,6 +158,10 @@ export const githubKeys = {
 
   collaborators: (org: string, repo: string) =>
     [...githubKeys.all, "collaborators", org, repo] as const,
+  // Prefix for the per-assignment collaborators fan-out (useGroupRepoMemberLogins),
+  // keyed by the sorted repo set beneath it.
+  groupCollaboratorsAll: (org: string) =>
+    [...githubKeys.all, "group-collaborators", org] as const,
 
   // Prefix for every repo's open-pulls entry: a bulk action invalidates all of
   // them at once.
@@ -328,6 +332,26 @@ export function invalidateClassroomTeam(
   })
   queryClient.invalidateQueries({
     queryKey: githubKeys.teamInvitations(org, teamSlug),
+  })
+}
+
+// Refresh everything derived from one repo's collaborators after an add or
+// remove: the per-repo list the Members modal reads, and the per-assignment
+// fan-out that credits a legacy group's members on a new manual grade. The
+// fan-out is keyed by the whole repo set, so it's invalidated by org prefix.
+// Single-sourced like invalidateGroupTeams: a grade saved right after a
+// Members edit would otherwise credit the stale member list, frozen by
+// override:true past the collector.
+export function invalidateRepoCollaborators(
+  queryClient: QueryClient,
+  org: string,
+  repo: string,
+) {
+  void queryClient.invalidateQueries({
+    queryKey: githubKeys.collaborators(org, repo),
+  })
+  void queryClient.invalidateQueries({
+    queryKey: githubKeys.groupCollaboratorsAll(org),
   })
 }
 

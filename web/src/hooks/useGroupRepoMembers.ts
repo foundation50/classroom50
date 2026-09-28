@@ -47,7 +47,7 @@ export function useGroupRepoMemberLogins(
   const enabled = Boolean(org) && repoNames.length > 0
 
   const { data, isLoading } = useQuery({
-    queryKey: [...githubKeys.all, "group-collaborators", org, repoKey] as const,
+    queryKey: [...githubKeys.groupCollaboratorsAll(org), repoKey] as const,
     queryFn: async (): Promise<GroupRepoMembers> => {
       const logins = new Set<string>()
       const membersByRepo = new Map<string, string[]>()
