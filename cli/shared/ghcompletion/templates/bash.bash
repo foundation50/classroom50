@@ -29,14 +29,15 @@ __gh_ext_{{.Ident}}_is_wrapped() {
 }
 
 __gh_ext_{{.Ident}}_install() {
+    local body
+
     # bash-completion v2 loads gh's completer lazily on first Tab. Ask its
     # loader first, then fall back to generating the completer. Generating it
     # without bash-completion present would register a completer whose every
     # Tab fails, for gh's own commands too, so stop instead.
-    if ! declare -F __gh_get_completion_results >/dev/null 2>&1; then
-        if declare -F _completion_loader >/dev/null 2>&1; then
-            _completion_loader gh >/dev/null 2>&1
-        fi
+    if ! declare -F __gh_get_completion_results >/dev/null 2>&1 \
+        && declare -F _completion_loader >/dev/null 2>&1; then
+        _completion_loader gh >/dev/null 2>&1
     fi
     if ! declare -F __gh_get_completion_results >/dev/null 2>&1; then
         declare -F _init_completion >/dev/null 2>&1 || declare -F _get_comp_words_by_ref >/dev/null 2>&1 || return 1
@@ -48,7 +49,8 @@ __gh_ext_{{.Ident}}_install() {
 
     # Chain: keep whatever the hook currently is (gh's own, or another
     # extension's wrapper) under a unique name, then put our router in front.
-    eval "$(declare -f __gh_get_completion_results | sed '1s/.*/__gh_ext_{{.Ident}}_prev()/')"
+    body=$(declare -f __gh_get_completion_results)
+    eval "__gh_ext_{{.Ident}}_prev${body#__gh_get_completion_results}"
 
     # `words` is the caller's local; dynamic scoping lets us replace
     # `gh {{.Ext}}` with one word that runs it, so the request

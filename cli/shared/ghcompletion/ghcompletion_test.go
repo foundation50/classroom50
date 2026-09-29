@@ -115,24 +115,47 @@ func fakeTeacherRoot() *cobra.Command {
 	return root
 }
 
-// hooks pairs each shell with the cobra-generated function its template
-// wraps and the request line the rewrite relies on. The real gh must keep
-// emitting them, and the fake gh must match, or the wrappers fall back to
-// doing nothing at rc time.
-var hooks = map[string]struct{ wraps, request string }{
-	"bash": {"__gh_get_completion_results", `requestComp="${words[0]} __complete ${args[*]}"`},
-	"zsh":  {"_gh", `requestComp="${words[1]} __complete ${words[2,-1]}"`},
-	"fish": {"__gh_perform_completion", `$args[1] __complete $args[2..-1]`},
+// testShells describes each shell under test: how to run it without rc
+// files, the harness load modes for gh's completer, and the cobra-generated
+// hook the template wraps plus the request line the rewrite relies on. The
+// real gh must keep emitting those, and the fake gh must match, or the
+// wrappers fall back to doing nothing at rc time.
+var testShells = []struct {
+	name           string
+	args           []string
+	loadModes      []string
+	wraps, request string
+}{
+	{"bash", []string{"--noprofile", "--norc"}, []string{"eager", "loader", "none"},
+		"__gh_get_completion_results", `requestComp="${words[0]} __complete ${args[*]}"`},
+	{"zsh", []string{"-f"}, []string{"fpath", "none"},
+		"_gh", `requestComp="${words[1]} __complete ${words[2,-1]}"`},
+	{"fish", []string{"--no-config"}, []string{"autoload", "none"},
+		"__gh_perform_completion", `$args[1] __complete $args[2..-1]`},
+}
+
+func shellArgs(t *testing.T, name string) []string {
+	t.Helper()
+	for _, sh := range testShells {
+		if sh.name == name {
+			return sh.args
+		}
+	}
+	t.Fatalf("no testShells entry for %s", name)
+	return nil
 }
 
 func TestScriptRendersForEachShell(t *testing.T) {
-	for _, sh := range shells {
+	if len(testShells) != len(shells) {
+		t.Fatalf("testShells covers %d shells, package supports %d", len(testShells), len(shells))
+	}
+	for _, sh := range testShells {
 		t.Run(sh.name, func(t *testing.T) {
 			out, err := Script(sh.name, "student")
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, want := range []string{"gh student __complete", "__gh_ext_student_prev", hooks[sh.name].wraps} {
+			for _, want := range []string{"gh student __complete", "__gh_ext_student_prev", sh.wraps} {
 				if !strings.Contains(out, want) {
 					t.Errorf("%s script missing %q", sh.name, want)
 				}
@@ -153,19 +176,20 @@ func TestRealGHCompleterShape(t *testing.T) {
 	if err != nil {
 		skipOrFailInCI(t, "gh not installed")
 	}
-	for shell, hook := range hooks {
-		t.Run(shell, func(t *testing.T) {
-			out, err := exec.Command(gh, "completion", "-s", shell).Output()
+	for _, sh := range testShells {
+		t.Run(sh.name, func(t *testing.T) {
+			t.Parallel()
+			out, err := exec.Command(gh, "completion", "-s", sh.name).Output()
 			if err != nil {
-				t.Fatalf("gh completion -s %s: %v", shell, err)
+				t.Fatalf("gh completion -s %s: %v", sh.name, err)
 			}
-			fake := runFake(t, "completion", "-s", shell)
-			for _, w := range []string{hook.wraps, hook.request} {
+			fake := runFake(t, "completion", "-s", sh.name)
+			for _, w := range []string{sh.wraps, sh.request} {
 				if !strings.Contains(string(out), w) {
-					t.Errorf("real gh's %s completer no longer contains %q; the %s template wraps it", shell, w, shell)
+					t.Errorf("real gh's %s completer no longer contains %q; the %s template wraps it", sh.name, w, sh.name)
 				}
 				if !strings.Contains(fake, w) {
-					t.Errorf("fake gh's %s completer lacks %q; the shell tests would not exercise the wrapper", shell, w)
+					t.Errorf("fake gh's %s completer lacks %q; the shell tests would not exercise the wrapper", sh.name, w)
 				}
 			}
 		})
@@ -279,9 +303,6 @@ var shellCases = []shellCase{
 }
 
 func TestShells(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the scripts target POSIX shells")
-	}
 	shims := installFakeGH(t)
 
 	// Script load orders: alone, after another extension, re-sourced, and
@@ -294,13 +315,14 @@ func TestShells(t *testing.T) {
 		{"teacher", "student", "--reload-gh", "student", "teacher"},
 	}
 
-	for _, sh := range harnessShells {
+	for _, sh := range testShells {
 		t.Run(sh.name, func(t *testing.T) {
 			bin := lookPath(t, sh.name)
 			for _, mode := range sh.loadModes {
 				for _, order := range orders {
 					name := mode + "/" + strings.Join(order, "+")
 					t.Run(name, func(t *testing.T) {
+						t.Parallel()
 						out := runHarness(t, bin, sh.args, sh.name, mode, order, shims)
 						assertCompletions(t, out, slices.Contains(order, "teacher"))
 					})
@@ -310,18 +332,11 @@ func TestShells(t *testing.T) {
 	}
 }
 
-var harnessShells = []struct {
-	name      string
-	args      []string
-	loadModes []string
-}{
-	{"zsh", []string{"-f"}, []string{"fpath", "none"}},
-	{"bash", []string{"--noprofile", "--norc"}, []string{"eager", "loader", "none"}},
-	{"fish", []string{"--no-config"}, []string{"autoload", "none"}},
-}
-
 func lookPath(t *testing.T, name string) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the scripts target POSIX shells")
+	}
 	bin, err := exec.LookPath(name)
 	if err != nil {
 		skipOrFailInCI(t, name+" not installed")
@@ -333,11 +348,8 @@ func lookPath(t *testing.T, name string) string {
 // cannot run without it. The wrapper must then register nothing rather
 // than a completer whose every Tab fails.
 func TestBashWithoutBashCompletionIsNoop(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("the scripts target POSIX shells")
-	}
 	bin := lookPath(t, "bash")
-	out := runHarness(t, bin, []string{"--noprofile", "--norc"}, "bash", "none-nocomp", []string{"student"}, installFakeGH(t))
+	out := runHarness(t, bin, shellArgs(t, "bash"), "bash", "none-nocomp", []string{"student"}, installFakeGH(t))
 	if strings.TrimSpace(out) != "registered\tno" {
 		t.Fatalf("wrapper must not register a gh completer without bash-completion, got:\n%s", out)
 	}
@@ -384,9 +396,7 @@ func runHarness(t *testing.T, bin string, shellArgs []string, shell, loadMode st
 		t.Fatal(err)
 	}
 
-	args := append(append([]string{}, shellArgs...), harness)
-	args = append(args, scripts...)
-	cmd := exec.Command(bin, args...)
+	cmd := exec.Command(bin, slices.Concat(shellArgs, []string{harness}, scripts)...)
 	cmd.Dir = tmp // fish file completion must not pick up repo files
 	cmd.Env = []string{
 		"PATH=" + shims + string(os.PathListSeparator) + os.Getenv("PATH"),

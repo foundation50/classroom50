@@ -12,6 +12,7 @@ package ghcompletion
 import (
 	"embed"
 	"fmt"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -21,14 +22,15 @@ import (
 //go:embed templates/*
 var templates embed.FS
 
-// shells is the single source for everything shell-specific: the template
-// at templates/<name>.<name>, the subcommand, and its install text. setup is
-// a format string taking the invocation (`gh student`) then the extension.
-//
+// shell is everything shell-specific: the template at
+// templates/<name>.<name>, the subcommand, and its install text. setup is a
+// format string taking the invocation (`gh student`) then the extension.
+type shell struct{ name, setup string }
+
 // PowerShell is absent: gh's completer there is one anonymous script block
 // with no function to wrap, so a script could only replace it, not chain
 // with another extension's.
-var shells = []struct{ name, setup string }{
+var shells = []shell{
 	{"bash", "Needs the bash-completion package (on macOS: brew install\n" +
 		"bash-completion@2). Add this to ~/.bashrc (or ~/.bash_profile on\n" +
 		"macOS), after bash-completion is loaded:\n\n" +
@@ -52,18 +54,14 @@ func shellNames() []string {
 
 // Script renders the completion script for shell and the extension invoked
 // as `gh <extension>`.
-func Script(shell, extension string) (string, error) {
-	supported := false
-	for _, s := range shells {
-		supported = supported || s.name == shell
-	}
-	if !supported {
-		return "", fmt.Errorf("unsupported shell %q (supported: %s)", shell, strings.Join(shellNames(), ", "))
+func Script(name, extension string) (string, error) {
+	if !slices.ContainsFunc(shells, func(s shell) bool { return s.name == name }) {
+		return "", fmt.Errorf("unsupported shell %q (supported: %s)", name, strings.Join(shellNames(), ", "))
 	}
 	if !validExtension(extension) {
 		return "", fmt.Errorf("invalid extension name %q", extension)
 	}
-	tmpl, err := template.ParseFS(templates, "templates/"+shell+"."+shell)
+	tmpl, err := template.ParseFS(templates, "templates/"+name+"."+name)
 	if err != nil {
 		return "", err
 	}
@@ -113,19 +111,21 @@ func newCmd(extension string) *cobra.Command {
 			"Supported shells: " + strings.Join(shellNames(), ", ") + ".",
 	}
 	for _, s := range shells {
-		cmd.AddCommand(shellCmd(extension, s.name, fmt.Sprintf(s.setup, invocation, extension)))
+		cmd.AddCommand(shellCmd(extension, s))
 	}
 	return cmd
 }
 
-func shellCmd(extension, shell, setup string) *cobra.Command {
+func shellCmd(extension string, s shell) *cobra.Command {
+	invocation := "gh " + extension
 	return &cobra.Command{
-		Use:   shell,
-		Short: "Generate the completion script for " + shell,
-		Long:  "Generate the " + shell + " completion script for `gh " + extension + "`.\n\n" + setup,
-		Args:  cobra.NoArgs,
+		Use:   s.name,
+		Short: "Generate the completion script for " + s.name,
+		Long: "Generate the " + s.name + " completion script for `" + invocation + "`.\n\n" +
+			fmt.Sprintf(s.setup, invocation, extension),
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			script, err := Script(shell, extension)
+			script, err := Script(s.name, extension)
 			if err != nil {
 				return err
 			}

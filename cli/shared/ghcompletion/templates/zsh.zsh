@@ -30,10 +30,10 @@ __gh_ext_{{.Ident}}_install() {
     # compinit registers _gh as an autoload stub whose body is the whole
     # completion file; that file only defines the real _gh when first run.
     # Load it, then hydrate it, so we wrap the completer and not the file.
-    if ! (( $+functions[_gh] )) || [[ "$(functions _gh)" == *"builtin autoload"* ]]; then
+    if ! (( $+functions[_gh] )) || [[ "$functions[_gh]" == *"builtin autoload"* ]]; then
         autoload -Uz +X _gh 2>/dev/null || :
     fi
-    if ! (( $+functions[_gh] )) || [[ "$(functions _gh)" == *"builtin autoload"* ]]; then
+    if ! (( $+functions[_gh] )) || [[ "$functions[_gh]" == *"builtin autoload"* ]]; then
         eval "$(gh completion -s zsh 2>/dev/null)" || return 1
     fi
     if [[ "$functions[_gh]" == *"_gh () {"* ]]; then
