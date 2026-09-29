@@ -12,7 +12,7 @@ See the [GitHub CLI extensions docs](https://docs.github.com/en/github-cli/githu
 
 - [gh-teacher/](gh-teacher/) — teacher-facing extension.
 - [gh-student/](gh-student/) — student-facing extension.
-- [shared/](shared/) — `github.com/foundation50/classroom50-cli-shared`, an internal Go module holding logic both extensions share (cross-binary contract constants, GitHub-API helpers, auth scaffolding, git Tree-commit plumbing, and the terminal-feedback UI primitives — the `ghui` spinner + TTY/color policy). It is **not** an extension. The two extensions depend on it via a relative `replace => ../shared` directive wired through the top-level `go.work` (dev-only); `go` statically links it at build time, so `gh extension install` ships self-contained binaries and the sharing is transparent to installation. Each extension still builds standalone with the workspace disabled (`GOWORK=off`).
+- [shared/](shared/) — `github.com/foundation50/classroom50-cli-shared`, an internal Go module holding logic both extensions share (cross-binary contract constants, GitHub-API helpers, auth scaffolding, git Tree-commit plumbing, the terminal-feedback UI primitives — the `ghui` spinner + TTY/color policy — and `ghcompletion`, the `completion` command whose scripts extend gh's own completer so Tab works after `gh teacher` / `gh student`). It is **not** an extension. The two extensions depend on it via a relative `replace => ../shared` directive wired through the top-level `go.work` (dev-only); `go` statically links it at build time, so `gh extension install` ships self-contained binaries and the sharing is transparent to installation. Each extension still builds standalone with the workspace disabled (`GOWORK=off`).
 
 ## Using the CLIs
 

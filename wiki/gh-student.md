@@ -18,6 +18,7 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 | `team list <org> <classroom> <assignment>` | Show your group for a team assignment and who is on it. |
 | `team add <org> <classroom> <assignment> <username>` | Add a classmate to your group (founders only). |
 | `submit` | Submit your work on the current assignment. `--key` for an unlisted classroom when the repository has no `.classroom50.yaml`. |
+| `completion <shell>` | Print a shell completion script for `gh student` (bash, zsh, or fish). See [Installation](Installation#shell-completion-optional). |
 
 ## `accept`
 
@@ -269,6 +270,15 @@ grades. `GIT_AUTHOR_*` / `GIT_COMMITTER_*` override the default identity.
   [Will `gh teacher login` disturb my existing `gh` setup?](Troubleshooting#will-gh-teacher-login-disturb-my-existing-gh-setup).
 - `logout`: runs `gh auth logout`, removing the local gh authentication, so
   later commands need a fresh `gh student login`.
+
+## `completion`
+
+Prints a script that makes Tab complete `gh student` commands and flags.
+`gh` completes the names of installed extensions but not what follows them,
+so the script extends gh's own completion rather than registering a new one.
+Supported shells: `bash`, `zsh`, `fish`. Set up gh's completion first, then
+see [Installation](Installation#shell-completion-optional) for where to put
+the script for each shell.
 
 ## Contributing
 

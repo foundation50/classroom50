@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/ghcompletion"
 	"github.com/foundation50/classroom50-cli-shared/ghhelp"
 	"github.com/foundation50/classroom50-cli-shared/updatecheck"
 	"github.com/foundation50/gh-student/internal/auth"
@@ -45,6 +46,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(invitecmd.NewCmd())
 	root.AddCommand(teamcmd.NewCmd())
 	root.AddCommand(submitcmd.NewCmd())
+	ghcompletion.Install(root, "student")
 	ghhelp.Install(root)
 	return root
 }

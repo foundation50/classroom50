@@ -64,6 +64,39 @@ If you skip this and run another command first, the CLI runs the login flow for
 you automatically. `gh teacher logout` and `gh student logout` mirror
 `gh auth logout`.
 
+## Shell completion (optional)
+
+Tab completion for `gh teacher` and `gh student` commands and flags works in
+bash, zsh, and fish. `gh` completes the names of installed extensions but not
+what follows them, so each extension ships a script that extends gh's own
+completion. Set up [gh's completion](https://cli.github.com/manual/gh_completion)
+first, then add the extension's script after it.
+
+zsh (`~/.zshrc`, after `compinit`):
+
+```sh
+eval "$(gh teacher completion zsh)"
+eval "$(gh student completion zsh)"
+```
+
+bash (`~/.bashrc`, or `~/.bash_profile` on macOS):
+
+```sh
+eval "$(gh teacher completion bash)"
+eval "$(gh student completion bash)"
+```
+
+fish:
+
+```sh
+gh teacher completion fish > ~/.config/fish/conf.d/gh-teacher.fish
+gh student completion fish > ~/.config/fish/conf.d/gh-student.fish
+```
+
+Start a new shell afterwards. Add only the lines for the extensions you have
+installed. PowerShell is not supported: gh's completion there cannot be
+extended without replacing it.
+
 ## Next steps
 
 - Teachers: [CLI Teacher Guide](CLI-Teacher-Guide).
