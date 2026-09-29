@@ -19,6 +19,11 @@ if [[ "$HARNESS_LOAD" != none-nocomp ]]; then
     }
 fi
 
+# bash 4+ has the compopt builtin, which cobra's completer calls for display
+# hints (nospace, filenames) and which refuses to run outside a live
+# completion. Those hints never change COMPREPLY, so a no-op is faithful.
+compopt() { :; }
+
 case "$HARNESS_LOAD" in
     eager) eval "$(gh completion -s bash)" ;;
     loader) _completion_loader() { eval "$(gh completion -s bash)"; } ;;
