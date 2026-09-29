@@ -12,7 +12,13 @@ else
 end
 
 for f in $argv
-    source $f
+    # A user re-sourcing gh's own completion file between two loads of the
+    # same script.
+    if test "$f" = --reload-gh
+        gh completion -s fish | source
+    else
+        source $f
+    end
 end
 
 function run

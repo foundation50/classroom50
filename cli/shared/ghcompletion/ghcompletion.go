@@ -21,28 +21,49 @@ import (
 //go:embed templates/*
 var templates embed.FS
 
-// Shells lists the supported shells in help order. PowerShell is absent: gh's
-// completer there is one anonymous script block with no function to wrap,
-// so a script could only replace it, not chain with another extension's.
-var Shells = []string{"bash", "zsh", "fish"}
+// shells is the single source for everything shell-specific: the template
+// at templates/<name>.<name>, the subcommand, and its install text. setup is
+// a format string taking the invocation (`gh student`) then the extension.
+//
+// PowerShell is absent: gh's completer there is one anonymous script block
+// with no function to wrap, so a script could only replace it, not chain
+// with another extension's.
+var shells = []struct{ name, setup string }{
+	{"bash", "Needs the bash-completion package (on macOS: brew install\n" +
+		"bash-completion@2). Add this to ~/.bashrc (or ~/.bash_profile on\n" +
+		"macOS), after bash-completion is loaded:\n\n" +
+		"  eval \"$(%[1]s completion bash)\"\n\n" +
+		"Then start a new shell."},
+	{"zsh", "Add this to ~/.zshrc, after compinit:\n\n" +
+		"  eval \"$(%[1]s completion zsh)\"\n\n" +
+		"Then start a new shell."},
+	{"fish", "Write the script to fish's startup directory:\n\n" +
+		"  %[1]s completion fish > ~/.config/fish/conf.d/gh-%[2]s.fish\n\n" +
+		"Then start a new shell."},
+}
 
-var templateFile = map[string]string{
-	"bash": "templates/bash.sh",
-	"zsh":  "templates/zsh.sh",
-	"fish": "templates/fish.fish",
+func shellNames() []string {
+	names := make([]string, len(shells))
+	for i, s := range shells {
+		names[i] = s.name
+	}
+	return names
 }
 
 // Script renders the completion script for shell and the extension invoked
 // as `gh <extension>`.
 func Script(shell, extension string) (string, error) {
-	file, ok := templateFile[shell]
-	if !ok {
-		return "", fmt.Errorf("unsupported shell %q (supported: %s)", shell, strings.Join(Shells, ", "))
+	supported := false
+	for _, s := range shells {
+		supported = supported || s.name == shell
+	}
+	if !supported {
+		return "", fmt.Errorf("unsupported shell %q (supported: %s)", shell, strings.Join(shellNames(), ", "))
 	}
 	if !validExtension(extension) {
 		return "", fmt.Errorf("invalid extension name %q", extension)
 	}
-	tmpl, err := template.ParseFS(templates, file)
+	tmpl, err := template.ParseFS(templates, "templates/"+shell+"."+shell)
 	if err != nil {
 		return "", err
 	}
@@ -86,37 +107,22 @@ func newCmd(extension string) *cobra.Command {
 		Long: "Generate a script that makes Tab complete `" + invocation + "` commands\n" +
 			"and flags in your shell.\n\n" +
 			"gh completes the names of installed extensions but not what follows\n" +
-			"them, so the script wraps gh's own completion and routes\n" +
-			"`" + invocation + " ...` requests to this extension. Set up gh's completion\n" +
+			"them, so the script wraps gh's own completion and hands anything typed\n" +
+			"after `" + invocation + "` to this extension. Set up gh's completion\n" +
 			"first: run `gh completion --help`.\n\n" +
-			"Supported shells: " + strings.Join(Shells, ", ") + ".",
+			"Supported shells: " + strings.Join(shellNames(), ", ") + ".",
 	}
-	cmd.AddCommand(
-		shellCmd(extension, "bash",
-			"Add this to ~/.bashrc (or ~/.bash_profile on macOS), after\n"+
-				"bash-completion is loaded:\n\n"+
-				"  eval \"$("+invocation+" completion bash)\"\n\n"+
-				"Then start a new shell.",
-		),
-		shellCmd(extension, "zsh",
-			"Add this to ~/.zshrc, after compinit:\n\n"+
-				"  eval \"$("+invocation+" completion zsh)\"\n\n"+
-				"Then start a new shell.",
-		),
-		shellCmd(extension, "fish",
-			"Write the script to fish's startup directory:\n\n"+
-				"  "+invocation+" completion fish > ~/.config/fish/conf.d/gh-"+extension+".fish\n\n"+
-				"Then start a new shell.",
-		),
-	)
+	for _, s := range shells {
+		cmd.AddCommand(shellCmd(extension, s.name, fmt.Sprintf(s.setup, invocation, extension)))
+	}
 	return cmd
 }
 
-func shellCmd(extension, shell, long string) *cobra.Command {
+func shellCmd(extension, shell, setup string) *cobra.Command {
 	return &cobra.Command{
 		Use:   shell,
 		Short: "Generate the completion script for " + shell,
-		Long:  "Generate the " + shell + " completion script for `gh " + extension + "`.\n\n" + long,
+		Long:  "Generate the " + shell + " completion script for `gh " + extension + "`.\n\n" + setup,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			script, err := Script(shell, extension)

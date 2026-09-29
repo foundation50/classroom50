@@ -4,17 +4,29 @@
 # (cli/cli#5309). This wraps gh's own completer: when the second word is
 # `{{.Ext}}`, the request is re-routed to `gh {{.Ext}} __complete ...` so
 # cobra answers with the extension's commands and flags. gh's completer
-# still handles the results, so nothing about its behaviour is duplicated.
-#
-# gh's completion must be available first. This loads it from fpath when it
-# is a lazy autoload, and falls back to generating it.
+# still handles the results, so nothing about its behavior is duplicated.
 
 __gh_ext_{{.Ident}}_exec() { gh {{.Ext}} "$@" }
 
-__gh_ext_{{.Ident}}_install() {
-    # Already wrapped (this file was sourced twice): nothing to do.
-    (( $+functions[__gh_ext_{{.Ident}}_wrapped] )) && return 0
+# True when this extension's router is somewhere in the live chain that
+# starts at _gh. A free-standing marker would go stale when the rc re-runs
+# gh's own `eval "$(gh completion -s zsh)"`, which resets _gh: the marker
+# would say "wrapped" while the wrapper is gone.
+__gh_ext_{{.Ident}}_is_wrapped() {
+    local f=_gh next body
+    while [[ -n "$f" ]] && (( $+functions[$f] )); do
+        body=$functions[$f]
+        [[ "$body" == *__gh_ext_{{.Ident}}_prev* ]] && return 0
+        [[ "$body" =~ '__gh_ext_[a-z0-9_]+_prev' ]] || return 1
+        # zsh reports the match in MATCH, or in BASH_REMATCH under that option.
+        next=${MATCH:-${BASH_REMATCH[1]}}
+        [[ "$next" == "$f" ]] && return 1
+        f=$next
+    done
+    return 1
+}
 
+__gh_ext_{{.Ident}}_install() {
     # compinit registers _gh as an autoload stub whose body is the whole
     # completion file; that file only defines the real _gh when first run.
     # Load it, then hydrate it, so we wrap the completer and not the file.
@@ -29,10 +41,11 @@ __gh_ext_{{.Ident}}_install() {
     fi
     (( $+functions[_gh] )) || return 1
 
+    __gh_ext_{{.Ident}}_is_wrapped && return 0
+
     # Chain: keep whatever _gh currently is (gh's own, or another
     # extension's wrapper) under a unique name, then put our router in front.
     functions[__gh_ext_{{.Ident}}_prev]=$functions[_gh]
-    functions[__gh_ext_{{.Ident}}_wrapped]='return 0'
 
     _gh() {
         if (( CURRENT >= 3 )) && [[ "${words[2]}" == "{{.Ext}}" ]]; then

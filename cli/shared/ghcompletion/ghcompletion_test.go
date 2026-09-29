@@ -115,23 +115,71 @@ func fakeTeacherRoot() *cobra.Command {
 	return root
 }
 
+// hooks pairs each shell with the cobra-generated function its template
+// wraps and the request line the rewrite relies on. The real gh must keep
+// emitting them, and the fake gh must match, or the wrappers fall back to
+// doing nothing at rc time.
+var hooks = map[string]struct{ wraps, request string }{
+	"bash": {"__gh_get_completion_results", `requestComp="${words[0]} __complete ${args[*]}"`},
+	"zsh":  {"_gh", `requestComp="${words[1]} __complete ${words[2,-1]}"`},
+	"fish": {"__gh_perform_completion", `$args[1] __complete $args[2..-1]`},
+}
+
 func TestScriptRendersForEachShell(t *testing.T) {
-	for _, shell := range Shells {
-		t.Run(shell, func(t *testing.T) {
-			out, err := Script(shell, "student")
+	for _, sh := range shells {
+		t.Run(sh.name, func(t *testing.T) {
+			out, err := Script(sh.name, "student")
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, want := range []string{"gh student __complete", "__gh_ext_student_prev", "cli/cli#5309"} {
+			for _, want := range []string{"gh student __complete", "__gh_ext_student_prev", hooks[sh.name].wraps} {
 				if !strings.Contains(out, want) {
-					t.Errorf("%s script missing %q", shell, want)
+					t.Errorf("%s script missing %q", sh.name, want)
 				}
 			}
 			if strings.Contains(out, "{{") {
-				t.Errorf("%s script has an unrendered template action", shell)
+				t.Errorf("%s script has an unrendered template action", sh.name)
 			}
 		})
 	}
+}
+
+// The templates hard-code cobra-internal names from gh's completer. The
+// fake gh below reproduces them from this module's cobra; this checks the
+// real gh still agrees, so a gh release on a restructured cobra fails here
+// instead of silently disabling every wrapper.
+func TestRealGHCompleterShape(t *testing.T) {
+	gh, err := exec.LookPath("gh")
+	if err != nil {
+		skipOrFailInCI(t, "gh not installed")
+	}
+	for shell, hook := range hooks {
+		t.Run(shell, func(t *testing.T) {
+			out, err := exec.Command(gh, "completion", "-s", shell).Output()
+			if err != nil {
+				t.Fatalf("gh completion -s %s: %v", shell, err)
+			}
+			fake := runFake(t, "completion", "-s", shell)
+			for _, w := range []string{hook.wraps, hook.request} {
+				if !strings.Contains(string(out), w) {
+					t.Errorf("real gh's %s completer no longer contains %q; the %s template wraps it", shell, w, shell)
+				}
+				if !strings.Contains(fake, w) {
+					t.Errorf("fake gh's %s completer lacks %q; the shell tests would not exercise the wrapper", shell, w)
+				}
+			}
+		})
+	}
+}
+
+// A missing tool skips locally but fails in CI, so a runner-image change
+// cannot quietly drop the shell coverage.
+func skipOrFailInCI(t *testing.T, reason string) {
+	t.Helper()
+	if os.Getenv("CI") != "" {
+		t.Fatalf("%s (required in CI)", reason)
+	}
+	t.Skip(reason)
 }
 
 func TestScriptRejectsBadInput(t *testing.T) {
@@ -236,28 +284,19 @@ func TestShells(t *testing.T) {
 	}
 	shims := installFakeGH(t)
 
-	shells := []struct {
-		name      string
-		args      []string
-		loadModes []string
-	}{
-		{"zsh", []string{"-f"}, []string{"fpath", "none"}},
-		{"bash", []string{"--noprofile", "--norc"}, []string{"eager", "loader", "none"}},
-		{"fish", []string{"--no-config"}, []string{"autoload", "none"}},
-	}
-	// Script load orders: alone, after another extension, and re-sourced.
+	// Script load orders: alone, after another extension, re-sourced, and
+	// re-sourced after the rc re-ran gh's own completion setup (--reload-gh
+	// is a harness marker, not a script), which resets gh's hook.
 	orders := [][]string{
 		{"student"},
 		{"teacher", "student"},
 		{"student", "teacher", "student"},
+		{"teacher", "student", "--reload-gh", "student", "teacher"},
 	}
 
-	for _, sh := range shells {
+	for _, sh := range harnessShells {
 		t.Run(sh.name, func(t *testing.T) {
-			bin, err := exec.LookPath(sh.name)
-			if err != nil {
-				t.Skipf("%s not installed", sh.name)
-			}
+			bin := lookPath(t, sh.name)
 			for _, mode := range sh.loadModes {
 				for _, order := range orders {
 					name := mode + "/" + strings.Join(order, "+")
@@ -268,6 +307,39 @@ func TestShells(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+var harnessShells = []struct {
+	name      string
+	args      []string
+	loadModes []string
+}{
+	{"zsh", []string{"-f"}, []string{"fpath", "none"}},
+	{"bash", []string{"--noprofile", "--norc"}, []string{"eager", "loader", "none"}},
+	{"fish", []string{"--no-config"}, []string{"autoload", "none"}},
+}
+
+func lookPath(t *testing.T, name string) string {
+	t.Helper()
+	bin, err := exec.LookPath(name)
+	if err != nil {
+		skipOrFailInCI(t, name+" not installed")
+	}
+	return bin
+}
+
+// Stock macOS bash has no bash-completion package, and gh's completer
+// cannot run without it. The wrapper must then register nothing rather
+// than a completer whose every Tab fails.
+func TestBashWithoutBashCompletionIsNoop(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the scripts target POSIX shells")
+	}
+	bin := lookPath(t, "bash")
+	out := runHarness(t, bin, []string{"--noprofile", "--norc"}, "bash", "none-nocomp", []string{"student"}, installFakeGH(t))
+	if strings.TrimSpace(out) != "registered\tno" {
+		t.Fatalf("wrapper must not register a gh completer without bash-completion, got:\n%s", out)
 	}
 }
 
@@ -292,6 +364,10 @@ func runHarness(t *testing.T, bin string, shellArgs []string, shell, loadMode st
 	tmp := t.TempDir()
 	var scripts []string
 	for _, ext := range order {
+		if strings.HasPrefix(ext, "--") {
+			scripts = append(scripts, ext) // harness marker, passed through
+			continue
+		}
 		script, err := Script(shell, ext)
 		if err != nil {
 			t.Fatal(err)

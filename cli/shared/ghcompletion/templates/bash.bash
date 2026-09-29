@@ -4,30 +4,51 @@
 # (cli/cli#5309). This wraps gh's own completer: when the second word is
 # `{{.Ext}}`, the request is re-routed to `gh {{.Ext}} __complete ...` so
 # cobra answers with the extension's commands and flags. gh's completer
-# still handles the results, so nothing about its behaviour is duplicated.
+# still handles the results, so nothing about its behavior is duplicated.
+#
+# Needs the bash-completion package: gh's completer calls its helpers, and
+# macOS ships bash without it. Without the package this script does nothing.
 
 __gh_ext_{{.Ident}}_exec() { gh {{.Ext}} "$@"; }
 
-__gh_ext_{{.Ident}}_install() {
-    # Already wrapped (this file was sourced twice): nothing to do.
-    declare -F __gh_ext_{{.Ident}}_wrapped >/dev/null 2>&1 && return 0
+# True when this extension's router is somewhere in the live chain that
+# starts at gh's hook. A free-standing marker would go stale when the rc
+# re-runs gh's own `eval "$(gh completion -s bash)"`, which resets the hook:
+# the marker would say "wrapped" while the wrapper is gone.
+__gh_ext_{{.Ident}}_is_wrapped() {
+    local f=__gh_get_completion_results next body
+    while [[ -n "$f" ]] && declare -F "$f" >/dev/null 2>&1; do
+        body=$(declare -f "$f")
+        [[ $body == *__gh_ext_{{.Ident}}_prev* ]] && return 0
+        [[ $body =~ __gh_ext_[a-z0-9_]+_prev ]] || return 1
+        next=${BASH_REMATCH[0]}
+        [[ "$next" == "$f" ]] && return 1
+        f=$next
+    done
+    return 1
+}
 
+__gh_ext_{{.Ident}}_install() {
     # bash-completion v2 loads gh's completer lazily on first Tab. Ask its
-    # loader first, then fall back to generating the completer.
+    # loader first, then fall back to generating the completer. Generating it
+    # without bash-completion present would register a completer whose every
+    # Tab fails, for gh's own commands too, so stop instead.
     if ! declare -F __gh_get_completion_results >/dev/null 2>&1; then
         if declare -F _completion_loader >/dev/null 2>&1; then
             _completion_loader gh >/dev/null 2>&1
         fi
     fi
     if ! declare -F __gh_get_completion_results >/dev/null 2>&1; then
+        declare -F _init_completion >/dev/null 2>&1 || declare -F _get_comp_words_by_ref >/dev/null 2>&1 || return 1
         eval "$(gh completion -s bash 2>/dev/null)" || return 1
     fi
     declare -F __gh_get_completion_results >/dev/null 2>&1 || return 1
 
+    __gh_ext_{{.Ident}}_is_wrapped && return 0
+
     # Chain: keep whatever the hook currently is (gh's own, or another
     # extension's wrapper) under a unique name, then put our router in front.
     eval "$(declare -f __gh_get_completion_results | sed '1s/.*/__gh_ext_{{.Ident}}_prev()/')"
-    __gh_ext_{{.Ident}}_wrapped() { return 0; }
 
     # `words` is the caller's local; dynamic scoping lets us replace
     # `gh {{.Ext}}` with one word that runs it, so the request

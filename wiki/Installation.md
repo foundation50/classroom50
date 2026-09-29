@@ -79,7 +79,10 @@ eval "$(gh teacher completion zsh)"
 eval "$(gh student completion zsh)"
 ```
 
-bash (`~/.bashrc`, or `~/.bash_profile` on macOS):
+bash (`~/.bashrc`, or `~/.bash_profile` on macOS). bash needs the
+[bash-completion](https://github.com/scop/bash-completion) package, which
+macOS does not ship (`brew install bash-completion@2`); without it the script
+does nothing:
 
 ```sh
 eval "$(gh teacher completion bash)"

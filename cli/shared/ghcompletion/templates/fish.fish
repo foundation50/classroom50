@@ -10,10 +10,6 @@
 # every `gh` completion when it loads, so this must wrap after it.
 
 function __gh_ext_{{.Ident}}_install
-    if functions -q __gh_ext_{{.Ident}}_wrapped
-        return 0
-    end
-
     # fish autoloads gh's completer on first Tab. Trigger that now (the same
     # trick gh's own script uses), then fall back to generating it.
     if not functions -q __gh_perform_completion
@@ -26,11 +22,26 @@ function __gh_ext_{{.Ident}}_install
         return 1
     end
 
+    # Already in the live chain that starts at gh's hook: nothing to do. A
+    # free-standing marker would go stale when gh's own completion file is
+    # re-sourced, which resets the hook.
+    set -l f __gh_perform_completion
+    while functions -q -- $f
+        set -l body (functions -- $f | string collect)
+        if string match -q -- '*__gh_ext_{{.Ident}}_prev*' $body
+            return 0
+        end
+        set -l next (string match -r -- '__gh_ext_[a-z0-9_]+_prev' $body)
+        if test -z "$next"; or test "$next[1]" = "$f"
+            break
+        end
+        set f $next[1]
+    end
+
     # Chain: keep whatever the hook currently is (gh's own, or another
     # extension's wrapper) under a unique name, then put our router in front.
+    functions -e __gh_ext_{{.Ident}}_prev
     functions -c __gh_perform_completion __gh_ext_{{.Ident}}_prev
-    function __gh_ext_{{.Ident}}_wrapped
-    end
 
     function __gh_perform_completion
         set -l args (commandline -opc)

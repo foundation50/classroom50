@@ -138,9 +138,9 @@ func Lint(root *cobra.Command) []string {
 	var out []string
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
-		// Cobra's own help/completion commands and help/version flags are
-		// not our copy; they exist once the tree has been executed.
-		if c.Name() != "help" && c.Name() != "completion" {
+		// Cobra's own help command and help/version flags are not our copy;
+		// they exist once the tree has been executed.
+		if c.Name() != "help" {
 			for _, v := range lintShort(c.Short) {
 				out = append(out, c.CommandPath()+": "+v)
 			}

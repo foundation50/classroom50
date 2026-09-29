@@ -54,7 +54,7 @@ per-step API and git detail; most commands that print progress also accept
 | `member list <org>[/<repo>]` | List actual members/collaborators. |
 | `download <org> <classroom> <assignment>` | Clone submissions and write `scores.csv`. |
 | `teardown <org>` | Delete every repo in a Classroom 50 org (dev reset). |
-| `completion <shell>` | Print a shell completion script for `gh teacher` (bash, zsh, or fish). See [Installation](Installation#shell-completion-optional). |
+| `completion <shell>` | Generate a shell completion script for `gh teacher` (bash, zsh, or fish). See [Installation](Installation#shell-completion-optional). |
 
 ## `init`
 
@@ -1267,7 +1267,7 @@ team's group record before deleting it.
 
 ## `completion`
 
-Prints a script that makes Tab complete `gh teacher` commands and flags.
+Generates a script that makes Tab complete `gh teacher` commands and flags.
 `gh` completes the names of installed extensions but not what follows them,
 so the script extends gh's own completion rather than registering a new one.
 Supported shells: `bash`, `zsh`, `fish`. Set up gh's completion first, then

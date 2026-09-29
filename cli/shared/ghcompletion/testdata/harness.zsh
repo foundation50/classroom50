@@ -13,7 +13,11 @@ fi
 fpath=("$HARNESS_TMP/fpath" ${fpath:#*site-functions*})
 autoload -Uz compinit && compinit -u -D
 
-for f in "$@"; do source "$f"; done
+for f in "$@"; do
+    # A user's rc that re-runs gh's own `eval "$(gh completion -s zsh)"`
+    # between two loads of the same script.
+    if [[ "$f" == --reload-gh ]]; then eval "$(gh completion -s zsh)"; else source "$f"; fi
+done
 
 # Stubs for the compsys calls the completer makes. _describe receives an
 # array of "name:description" entries; keep the names only.

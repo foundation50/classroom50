@@ -161,5 +161,11 @@ jobs:
             exit 1
           fi
 
+      - name: Install shells for completion tests
+        # cli/shared's ghcompletion tests drive real zsh/bash/fish; under CI
+        # they fail rather than skip when a shell is missing.
+        if: ${{ matrix.module == 'shared' }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh fish
+
       - name: Test
         run: go test ./...

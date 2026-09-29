@@ -89,3 +89,19 @@ func TestHelpRendersWrappedFlagsOnRealTree(t *testing.T) {
 		}
 	}
 }
+
+// Guards that ghcompletion.Install is wired into the real root, and before
+// ghhelp.Install: swapping the two would let `completion powershell` print
+// help and exit 0 instead of failing.
+func TestCompletionOnRealTree(t *testing.T) {
+	out, err := runRoot(t, "completion", "zsh")
+	if err != nil {
+		t.Fatalf("completion zsh failed: %v\n%s", err, out)
+	}
+	if !strings.HasPrefix(out, "# zsh completion for `gh teacher`") {
+		t.Errorf("completion zsh must emit the gh teacher script, got:\n%.120s", out)
+	}
+	if out, err := runRoot(t, "completion", "powershell"); err == nil {
+		t.Errorf("completion powershell must fail, got exit 0 with:\n%s", out)
+	}
+}
