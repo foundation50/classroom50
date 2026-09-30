@@ -161,7 +161,15 @@ organization is rejected (students can't be granted access, so accept would
   template has forks. Don't reuse such a repository. Create a new repository,
   copy the starter's contents into it, and flag the copy as the template.
   Repositories Classroom 50 generates are not forks and never inherit this
-  access.
+  access. Two things do not undo the exposure once it has happened:
+  - **Locking the assignment.** GitHub copies the grant to each fork when the
+    team is added to the template and leaves those copies in place when the
+    team is removed from it, so the forks stay readable while the template
+    itself is locked.
+  - **Cleaning the forks by hand, alone.** Removing the team from each fork
+    works until the team is added to the template again, which unlocking, a
+    re-save, or "Fix template access" all do. Switch the assignment to a
+    fork-free copy first, then remove the team from the forks.
 - **Only the default branch is copied** unless the assignment enables
   **Include all branches** (`include_all_branches`), which passes every branch
   through to each generated student repository.
