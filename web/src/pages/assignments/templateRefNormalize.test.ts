@@ -16,6 +16,7 @@ const ok = (
   branch,
   visibility: "public",
   inOrg: owner === ORG,
+  forksCount: 0,
 })
 
 describe("canonicalTemplateRef", () => {

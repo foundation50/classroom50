@@ -70,6 +70,15 @@ the exception: the team has no read access to its private template until you
 unlock. Create a timed assessment locked and unlock it when the session
 starts. See [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments).
 
+**That read access reaches the template's private forks.** GitHub gives a
+private fork the same team permissions as its upstream, so registering a
+private template that has forks lets the classroom team read every one of
+them. Repositories GitHub Classroom created since 2024 are forks of their
+starter code, so reusing an old starter repository as a template in the same
+organization exposes those students' work. Register a fresh, fork-free copy
+instead. See
+[Template requirements and gotchas](Assignment-Templates#template-requirements-and-gotchas).
+
 **Grading files are tamper-proof, not secret.** Test scripts and fixtures
 kept in `CLASSROOM/autograders/ASSIGNMENT/` never enter a student's
 repository, and the runner fetches them fresh on every grading run, so a

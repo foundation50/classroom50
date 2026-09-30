@@ -367,6 +367,13 @@ export type TemplateAccessVerification =
       branch: string
       visibility: "public" | "private"
       inOrg: boolean
+      // How many forks the template has. Matters only for an in-org private
+      // template: the classroom team read granted on it is inherited by every
+      // private fork (GitHub's fork permission model), so a template that is
+      // also the upstream of older student repos (GitHub Classroom forks, a
+      // "fork the starter" workflow) leaks them to the whole roster. 0 when
+      // GitHub omits the count.
+      forksCount: number
     }
   // Reachable third-party org template (neither the classroom org nor the
   // teacher's account). The org's app restriction only bites at generate time,
@@ -578,6 +585,7 @@ export async function verifyTemplateAccess(
     branch,
     visibility,
     inOrg,
+    forksCount: repo.forks_count ?? 0,
   }
 }
 
