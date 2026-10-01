@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.57.0](https://github.com/foundation50/classroom50/compare/web-v1.56.1...web-v1.57.0) (2026-10-01)
+
+
+### Bug Fixes
+
+* **web:** update client dependencies and unblock the browser CI lane ([#1092](https://github.com/foundation50/classroom50/issues/1092)) ([35813e8](https://github.com/foundation50/classroom50/commit/35813e84822f7458f4e5ccbda0595c425d5b868e))
+
 ## [1.56.1](https://github.com/foundation50/classroom50/compare/web-v1.56.0...web-v1.56.1) (2026-09-28)
 
 
