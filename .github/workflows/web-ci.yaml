@@ -103,10 +103,12 @@ jobs:
   # text spacing) run in real Chromium via the vitest browser project. Isolated
   # into its own lane so the ~90MB Playwright browser install is off the critical
   # path of every other check, and cached so repeat runs skip the download.
+  # The job ceiling covers the worst-case install-deps retry loop (14 min
+  # step ceiling) plus setup and the ~1 min test run.
   browser:
     name: A11y layout guards (Chromium)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-web
@@ -133,18 +135,38 @@ jobs:
       # The per-attempt `timeout` is what makes the retries reachable: a
       # step-level timeout-minutes kills the whole loop, so a hang — the exact
       # failure mode above — never reaches attempt 2. Bounding each attempt turns
-      # a stall into a non-zero exit the loop can act on. The step ceiling stays
-      # above 3 attempts plus backoff (3*100s + 30s) so the loop reports the
-      # failure itself rather than being cancelled mid-retry.
+      # a stall into a non-zero exit the loop can act on.
+      #
+      # Two things make a retry able to succeed rather than fail instantly:
+      # - `timeout` only kills the node process; the `sudo apt-get` it spawned
+      #   keeps running as root and holding the dpkg lock. Each retry waits
+      #   (bounded) for that orphan to finish so it doesn't die on "Could not
+      #   get lock /var/lib/dpkg/lock-frontend", which is how every retry
+      #   failed on main after the Playwright 1.63 bump.
+      # - A healthy apt run that pulls fonts + mesa takes ~2.5 min on a fresh
+      #   runner image, so the attempt budget has to clear that, not just a
+      #   fast no-op. The step ceiling stays above 3 attempts plus lock waits
+      #   and backoff (3*180s + 2*120s + 30s) so the loop reports the failure
+      #   itself rather than being cancelled mid-retry.
       - name: Install Playwright browser deps
-        timeout-minutes: 6
+        timeout-minutes: 14
         run: |
+          wait_for_apt() {
+            for _ in $(seq 1 24); do
+              if ! pgrep -x 'apt-get|apt|dpkg' >/dev/null; then
+                return 0
+              fi
+              sleep 5
+            done
+            echo "apt still running after 120s; retrying anyway" >&2
+          }
           for attempt in 1 2 3; do
-            if timeout 100s npx playwright install-deps chromium; then
+            if timeout 180s npx playwright install-deps chromium; then
               exit 0
             fi
             echo "playwright install-deps failed (attempt $attempt); retrying..." >&2
             sleep $((attempt * 10))
+            wait_for_apt
           done
           echo "playwright install-deps failed after 3 attempts" >&2
           exit 1
