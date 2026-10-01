@@ -142,12 +142,14 @@ jobs:
       #   keeps running as root and holding the dpkg lock. Each retry waits
       #   (bounded) for that orphan to finish so it doesn't die on "Could not
       #   get lock /var/lib/dpkg/lock-frontend", which is how every retry
-      #   failed on main after the Playwright 1.63 bump.
+      #   failed on main once a refreshed ubuntu-latest image made the fresh
+      #   apt install take ~165s, past the old 100s budget.
       # - A healthy apt run that pulls fonts + mesa takes ~2.5 min on a fresh
       #   runner image, so the attempt budget has to clear that, not just a
-      #   fast no-op. The step ceiling stays above 3 attempts plus lock waits
-      #   and backoff (3*180s + 2*120s + 30s) so the loop reports the failure
-      #   itself rather than being cancelled mid-retry.
+      #   fast no-op. Backoff and the lock wait run only between attempts, so
+      #   the worst case is 3*180s + 30s + 2*120s = 810s and the step ceiling
+      #   stays above it: the loop reports the failure itself rather than being
+      #   cancelled mid-retry.
       - name: Install Playwright browser deps
         timeout-minutes: 14
         run: |
@@ -164,6 +166,7 @@ jobs:
             if timeout 180s npx playwright install-deps chromium; then
               exit 0
             fi
+            [ "$attempt" = 3 ] && break
             echo "playwright install-deps failed (attempt $attempt); retrying..." >&2
             sleep $((attempt * 10))
             wait_for_apt
