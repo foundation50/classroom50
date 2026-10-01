@@ -149,6 +149,27 @@ organization is rejected (students can't be granted access, so accept would
   Either have the upstream organization approve Classroom 50 as well, or copy
   the content into a fresh, fork-free repository in your organization and flag
   that as the template.
+- **A private template that has forks shares its team access with them.**
+  GitHub gives a private fork the same *team* permissions as its upstream, so
+  the read access Classroom 50 grants the classroom team on a private template
+  also lands on every private fork of it, in the fork's "Collaborators and
+  teams" settings. That matters when the template was the starter code of an
+  earlier course in the same organization: GitHub Classroom has created
+  student repositories as forks since 2024, so registering the old starter as
+  a template would let the whole roster read those students' work. The
+  assignment form and `gh teacher assignment add` warn when a private
+  template has forks. Don't reuse such a repository. Create a new repository,
+  copy the starter's contents into it, and flag the copy as the template.
+  Repositories Classroom 50 generates are not forks and never inherit this
+  access. Two things do not undo the exposure once it has happened:
+  - **Locking the assignment.** GitHub copies the grant to each fork when the
+    team is added to the template and leaves those copies in place when the
+    team is removed from it, so the forks stay readable while the template
+    itself is locked.
+  - **Cleaning the forks by hand, alone.** Removing the team from each fork
+    works until the team is added to the template again, which unlocking, a
+    re-save, or "Fix template access" all do. Switch the assignment to a
+    fork-free copy first, then remove the team from the forks.
 - **Only the default branch is copied** unless the assignment enables
   **Include all branches** (`include_all_branches`), which passes every branch
   through to each generated student repository.

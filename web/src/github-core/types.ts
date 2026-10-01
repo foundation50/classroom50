@@ -86,6 +86,11 @@ export type GitHubRepo = {
     full_name: string
     private: boolean
   }
+  // Private forks inherit their upstream's TEAM permissions, so a team read
+  // granted on a private template reaches every private fork of it (GitHub
+  // Classroom has created student repos as forks since 2024). The template
+  // pre-flight warns when a private in-org template has forks.
+  forks_count?: number
   default_branch: string
   // Repo size in KB (GET /repos). Populated by an async background job, so it
   // lags a fresh repo's real commits (issue #544) — a non-fork size 0 is only a

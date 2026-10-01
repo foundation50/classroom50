@@ -325,6 +325,38 @@ const TemplateVerificationNote = ({
       </Note>
     ) : null
 
+  // The classroom team read on a private in-org template is inherited by every
+  // private fork of it (GitHub's fork permission model), so a template that is
+  // the upstream of older student repos (GitHub Classroom has forked since
+  // 2024) would expose them all to the roster. Warn before the grant fires.
+  const privateForksNote =
+    verification.kind === "ok" &&
+    verification.inOrg &&
+    verification.visibility === "private" &&
+    verification.forksCount > 0 ? (
+      <Note tone="warning" icon={AlertIcon}>
+        <Trans
+          i18nKey="assignments.template.privateHasForks"
+          values={{
+            owner: verification.owner,
+            repo: verification.repo,
+            count: verification.forksCount,
+          }}
+          components={{ important: <strong /> }}
+        />
+        <ExternalLink
+          href={`https://github.com/${verification.owner}/${verification.repo}/forks`}
+          variant="plain"
+          className="mt-1 flex font-semibold underline"
+        >
+          {t("assignments.template.viewForks", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}
+        </ExternalLink>
+      </Note>
+    ) : null
+
   const verdict = renderTemplateVerdict({
     verification,
     t,
@@ -337,10 +369,11 @@ const TemplateVerificationNote = ({
     statusDescription,
   })
 
-  if (!nonMainNote && !ignoredBranchNote) return verdict
+  if (!nonMainNote && !ignoredBranchNote && !privateForksNote) return verdict
   return (
     <>
       {verdict}
+      {privateForksNote}
       {ignoredBranchNote}
       {nonMainNote}
     </>

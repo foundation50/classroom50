@@ -380,6 +380,25 @@ Classroom's vocabulary (cutoff date, Download grades, roster identifiers, teams)
 maps onto Classroom 50's, see
 [Coming from GitHub Classroom?](Glossary#coming-from-github-classroom).
 
+### Can I reuse my GitHub Classroom starter repositories as templates?
+
+Copy them first. Since 2024 GitHub Classroom has created each student
+repository as a **fork** of the assignment's starter code, and GitHub gives a
+private fork the same team permissions as its upstream. Classroom 50 grants
+the classroom team read access to a private template, so registering an old
+starter repository directly would let every student read every repository
+forked from it, including previous students' work. Create a new repository,
+copy the starter's contents into it, enable **Template repository**, and
+register the copy. The assignment form and `gh teacher assignment add` warn
+when a private template has forks. If you already registered a starter with
+forks, switch the assignment to the fork-free copy **first**, then remove the
+classroom team from each fork's **Collaborators and teams** settings. The
+order matters: GitHub leaves the copied grant on each fork when the team is
+removed from the template (so locking the assignment doesn't help), and adds
+it back to every fork the next time the team is granted on the template
+(which unlocking or re-saving does). See
+[Template requirements and gotchas](Assignment-Templates#template-requirements-and-gotchas).
+
 ## Access and permissions
 
 ### Why does signing in ask for access to all my repositories?
