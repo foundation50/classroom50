@@ -266,6 +266,26 @@ const (
 	ClassroomFilename   = "classroom.json"
 	ScoresFilename      = "scores.json"
 
+	// GroupMembershipNoteUnreadable is the `note` cell of a group whose live
+	// membership could not be read. Mirrored verbatim in the web GUI
+	// (web/src/domain/submissions/groupMembershipCsv.ts).
+	GroupMembershipNoteUnreadable = "membership could not be read"
+)
+
+// GroupMembershipCSVColumns is the header of the group-membership export
+// (`gh teacher group list --csv`, the web "Download groups (CSV)" action).
+// `group` is the scores.json owner key and columns 4..10 are roster.csv's
+// header verbatim, so the file joins to both without renaming. Hand-mirrored
+// with NO compile-time link in the web GUI (GROUP_MEMBERSHIP_CSV_COLUMNS);
+// contract_test.go pins the Go half.
+var GroupMembershipCSVColumns = []string{
+	"group", "group_name", "team_slug", "repo",
+	"username", "first_name", "last_name", "email", "section", "github_id", "role",
+	"in_roster", "note",
+}
+
+const (
+
 	// ServiceTokenSecretName is the repo-level Actions secret on the classroom50 repository
 	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml
 	// consume. Hand-mirrored with NO compile-time link in the collect-scores /

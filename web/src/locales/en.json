@@ -3288,6 +3288,12 @@
       "blockedTitle": "These repositories need an org admin:",
       "blockedHint": "Their feedback branch points at the wrong commit, so opening the PR would show an empty diff. An organization admin must delete each feedback branch before re-running this action. Retrying alone won't fix them."
     },
+    "downloadGroups": {
+      "menuLabel": "Download groups (CSV)",
+      "title": "Download one row per group member, with roster names, email, and section",
+      "titleLoading": "Waiting for the roster and group membership to load",
+      "titleEmpty": "No groups yet"
+    },
     "downloadAll": {
       "menuLabel": "Download all submissions",
       "title": "Download every student's latest submission",
