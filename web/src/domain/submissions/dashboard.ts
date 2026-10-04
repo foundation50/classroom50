@@ -7,7 +7,7 @@ import type {
   NormalizedScores,
   SubmissionRow,
 } from "./scores"
-import type { GitHubRepo } from "@/github-core/types"
+import type { GitHubRepo, GitHubUser } from "@/github-core/types"
 import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import { existingAssignmentRepos } from "@/domain/assignments/assignmentRepoPresence"
 import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
@@ -1576,7 +1576,7 @@ function ownerSortKey(owner: string, names: Map<string, string>): string {
 // alone.
 export function legacyGroupCreditedMembers(
   groupRepos: readonly GroupRepo[],
-  membersByRepo: ReadonlyMap<string, string[]>,
+  membersByRepo: ReadonlyMap<string, readonly Pick<GitHubUser, "login">[]>,
   students: readonly Student[],
 ): Map<string, string[]> {
   const roster = new Set(students.map((s) => s.username.trim().toLowerCase()))
@@ -1586,7 +1586,7 @@ export function legacyGroupCreditedMembers(
     if (!collaborators) continue
     const owner = repo.owner.trim().toLowerCase()
     const members = [owner]
-    for (const login of collaborators) {
+    for (const { login } of collaborators) {
       const key = login.trim().toLowerCase()
       if (key !== owner && roster.has(key) && !members.includes(key)) {
         members.push(key)

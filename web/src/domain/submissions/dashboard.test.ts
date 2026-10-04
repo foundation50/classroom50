@@ -2318,11 +2318,12 @@ describe("legacyGroupCreditedMembers", () => {
     student({ username: "Bob" }),
     student({ username: "cara" }),
   ]
+  const users = (...logins: string[]) => logins.map((login) => ({ login }))
 
   it("credits the founder plus on-roster collaborators, lowercased and deduped", () => {
     const map = legacyGroupCreditedMembers(
       repos,
-      new Map([["cs101-hw1-alice", ["alice", "bob", "BOB", "intruder"]]]),
+      new Map([["cs101-hw1-alice", users("alice", "bob", "BOB", "intruder")]]),
       roster,
     )
     // Mirrors the collector: a collaborator off the classroom team (an account
@@ -2333,7 +2334,7 @@ describe("legacyGroupCreditedMembers", () => {
   it("keeps the founder even when they are off the roster", () => {
     const map = legacyGroupCreditedMembers(
       repos,
-      new Map([["cs101-hw1-dan", ["cara"]]]),
+      new Map([["cs101-hw1-dan", users("cara")]]),
       roster,
     )
     expect(map.get("dan")).toEqual(["dan", "cara"])
@@ -2344,7 +2345,7 @@ describe("legacyGroupCreditedMembers", () => {
     // instead of writing a grade credited to the founder alone.
     const map = legacyGroupCreditedMembers(
       repos,
-      new Map([["cs101-hw1-alice", []]]),
+      new Map([["cs101-hw1-alice", users()]]),
       roster,
     )
     expect(map.get("alice")).toEqual(["alice"])
