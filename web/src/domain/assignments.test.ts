@@ -3218,9 +3218,6 @@ describe("verifyTemplateAccess", () => {
     }
   })
 
-  // The classroom team read granted on a private in-org template is inherited
-  // by its private forks (GitHub Classroom has created student repos as forks
-  // since 2024), so the verdict carries the count for the field to warn on.
   it("carries the template's fork count on the ok verdict", async () => {
     const client = clientReturning({
       name: "tmpl",
@@ -3253,6 +3250,26 @@ describe("verifyTemplateAccess", () => {
 
     expect(result.kind).toBe("ok")
     if (result.kind === "ok") expect(result.forksCount).toBe(0)
+  })
+
+  // The team grant fires for a private-fork verdict too, so the field needs the
+  // count on it as well.
+  it("carries the fork count on the private-fork verdict", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      default_branch: "main",
+      fork: true,
+      parent: { full_name: `${ORG}/upstream`, private: true },
+      forks_count: 7,
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("private-fork")
+    if (result.kind === "private-fork") expect(result.forksCount).toBe(7)
   })
 
   it("canonicalizes owner/repo from full_name so the field can display GitHub's casing", async () => {

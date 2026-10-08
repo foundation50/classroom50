@@ -367,12 +367,8 @@ export type TemplateAccessVerification =
       branch: string
       visibility: "public" | "private"
       inOrg: boolean
-      // How many forks the template has. Matters only for an in-org private
-      // template: the classroom team read granted on it is inherited by every
-      // private fork (GitHub's fork permission model), so a template that is
-      // also the upstream of older student repos (GitHub Classroom forks, a
-      // "fork the starter" workflow) leaks them to the whole roster. 0 when
-      // GitHub omits the count.
+      // 0 when GitHub omits the count; the field warns on it for a private
+      // in-org template (see TemplateField's privateForksNote).
       forksCount: number
     }
   // Reachable third-party org template (neither the classroom org nor the
@@ -398,6 +394,9 @@ export type TemplateAccessVerification =
       branch: string
       parent?: string
       parentInOrg: boolean
+      // Always an in-org private template, so the team grant still fires and
+      // its own forks inherit it exactly as on the `ok` verdict.
+      forksCount: number
     }
 
 // Classify a repo as a risky private fork for template use. `generate` copies
@@ -569,6 +568,7 @@ export async function verifyTemplateAccess(
   // surprised at accept. A public parent generates fine, so only warn when the
   // parent is private (or unknown).
   const fork = classifyPrivateFork(repo, org)
+  const forksCount = repo.forks_count ?? 0
   if (fork.isRiskyPrivateFork) {
     return {
       kind: "private-fork",
@@ -576,6 +576,7 @@ export async function verifyTemplateAccess(
       branch,
       parent: fork.parent,
       parentInOrg: fork.parentInOrg,
+      forksCount,
     }
   }
 
@@ -585,7 +586,7 @@ export async function verifyTemplateAccess(
     branch,
     visibility,
     inOrg,
-    forksCount: repo.forks_count ?? 0,
+    forksCount,
   }
 }
 

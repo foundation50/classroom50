@@ -8,6 +8,7 @@ describe("templateForkNoteView", () => {
     owner: "cs50",
     repo: "hw1",
     branch: "main",
+    forksCount: 0,
   }
 
   it("selects the in-org copy for an in-org parent", () => {

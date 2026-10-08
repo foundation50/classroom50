@@ -325,33 +325,43 @@ const TemplateVerificationNote = ({
       </Note>
     ) : null
 
-  // The classroom team read on a private in-org template is inherited by every
-  // private fork of it (GitHub's fork permission model), so a template that is
-  // the upstream of older student repos (GitHub Classroom has forked since
-  // 2024) would expose them all to the roster. Warn before the grant fires.
+  // GitHub propagates a team's permission on a private repo to every private
+  // fork of it, so the classroom team read granted on an in-org private
+  // template also opens each fork (commonly GitHub Classroom student repos,
+  // forks of the starter since 2024) to the roster. Warn before the grant
+  // fires. A `private-fork` verdict is in-org and private by construction.
+  const privateForks =
+    (verification.kind === "ok" &&
+      verification.inOrg &&
+      verification.visibility === "private") ||
+    verification.kind === "private-fork"
+      ? {
+          owner: verification.owner,
+          repo: verification.repo,
+          count: verification.forksCount,
+        }
+      : null
   const privateForksNote =
-    verification.kind === "ok" &&
-    verification.inOrg &&
-    verification.visibility === "private" &&
-    verification.forksCount > 0 ? (
+    privateForks && privateForks.count > 0 ? (
       <Note tone="warning" icon={AlertIcon}>
         <Trans
           i18nKey="assignments.template.privateHasForks"
-          values={{
-            owner: verification.owner,
-            repo: verification.repo,
-            count: verification.forksCount,
-          }}
+          values={privateForks}
           components={{ important: <strong /> }}
         />
+        <ul className="mt-1 list-disc space-y-0.5 ps-4">
+          <li>{t("assignments.template.privateHasForksStepCreate")}</li>
+          <li>{t("assignments.template.privateHasForksStepCopy")}</li>
+          <li>{t("assignments.template.privateHasForksStepEnable")}</li>
+        </ul>
         <ExternalLink
-          href={`https://github.com/${verification.owner}/${verification.repo}/forks`}
+          href={`https://github.com/${privateForks.owner}/${privateForks.repo}/forks`}
           variant="plain"
           className="mt-1 flex font-semibold underline"
         >
           {t("assignments.template.viewForks", {
-            owner: verification.owner,
-            repo: verification.repo,
+            owner: privateForks.owner,
+            repo: privateForks.repo,
           })}
         </ExternalLink>
       </Note>

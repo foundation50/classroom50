@@ -419,6 +419,26 @@ describe("TemplateField — private template with forks", () => {
     })
     expect(screen.queryByText(FORKS_KEY)).toBeNull()
   })
+
+  // The team grant fires for a private-fork verdict too, so its forks are just
+  // as exposed as a plain private template's.
+  it("warns for a private in-org template that is itself a fork and has forks", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "private-fork",
+      owner: ORG,
+      repo: "tmpl",
+      branch: "main",
+      parent: `${ORG}/upstream`,
+      parentInOrg: true,
+      forksCount: 5,
+    })
+    renderField()
+    expect(await screen.findByText(FORKS_KEY)).toBeTruthy()
+    const link = screen.getByText("assignments.template.viewForks").closest("a")
+    expect(link?.getAttribute("href")).toBe(
+      `https://github.com/${ORG}/tmpl/forks`,
+    )
+  })
 })
 
 describe("TemplateField — empty-template verdict", () => {
