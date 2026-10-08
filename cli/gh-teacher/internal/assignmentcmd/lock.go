@@ -191,7 +191,7 @@ func revokeClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Wri
 	}
 	if err := configrepo.RemoveTeamRepo(client, org, team.Slug, tmplOwner, tmplRepo); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) && !cliutil.IsRateLimited(err) {
-			_, _ = fmt.Fprintf(errOut, "Warning: locked %q, but removing the student team %s read on the private template %s/%s needs an organization owner. Students may still be able to accept until an owner revokes it: re-run as an owner, use the web app, or remove the %s team from %s/%s in GitHub (Settings -> Collaborators and teams).\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: locked %q, but removing the student team %s read on the private template %s/%s needs an organization owner. Students may still be able to accept until an owner revokes it: re-run as an owner, use the web app, or remove the %s team from %s/%s in GitHub (Settings -> Collaborators & teams).\n",
 				slug, team.Slug, tmplOwner, tmplRepo, team.Slug, tmplOwner, tmplRepo)
 			return nil
 		}

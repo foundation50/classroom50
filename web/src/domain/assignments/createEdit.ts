@@ -1063,7 +1063,7 @@ async function grantTeamTemplateRead(
     // through. Anything else is transient and must not be misread as "no team".
     if (!(err instanceof GitHubAPIError && err.isNotFound)) {
       throw new Error(
-        `Assignment "${slug}" was saved, but checking classroom "${classroom}" for its team failed (${getErrorMessage(err)}). The classroom team read on the private template ${template.owner}/${template.repo} could not be granted — retry the save; if it keeps failing, grant the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators and teams).`,
+        `Assignment "${slug}" was saved, but checking classroom "${classroom}" for its team failed (${getErrorMessage(err)}). The classroom team read on the private template ${template.owner}/${template.repo} could not be granted — retry the save; if it keeps failing, grant the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators & teams).`,
         { cause: err },
       )
     }
@@ -1132,7 +1132,7 @@ export async function tryGrantTeamTemplateRead(
       `the private template ${template.owner}/${template.repo} failed (${detail}). ` +
       `Students can't accept it until the ${classroomTeamSlug(classroom)} team is granted ` +
       `read on that repo — grant the team read on ${template.owner}/${template.repo} ` +
-      `directly in GitHub (Settings -> Collaborators and teams), then students can accept.`
+      `directly in GitHub (Settings -> Collaborators & teams), then students can accept.`
     )
   }
 }
@@ -1150,7 +1150,7 @@ export function templateGrantOwnerRequiredWarning(
     `Assignment "${slug}" was saved, but its private template ${template.owner}/${template.repo} ` +
     `needs the ${classroomTeamSlug(classroom)} team granted read — a step only an organization owner can do. ` +
     `Students can't accept it until an owner opens this classroom (which grants it automatically) or grants ` +
-    `the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators and teams).`
+    `the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators & teams).`
   )
 }
 
@@ -1358,7 +1358,7 @@ async function revokeStudentTeamTemplateRead(
       return (
         `Assignment "${slug}" was locked, but reading classroom "${classroom}" to find its team failed ` +
         `(${getErrorMessage(err)}). The ${classroomTeamSlug(classroom)} team's read on the private template ` +
-        `${template.owner}/${template.repo} was not removed — remove it in GitHub (Settings -> Collaborators and teams) ` +
+        `${template.owner}/${template.repo} was not removed — remove it in GitHub (Settings -> Collaborators & teams) ` +
         `so students can't accept while it's locked.`
       )
     }
@@ -1379,7 +1379,7 @@ async function revokeStudentTeamTemplateRead(
     return (
       `Assignment "${slug}" was locked, but the recorded classroom team "${teamSlug}" is outside the ` +
       `classroom50- namespace, so its access to ${template.owner}/${template.repo} was left unchanged. ` +
-      `Remove it in GitHub (Settings -> Collaborators and teams) if students should not have read while locked.`
+      `Remove it in GitHub (Settings -> Collaborators & teams) if students should not have read while locked.`
     )
   }
 
@@ -1399,7 +1399,7 @@ async function revokeStudentTeamTemplateRead(
       `Assignment "${slug}" was locked, but removing the ${classroomTeamSlug(classroom)} team's read on the ` +
       `private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}). Students may still be ` +
       `able to accept — remove the team's access to ${template.owner}/${template.repo} directly in GitHub ` +
-      `(Settings -> Collaborators and teams).`
+      `(Settings -> Collaborators & teams).`
     )
   }
 }
@@ -1526,7 +1526,7 @@ export async function reconcileLockTemplateAccess(
   } catch (err) {
     log.error("reconcileLockTemplateAccess: template probe failed", { err })
     return locked
-      ? `Assignment "${slug}" was locked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not removed. Remove it in GitHub (Settings -> Collaborators and teams) so students can't accept while it's locked.`
+      ? `Assignment "${slug}" was locked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not removed. Remove it in GitHub (Settings -> Collaborators & teams) so students can't accept while it's locked.`
       : `Assignment "${slug}" was unlocked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not restored. Retry the unlock, or grant the team read on ${template.owner}/${template.repo} in GitHub.`
   }
   if (!repo?.private) return undefined

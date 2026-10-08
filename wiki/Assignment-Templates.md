@@ -152,8 +152,8 @@ organization is rejected (students can't be granted access, so accept would
 - **A private template that has forks shares its team access with them.**
   GitHub gives a private fork the same *team* permissions as its upstream, so
   the read access Classroom 50 grants the classroom team on a private template
-  also lands on every private fork of it, in the fork's "Collaborators and
-  teams" settings. That matters when the template was the starter code of an
+  also lands on every private fork of it, in the fork's **Collaborators &
+  teams** settings. That matters when the template was the starter code of an
   earlier course in the same organization: GitHub Classroom has created
   student repositories as forks since 2024, so registering the old starter as
   a template would let the whole roster read those students' work. The
@@ -166,7 +166,12 @@ organization is rejected (students can't be granted access, so accept would
   - **Locking the assignment.** GitHub copies the grant to each fork when the
     team is added to the template and leaves those copies in place when the
     team is removed from it, so the forks stay readable while the template
-    itself is locked.
+    itself is locked. (GitHub's fork documentation says private forks are
+    deleted when a team's access to the upstream is revoked. That describes
+    forks in a member's own account whose access depended on the team. Forks
+    GitHub Classroom created live in the organization itself, and in a live
+    test revoking the team from the template left them, and the copied grant,
+    in place.)
   - **Cleaning the forks by hand, alone.** Removing the forks from the team
     works until the team is added to the template again, which unlocking, a
     re-save, or "Fix template access" all do. Switch the assignment to a
