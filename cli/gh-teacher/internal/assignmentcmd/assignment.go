@@ -1406,13 +1406,12 @@ func dueZoneName(loc *time.Location, t time.Time) string {
 	return abbr
 }
 
-// templateFacts is what add needs to know about a validated template beyond its
-// resolved ref: whether it is private (decides the classroom-team read grant),
-// the cross-org parent owner when it is a fork of another org's repo (empty
-// otherwise; issue #468), and how many forks it has (a private template's team
-// read is inherited by every private fork).
+// templateFacts is what add warns or decides on about a validated template,
+// beyond its resolved ref.
 type templateFacts struct {
-	Private            bool
+	Private bool
+	// Owner of the upstream when the template is a fork of another org's repo
+	// (issue #468); empty otherwise.
 	CrossOrgForkParent string
 	ForksCount         int
 }
