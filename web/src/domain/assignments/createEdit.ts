@@ -72,6 +72,8 @@ import {
 import { resolveSubmissionMode } from "./submissionDetection"
 import { isDefaultAutograder } from "./autograderYaml"
 import { localizedError } from "@/types/localizedMessage"
+import type { LocalizedMessage } from "@/types/localizedMessage"
+import { templateForksNotice } from "./templateWarnings"
 
 export type CreateAssignmentResult = CreateClassroomResult & {
   // Set when the assignment saved but the follow-up team read grant on a
@@ -82,6 +84,10 @@ export type CreateAssignmentResult = CreateClassroomResult & {
   // read on its private in-org template failed (non-fatal, the commit landed).
   // Same shape and surfacing as SetAssignmentLockResult.templateAccessWarning.
   templateAccessWarning?: string
+  // Set when the team was (or, owner-required, will be) granted read on a
+  // private in-org template that has forks, which inherit that read. Its own
+  // field: the two above mean "something failed", this one does not.
+  templateForksNotice?: LocalizedMessage
 }
 
 // Ownership of every Assignment entry-level key on the edit path. Typed as a
@@ -241,8 +247,11 @@ export async function editAssignment(
   // Normalize the edit like create so it never leaves stray non-schema keys
   // the CLI rejects. The template ref is re-resolved live either way (a
   // template that went unusable fails the save before any commit).
-  const { entry: editedAssignment, needsTeamGrant } =
-    await buildAssignmentEntry(client, input)
+  const {
+    entry: editedAssignment,
+    needsTeamGrant,
+    forksCount,
+  } = await buildAssignmentEntry(client, input)
 
   // Renaming isn't supported: the slug is the assignment's repo-path identity
   // and its lookup key here. Pin the written slug to the stored one so the edit
@@ -321,6 +330,7 @@ export async function editAssignment(
   // ordinary edit can't silently re-open it — mirrors the CLI add/reuse guard.
   // The same re-affirm is what restores the read on a true-to-false save.
   let templateGrantWarning: string | undefined
+  let templateForks: LocalizedMessage | undefined
   if (needsTeamGrant && preservedEntry.template && !nowLocked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
@@ -330,6 +340,16 @@ export async function editAssignment(
       preservedEntry.template,
       input.canGrantTemplateAccess,
     )
+    // Only a fresh team-to-template association fans out to the forks, and on
+    // this path that is the true-to-false save (the re-affirm on an ordinary
+    // edit is a no-op PUT). The create form's pre-flight covers a changed ref.
+    if (wasLocked) {
+      templateForks = templateForksNotice(
+        preservedEntry.template,
+        { private: true, forks_count: forksCount },
+        templateGrantWarning === undefined,
+      )
+    }
   }
 
   // A false-to-true save is the lock action in form clothing: revoke the
@@ -338,15 +358,17 @@ export async function editAssignment(
   // has nothing to remove.
   let templateAccessWarning: string | undefined
   if (nowLocked && !wasLocked) {
-    templateAccessWarning = await reconcileLockTemplateAccess(
-      client,
-      input.org,
-      input.classroom,
-      input.slug,
-      preservedEntry.template,
-      true,
-      nextAssignments.assignments,
-    )
+    templateAccessWarning = (
+      await reconcileLockTemplateAccess(
+        client,
+        input.org,
+        input.classroom,
+        input.slug,
+        preservedEntry.template,
+        true,
+        nextAssignments.assignments,
+      )
+    ).accessWarning
   }
 
   return {
@@ -355,6 +377,7 @@ export async function editAssignment(
     ...written,
     templateGrantWarning,
     templateAccessWarning,
+    templateForksNotice: templateForks,
   }
 }
 
@@ -393,7 +416,7 @@ async function ensureDeclarativeTestsWritable(
 async function buildAssignmentEntry(
   client: GitHubClient,
   input: CreateAssignmentInput,
-): Promise<{ entry: Assignment; needsTeamGrant: boolean }> {
+): Promise<{ entry: Assignment; needsTeamGrant: boolean; forksCount: number }> {
   const userTests = input.tests.map(draftToTest)
 
   // A setup command is written as a leading 0-point `run` test named "setup" —
@@ -578,6 +601,7 @@ async function buildAssignmentEntry(
   // template-less assignment, so skip parse/resolve/grant entirely.
   let template: Assignment["template"] | undefined
   let needsTeamGrant = false
+  let forksCount = 0
   if (input.template_repo.trim()) {
     const parsedTemplate = parseTemplateRef(input.template_repo, input.org)
     // Re-resolved live even when the ref is unchanged: resolveTemplate fails
@@ -591,6 +615,7 @@ async function buildAssignmentEntry(
     const resolved = await resolveTemplate(client, input.org, parsedTemplate)
     template = resolved.template
     needsTeamGrant = resolved.needsTeamGrant
+    forksCount = resolved.forksCount
   }
 
   // Must match classroom50/assignments/v1 exactly — the CLI rejects unknown
@@ -716,7 +741,7 @@ async function buildAssignmentEntry(
   )
   if (badRunnerLabel) {
     throw new Error(
-      `runtime.runs-on ${JSON.stringify(badRunnerLabel)} must be a GitHub runner label — letters, numbers, and . - _ only, no whitespace or metacharacters.`,
+      `runtime.runs-on ${JSON.stringify(badRunnerLabel)} must be a GitHub runner label: letters, numbers, and . - _ only, no whitespace or metacharacters.`,
     )
   }
   if (runnerLabels.length === 1) {
@@ -731,7 +756,7 @@ async function buildAssignmentEntry(
     const badLabel = runnerLabels.find(isNonUbuntuHostedLabel)
     if (badLabel) {
       throw new Error(
-        `runtime.runs-on ${JSON.stringify(badLabel)} can't be combined with a Docker image — GitHub Actions runs containers on Ubuntu hosts only.`,
+        `runtime.runs-on ${JSON.stringify(badLabel)} can't be combined with a Docker image: GitHub Actions runs containers on Ubuntu hosts only.`,
       )
     }
     // Image/user flow into Actions' `container:` / `--user` — shape-gate them
@@ -1019,7 +1044,7 @@ async function buildAssignmentEntry(
     }
   }
 
-  return { entry, needsTeamGrant }
+  return { entry, needsTeamGrant, forksCount }
 }
 
 // The NON-OWNER staff roles that get an eager read grant on a private in-org
@@ -1062,7 +1087,7 @@ async function grantTeamTemplateRead(
     // through. Anything else is transient and must not be misread as "no team".
     if (!(err instanceof GitHubAPIError && err.isNotFound)) {
       throw new Error(
-        `Assignment "${slug}" was saved, but checking classroom "${classroom}" for its team failed (${getErrorMessage(err)}). The classroom team read on the private template ${template.owner}/${template.repo} could not be granted — retry the save; if it keeps failing, grant the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators and teams).`,
+        `Assignment "${slug}" was saved, but checking classroom "${classroom}" for its team failed (${getErrorMessage(err)}). The classroom team read on the private template ${template.owner}/${template.repo} could not be granted. Retry the save; if it keeps failing, grant the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators & teams).`,
         { cause: err },
       )
     }
@@ -1130,8 +1155,8 @@ export async function tryGrantTeamTemplateRead(
       `Assignment "${slug}" was saved, but granting the classroom team read on ` +
       `the private template ${template.owner}/${template.repo} failed (${detail}). ` +
       `Students can't accept it until the ${classroomTeamSlug(classroom)} team is granted ` +
-      `read on that repo — grant the team read on ${template.owner}/${template.repo} ` +
-      `directly in GitHub (Settings -> Collaborators and teams), then students can accept.`
+      `read on that repo. Grant the team read on ${template.owner}/${template.repo} ` +
+      `directly in GitHub (Settings -> Collaborators & teams), then students can accept.`
     )
   }
 }
@@ -1147,9 +1172,9 @@ export function templateGrantOwnerRequiredWarning(
 ): string {
   return (
     `Assignment "${slug}" was saved, but its private template ${template.owner}/${template.repo} ` +
-    `needs the ${classroomTeamSlug(classroom)} team granted read — a step only an organization owner can do. ` +
+    `needs the ${classroomTeamSlug(classroom)} team granted read, a step only an organization owner can do. ` +
     `Students can't accept it until an owner opens this classroom (which grants it automatically) or grants ` +
-    `the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators and teams).`
+    `the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators & teams).`
   )
 }
 
@@ -1188,10 +1213,11 @@ export async function createAssignment(
   // The entry build (template probe) is independent of the config-repo read,
   // so they overlap; Promise.all rejects on the first rejection, so an archived
   // classroom or a bad template still fails closed before any write.
-  const [{ entry: assignmentBody, needsTeamGrant }, ctx] = await Promise.all([
-    buildAssignmentEntry(client, input),
-    readAssignmentsForWrite(client, input.org, input.classroom),
-  ])
+  const [{ entry: assignmentBody, needsTeamGrant, forksCount }, ctx] =
+    await Promise.all([
+      buildAssignmentEntry(client, input),
+      readAssignmentsForWrite(client, input.org, input.classroom),
+    ])
   const currentAssignments = ctx.current
 
   if (
@@ -1211,7 +1237,7 @@ export async function createAssignment(
     )
   ) {
     throw new Error(
-      `Slug "${assignmentBody.slug}" is reserved: it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on — choose a different slug.`,
+      `Slug "${assignmentBody.slug}" is reserved: it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on. Choose a different slug.`,
     )
   }
 
@@ -1232,6 +1258,7 @@ export async function createAssignment(
   // happens on unlock (setAssignmentLock or a later edit), so a timed
   // assessment's template stays invisible until the teacher opens it.
   let templateGrantWarning: string | undefined
+  let templateForks: LocalizedMessage | undefined
   if (needsTeamGrant && assignmentBody.template && !assignmentBody.locked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
@@ -1241,6 +1268,13 @@ export async function createAssignment(
       assignmentBody.template,
       input.canGrantTemplateAccess,
     )
+    // The form's pre-flight note is advisory and debounced, so a fast submit
+    // can grant before it rendered; the write path reports the same fact.
+    templateForks = templateForksNotice(
+      assignmentBody.template,
+      { private: true, forks_count: forksCount },
+      templateGrantWarning === undefined,
+    )
   }
 
   return {
@@ -1248,6 +1282,7 @@ export async function createAssignment(
     baseTreeSha: ctx.baseTreeSha,
     ...written,
     templateGrantWarning,
+    templateForksNotice: templateForks,
   }
 }
 
@@ -1301,6 +1336,17 @@ export type SetAssignmentLockResult = Omit<
   // team still has read, or an unlocked one whose read wasn't restored. The UI
   // surfaces it like templateGrantWarning.
   templateAccessWarning?: string
+  // Set when an unlock granted (or, owner-required, will grant) the team read
+  // on a private template that has forks, which inherit it. Separate from the
+  // failure warning above so the UI never reports a successful grant as failed.
+  templateForksNotice?: LocalizedMessage
+}
+
+// What reconciling the template read after a lock flip learned: a failure to
+// report, and the forks notice an unlock's fresh grant carries.
+export type LockTemplateReconcile = {
+  accessWarning?: string
+  forksNotice?: LocalizedMessage
 }
 
 // Remove ONLY the classroom student team's read on a private in-org template
@@ -1324,7 +1370,7 @@ async function revokeStudentTeamTemplateRead(
       return (
         `Assignment "${slug}" was locked, but reading classroom "${classroom}" to find its team failed ` +
         `(${getErrorMessage(err)}). The ${classroomTeamSlug(classroom)} team's read on the private template ` +
-        `${template.owner}/${template.repo} was not removed — remove it in GitHub (Settings -> Collaborators and teams) ` +
+        `${template.owner}/${template.repo} was not removed. Remove it in GitHub (Settings -> Collaborators & teams) ` +
         `so students can't accept while it's locked.`
       )
     }
@@ -1345,7 +1391,7 @@ async function revokeStudentTeamTemplateRead(
     return (
       `Assignment "${slug}" was locked, but the recorded classroom team "${teamSlug}" is outside the ` +
       `classroom50- namespace, so its access to ${template.owner}/${template.repo} was left unchanged. ` +
-      `Remove it in GitHub (Settings -> Collaborators and teams) if students should not have read while locked.`
+      `Remove it in GitHub (Settings -> Collaborators & teams) if students should not have read while locked.`
     )
   }
 
@@ -1364,8 +1410,8 @@ async function revokeStudentTeamTemplateRead(
     return (
       `Assignment "${slug}" was locked, but removing the ${classroomTeamSlug(classroom)} team's read on the ` +
       `private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}). Students may still be ` +
-      `able to accept — remove the team's access to ${template.owner}/${template.repo} directly in GitHub ` +
-      `(Settings -> Collaborators and teams).`
+      `able to accept. Remove the team's access to ${template.owner}/${template.repo} directly in GitHub ` +
+      `(Settings -> Collaborators & teams).`
     )
   }
 }
@@ -1442,7 +1488,7 @@ export async function setAssignmentLock(
     `${locked ? "Lock" : "Unlock"} assignment: ${classroom}/${slug}`,
   )
 
-  const templateAccessWarning = await reconcileLockTemplateAccess(
+  const { accessWarning, forksNotice } = await reconcileLockTemplateAccess(
     client,
     org,
     classroom,
@@ -1452,7 +1498,12 @@ export async function setAssignmentLock(
     ctx.current.assignments,
   )
 
-  return { ...result, locked, templateAccessWarning }
+  return {
+    ...result,
+    locked,
+    templateAccessWarning: accessWarning,
+    templateForksNotice: forksNotice,
+  }
 }
 
 // Reconcile the private in-org template's student-team read after a lock flip:
@@ -1472,15 +1523,15 @@ export async function reconcileLockTemplateAccess(
   template: Assignment["template"],
   locked: boolean,
   assignments: readonly Assignment[] = [],
-): Promise<string | undefined> {
-  if (!template) return undefined
+): Promise<LockTemplateReconcile> {
+  if (!template) return {}
   const inOrg = template.owner.toLowerCase() === org.toLowerCase()
-  if (!inOrg) return undefined
+  if (!inOrg) return {}
   if (locked && templateStillInUse(template, slug, assignments)) {
     log.info("reconcileLockTemplateAccess: read kept, template shared", {
       slug,
     })
-    return undefined
+    return {}
   }
 
   // getRepo returns null on 404 (since-deleted/invisible template → nothing to
@@ -1491,15 +1542,41 @@ export async function reconcileLockTemplateAccess(
     repo = await getRepo(client, template.owner, template.repo)
   } catch (err) {
     log.error("reconcileLockTemplateAccess: template probe failed", { err })
-    return locked
-      ? `Assignment "${slug}" was locked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not removed. Remove it in GitHub (Settings -> Collaborators and teams) so students can't accept while it's locked.`
-      : `Assignment "${slug}" was unlocked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not restored. Retry the unlock, or grant the team read on ${template.owner}/${template.repo} in GitHub.`
+    return {
+      accessWarning: locked
+        ? `Assignment "${slug}" was locked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not removed. Remove it in GitHub (Settings -> Collaborators & teams) so students can't accept while it's locked.`
+        : `Assignment "${slug}" was unlocked, but checking the private template ${template.owner}/${template.repo} failed (${getErrorMessage(err)}); the ${classroomTeamSlug(classroom)} team's read was not restored. Retry the unlock, or grant the team read on ${template.owner}/${template.repo} in GitHub.`,
+    }
   }
-  if (!repo?.private) return undefined
+  if (!repo?.private) return {}
 
-  return locked
-    ? revokeStudentTeamTemplateRead(client, org, classroom, slug, template)
-    : tryGrantTeamTemplateRead(client, org, classroom, slug, template)
+  if (locked) {
+    return {
+      accessWarning: await revokeStudentTeamTemplateRead(
+        client,
+        org,
+        classroom,
+        slug,
+        template,
+      ),
+    }
+  }
+  // Unlock is a fresh team-to-template association (see templateForksNotice).
+  const accessWarning = await tryGrantTeamTemplateRead(
+    client,
+    org,
+    classroom,
+    slug,
+    template,
+  )
+  return {
+    accessWarning,
+    forksNotice: templateForksNotice(
+      template,
+      repo,
+      accessWarning === undefined,
+    ),
+  }
 }
 
 export function templateStillInUse(

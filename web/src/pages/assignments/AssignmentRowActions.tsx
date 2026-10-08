@@ -22,6 +22,7 @@ import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
+import { resolveLocalizedMessage } from "@/types/localizedMessage"
 
 // Assignment display name with a slug fallback, shared by the action labels.
 export const assignmentName = (assignment: Assignment): string =>
@@ -315,8 +316,15 @@ export const LockAssignmentAction = ({
         confirm: t("assignments.table.lockConfirm"),
       }
   const setLock = useSetAssignmentLock(org, classroom, (result) => {
+    // Kept as toasts: non-fatal outcomes with no page anchor. The forks notice
+    // is not a failure, so it never replaces the success announcement.
+    if (result.templateForksNotice) {
+      notify({
+        tone: "warning",
+        message: resolveLocalizedMessage(t, result.templateForksNotice),
+      })
+    }
     if (result.templateAccessWarning) {
-      // Kept as a toast: a non-fatal partial outcome with no page anchor.
       notify({ tone: "warning", message: result.templateAccessWarning })
       return
     }

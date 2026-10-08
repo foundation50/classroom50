@@ -328,7 +328,7 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 	if tmpl == nil {
 		return nil
 	}
-	private, ok, err := templateVisibility(client, tmpl.Owner, tmpl.Repo)
+	probe, ok, err := probeTemplate(client, tmpl.Owner, tmpl.Repo)
 	if err != nil {
 		return fmt.Errorf("assignment reused, but checking the template %s/%s failed: %w", tmpl.Owner, tmpl.Repo, err)
 	}
@@ -337,7 +337,7 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 			slug, tmpl.Owner, tmpl.Repo)
 		return nil
 	}
-	if !private {
+	if !probe.Private {
 		return nil // public template needs no grant
 	}
 	if !templateInOrg(tmpl.Owner, org) {
@@ -345,6 +345,9 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 			slug, tmpl.Owner, tmpl.Repo, classroom, org)
 		return nil
 	}
+	// The target team is a new team-to-template association (see
+	// warnPrivateTemplateForks).
+	warnPrivateTemplateForks(errOut, tmpl.Owner, tmpl.Repo, probe.ForksCount, forksRemedyRegistered)
 	return grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, tmpl.Owner, tmpl.Repo, grantContext{verb: "reused", classroomNoun: "target classroom"})
 }
 
@@ -388,7 +391,7 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 		// denial — keep it fatal so a throttle stays a loud, non-zero-exit failure
 		// rather than misleading owner guidance. Only a non-rate-limited 403 is benign.
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) && !cliutil.IsRateLimited(err) {
-			_, _ = fmt.Fprintf(errOut, "Warning: assignment %s, but granting the %s team read on the private template %s/%s needs an organization owner (a non-owner can't grant repo access at GitHub). Students can't `gh student accept` until an owner grants it: re-run this command as an owner%s, open the classroom in the web app (which grants it automatically), or grant the %s team read on %s/%s directly in GitHub (Settings -> Collaborators and teams).\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: assignment %s, but granting the %s team read on the private template %s/%s needs an organization owner (a non-owner can't grant repo access at GitHub). Students can't `gh student accept` until an owner grants it: re-run this command as an owner%s, open the classroom in the web app (which grants it automatically), or grant the %s team read on %s/%s directly in GitHub (Settings -> Collaborators & teams).\n",
 				ctx.verb, ctx.classroomNoun, tmplOwner, tmplRepo, ctx.rerunHint, team.Slug, tmplOwner, tmplRepo)
 			return nil
 		}
@@ -433,19 +436,15 @@ func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, 
 	}
 }
 
-// templateVisibility probes a template repo for the reuse grant decision:
-// returns (private, visible, err). A 404 is the "not visible" case; other
-// transport errors propagate.
-func templateVisibility(client githubapi.Client, owner, repo string) (private bool, visible bool, err error) {
+// probeTemplate reports a registered template's grant-relevant fields, or
+// visible=false on a 404 (deleted, renamed, or private outside the token's reach).
+func probeTemplate(client githubapi.Client, owner, repo string) (probe templateProbe, visible bool, err error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
-	var resp struct {
-		Private bool `json:"private"`
-	}
-	if err := client.Get(path, &resp); err != nil {
+	if err := client.Get(path, &probe); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return false, false, nil
+			return templateProbe{}, false, nil
 		}
-		return false, false, fmt.Errorf("GET %s: %w", path, err)
+		return templateProbe{}, false, fmt.Errorf("GET %s: %w", path, err)
 	}
-	return resp.Private, true, nil
+	return probe, true, nil
 }

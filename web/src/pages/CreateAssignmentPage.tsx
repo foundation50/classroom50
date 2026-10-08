@@ -28,7 +28,7 @@ import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { parseSubmissionTags } from "@/util/submissionTags"
-import { errorText } from "@/types/localizedMessage"
+import { errorText, resolveLocalizedMessage } from "@/types/localizedMessage"
 
 const log = logger.scope("CreateAssignmentPage")
 
@@ -201,6 +201,18 @@ const CreateAssignmentPage = () => {
                     setWarningMessage(result.templateGrantWarning)
                     window.scrollTo({ top: 0, behavior: "smooth" })
                     return
+                  }
+                  // The form's pre-flight note said the same thing, but a fast
+                  // submit can outrun it; a toast survives the redirect.
+                  if (result.templateForksNotice) {
+                    notify({
+                      tone: "warning",
+                      durationMs: 12000,
+                      message: resolveLocalizedMessage(
+                        t,
+                        result.templateForksNotice,
+                      ),
+                    })
                   }
                   // Toast before navigating: the provider is mounted above the
                   // router, so the confirmation survives the redirect.

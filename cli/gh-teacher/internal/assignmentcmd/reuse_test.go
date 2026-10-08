@@ -41,6 +41,7 @@ type reuseServerConfig struct {
 	targetClassroom   string // raw classroom.json for target; "" => 404
 	templatePrivate   bool
 	templateMissing   bool // template repo 404s
+	templateForks     int  // forks_count on the template
 	// grantStatus overrides the classroom-team grant PUT response; 0 =>
 	// the default 204 (success). Set to e.g., 500 to exercise the
 	// grant-fails-after-the-copy-landed path.
@@ -100,7 +101,7 @@ func newReuseServer(t *testing.T, cfg reuseServerConfig) (*httptest.Server, *reu
 			_, _ = io.WriteString(w, `{"message":"Not Found"}`)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "size": 1, "default_branch": "main", "private": cfg.templatePrivate})
+		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "size": 1, "default_branch": "main", "private": cfg.templatePrivate, "forks_count": cfg.templateForks})
 	})
 
 	// Classroom-team grant: GET team membership probe + PUT grant.
@@ -552,6 +553,36 @@ func outOfOrgTemplateSourceBody() string {
     }
   ]
 }`
+}
+
+// TestRunAssignmentReuse_PrivateTemplateWithForksWarns: the target classroom's
+// team is a new team-to-template association, which fans the read out to the
+// template's private forks, so reuse warns like add and unlock do.
+func TestRunAssignmentReuse_PrivateTemplateWithForksWarns(t *testing.T) {
+	server, fix := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: sourceAssignmentsBody(),
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBody(nil),
+		templatePrivate:   true,
+		templateForks:     4,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentReuse(client, &out, &errOut, baseReuseParams()); err != nil {
+		t.Fatalf("runAssignmentReuse(forks): %v", err)
+	}
+	fix.mu.Lock()
+	granted := fix.grantedRepo
+	fix.mu.Unlock()
+	if granted != "o/hello-template" {
+		t.Errorf("the warning must not block the grant, got %q", granted)
+	}
+	for _, want := range []string{"has 4 fork(s)", "fork-free copy", "https://github.com/o/hello-template/forks"} {
+		if !strings.Contains(errOut.String(), want) {
+			t.Errorf("stderr should contain %q, got %q", want, errOut.String())
+		}
+	}
 }
 
 // TestRunAssignmentReuse_PublicTemplateSkipsGrant: a public template needs

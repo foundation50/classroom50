@@ -39,7 +39,7 @@ const reconcileLockTemplateAccess =
       template: unknown,
       locked: boolean,
       assignments?: unknown,
-    ) => Promise<string | undefined>
+    ) => Promise<{ accessWarning?: string; forksNotice?: unknown }>
   >()
 const resolveTemplateGrant =
   vi.fn<(...args: unknown[]) => Promise<string | undefined>>()
@@ -52,7 +52,10 @@ vi.mock("./createEdit", () => ({
 }))
 
 // The target's view of each template repo; null is a 404.
-const repos = new Map<string, { private: boolean } | null>()
+const repos = new Map<
+  string,
+  { private: boolean; forks_count?: number } | null
+>()
 const getRepo = vi.fn(
   async (_client: unknown, owner: string, repo: string) =>
     repos.get(`${owner}/${repo}`) ?? null,
@@ -96,7 +99,7 @@ beforeEach(() => {
   createGitTree.mockReset().mockResolvedValue({ sha: "NEWTREE" })
   createGitCommit.mockReset().mockResolvedValue({ sha: "NEWCOMMIT" })
   updateRef.mockReset().mockResolvedValue({})
-  reconcileLockTemplateAccess.mockReset().mockResolvedValue(undefined)
+  reconcileLockTemplateAccess.mockReset().mockResolvedValue({})
   file = {
     schema: "classroom50/assignments/v1",
     assignments: [
@@ -202,7 +205,9 @@ describe("setAssignmentsLock", () => {
       { slug: "hw2", template },
       { slug: "hw3" },
     ]
-    reconcileLockTemplateAccess.mockResolvedValue("could not revoke")
+    reconcileLockTemplateAccess.mockResolvedValue({
+      accessWarning: "could not revoke",
+    })
 
     const result = await setAssignmentsLock(client, {
       org: ORG,
@@ -216,6 +221,40 @@ describe("setAssignmentsLock", () => {
       "could not revoke",
       "could not revoke",
       "could not revoke",
+    ])
+  })
+
+  // The forks notice is not a failure, so it travels in its own field and
+  // never lands in templateAccessWarning (which the toolbar reads as "failed").
+  it("keeps an unlock's forks notice apart from the access warning", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    file.assignments = [
+      { slug: "hw1", template, locked: true },
+      { slug: "hw2" },
+    ]
+    const notice = { key: "assignments.template.forksInherit", params: {} }
+    reconcileLockTemplateAccess.mockImplementation(async (...args) =>
+      args[3] === "hw1" ? { forksNotice: notice } : {},
+    )
+
+    const result = await setAssignmentsLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw1", "hw2"],
+      locked: false,
+    })
+
+    expect(result.outcomes).toEqual([
+      {
+        slug: "hw1",
+        templateAccessWarning: undefined,
+        templateForksNotice: notice,
+      },
+      {
+        slug: "hw2",
+        templateAccessWarning: undefined,
+        templateForksNotice: undefined,
+      },
     ])
   })
 
@@ -267,7 +306,7 @@ describe("setAssignmentsLock", () => {
 
   it("surfaces a template warning against its own slug", async () => {
     reconcileLockTemplateAccess.mockImplementation(async (...args) =>
-      args[3] === "hw3" ? "could not revoke" : undefined,
+      args[3] === "hw3" ? { accessWarning: "could not revoke" } : {},
     )
 
     const result = await setAssignmentsLock(client, {
@@ -278,8 +317,16 @@ describe("setAssignmentsLock", () => {
     })
 
     expect(result.outcomes).toEqual([
-      { slug: "hw1", templateAccessWarning: undefined },
-      { slug: "hw3", templateAccessWarning: "could not revoke" },
+      {
+        slug: "hw1",
+        templateAccessWarning: undefined,
+        templateForksNotice: undefined,
+      },
+      {
+        slug: "hw3",
+        templateAccessWarning: "could not revoke",
+        templateForksNotice: undefined,
+      },
     ])
   })
 })
@@ -450,6 +497,36 @@ describe("copyAssignments", () => {
       "owner required",
       "owner required",
     ])
+  })
+
+  // The target team is a new team-to-template association, which fans out to
+  // the template's private forks. The notice is its own field so the modal
+  // never files a successful grant under "could not be granted"; copies on a
+  // fork-free template get nothing.
+  it("reports the forks notice per copy whose template has forks", async () => {
+    const forked = { owner: ORG, repo: "tpl", branch: "main" }
+    const plain = { owner: ORG, repo: "plain", branch: "main" }
+    repos.set(`${ORG}/tpl`, { private: true, forks_count: 2 })
+    repos.set(`${ORG}/plain`, { private: true })
+
+    const result = await copy(
+      [
+        item("a1", "a1", { template: forked }),
+        item("a2", "a2", { template: plain }),
+      ],
+      true,
+    )
+
+    expect(resolveTemplateGrant).toHaveBeenCalledTimes(2)
+    expect(result.outcomes[0]).toEqual({
+      slug: "a1",
+      targetSlug: "a1",
+      templateForksNotice: {
+        key: "assignments.template.forksInherit",
+        params: { owner: ORG, repo: "tpl", count: 2 },
+      },
+    })
+    expect(result.outcomes[1]).toEqual({ slug: "a2", targetSlug: "a2" })
   })
 
   // A transient probe failure is that template's problem, not the batch's.

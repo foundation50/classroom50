@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useTranslation } from "react-i18next"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
@@ -10,6 +11,7 @@ import {
 } from "@/domain/assignments"
 import { planBulkReuseSlugs } from "@/util/bulkReuseSlugs"
 import type { Assignment } from "@/types/classroom"
+import { resolveLocalizedMessage } from "@/types/localizedMessage"
 
 type UseReuseAssignmentParams = {
   org: string
@@ -44,6 +46,7 @@ export function useReuseAssignment({
   takenLoading,
   closeDialog,
 }: UseReuseAssignmentParams) {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   // Attempt the owner-only template read-grant unless the org role is a
@@ -97,10 +100,16 @@ export function useReuseAssignment({
       copyAssignmentWithConflictRetry(client, input),
     onSuccess: (result) => {
       invalidateAssignments(queryClient, org, targetClassroom)
-      // A template-grant failure doesn't fail the copy — surface it and keep
-      // the modal open; otherwise close.
-      if (result.templateGrantWarning) {
-        setWarning(result.templateGrantWarning)
+      // A template-grant failure doesn't fail the copy, and the forks notice
+      // is not a failure at all; both are worth reading before the modal goes,
+      // so either keeps it open. Otherwise close.
+      const forks = result.templateForksNotice
+        ? resolveLocalizedMessage(t, result.templateForksNotice)
+        : undefined
+      if (result.templateGrantWarning || forks) {
+        setWarning(
+          [result.templateGrantWarning, forks].filter(Boolean).join(" "),
+        )
       } else {
         closeDialog()
       }

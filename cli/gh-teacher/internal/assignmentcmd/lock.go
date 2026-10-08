@@ -142,13 +142,13 @@ func runAssignmentLock(client githubapi.Client, out, errOut io.Writer, org, clas
 	if template == nil {
 		return nil
 	}
-	private, ok, err := templateVisibility(client, template.Owner, template.Repo)
+	probe, ok, err := probeTemplate(client, template.Owner, template.Repo)
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "Warning: %sed %q, but checking the template %s/%s failed (%v); its student-team access was not updated.\n",
 			verb, slug, template.Owner, template.Repo, err)
 		return nil
 	}
-	if !ok || !private || !templateInOrg(template.Owner, org) {
+	if !ok || !probe.Private || !templateInOrg(template.Owner, org) {
 		return nil // public / not-visible / out-of-org: no student-team grant exists
 	}
 
@@ -156,7 +156,9 @@ func runAssignmentLock(client githubapi.Client, out, errOut io.Writer, org, clas
 		return revokeClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, template.Owner, template.Repo)
 	}
 	// Unlock: re-grant the student team (and, per that path, the staff teams)
-	// read on the private template so students can accept again.
+	// read on the private template so students can accept again. A fresh
+	// association, so it reaches the forks (see warnPrivateTemplateForks).
+	warnPrivateTemplateForks(errOut, template.Owner, template.Repo, probe.ForksCount, forksRemedyRegistered)
 	return grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, template.Owner, template.Repo,
 		grantContext{verb: "unlocked", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment lock ... --unlock`"})
 }
@@ -186,7 +188,7 @@ func revokeClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Wri
 	}
 	if err := configrepo.RemoveTeamRepo(client, org, team.Slug, tmplOwner, tmplRepo); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) && !cliutil.IsRateLimited(err) {
-			_, _ = fmt.Fprintf(errOut, "Warning: locked %q, but removing the student team %s read on the private template %s/%s needs an organization owner. Students may still be able to accept until an owner revokes it: re-run as an owner, use the web app, or remove the %s team from %s/%s in GitHub (Settings -> Collaborators and teams).\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: locked %q, but removing the student team %s read on the private template %s/%s needs an organization owner. Students may still be able to accept until an owner revokes it: re-run as an owner, use the web app, or remove the %s team from %s/%s in GitHub (Settings -> Collaborators & teams).\n",
 				slug, team.Slug, tmplOwner, tmplRepo, team.Slug, tmplOwner, tmplRepo)
 			return nil
 		}

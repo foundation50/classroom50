@@ -35,7 +35,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Trans, useTranslation } from "react-i18next"
-import { errorText } from "@/types/localizedMessage"
+import { errorText, resolveLocalizedMessage } from "@/types/localizedMessage"
 
 const EditAssignmentFormStudent = ({
   org,
@@ -360,11 +360,15 @@ const AssignmentSettingsPage = () => {
               // Surface a non-fatal template-grant or lock-revoke warning
               // inline; else show the success banner. It persists until the
               // next save clears it via onMutate (Primer: don't auto-dismiss
-              // status messages).
+              // status messages). An unlock's forks notice rides in the same
+              // banner; it is not a failure, so it does not hide success alone.
+              const forks = result?.templateForksNotice
+                ? resolveLocalizedMessage(t, result.templateForksNotice)
+                : undefined
               const warning =
                 result?.templateGrantWarning ?? result?.templateAccessWarning
-              if (warning) {
-                setEditWarning(warning)
+              if (warning || forks) {
+                setEditWarning([warning, forks].filter(Boolean).join(" "))
               } else {
                 setEditSuccess(true)
               }

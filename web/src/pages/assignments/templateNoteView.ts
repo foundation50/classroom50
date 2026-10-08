@@ -19,3 +19,26 @@ export function templateForkNoteView(
     : "assignments.template.privateForkNoParent"
   return { messageKey }
 }
+
+// The verdict kinds whose template gets the classroom-team read grant on save
+// (so whose private forks inherit it): an in-org private `ok`, and every
+// `private-fork`, which is in-org and private by construction. One source for
+// the question so the forks note and the team-access check cannot drift.
+export function teamGrantTemplate(
+  verification: TemplateAccessVerification | null,
+): { owner: string; repo: string; branch: string; forksCount: number } | null {
+  if (!verification) return null
+  if (verification.kind === "private-fork") {
+    const { owner, repo, branch, forksCount } = verification
+    return { owner, repo, branch, forksCount }
+  }
+  if (
+    verification.kind === "ok" &&
+    verification.inOrg &&
+    verification.visibility === "private"
+  ) {
+    const { owner, repo, branch, forksCount } = verification
+    return { owner, repo, branch, forksCount }
+  }
+  return null
+}

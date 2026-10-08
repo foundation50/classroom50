@@ -501,12 +501,12 @@ func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
 			"fork":           true,
 			"parent":         map[string]any{"full_name": "upstream-org/tmpl"},
 		})
-		_, _, parent, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		_, facts, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
 		if err != nil {
 			t.Fatalf("validateTemplateRepo: %v", err)
 		}
-		if parent != "upstream-org" {
-			t.Errorf("crossOrgForkParent = %q, want %q", parent, "upstream-org")
+		if facts.CrossOrgForkParent != "upstream-org" {
+			t.Errorf("CrossOrgForkParent = %q, want %q", facts.CrossOrgForkParent, "upstream-org")
 		}
 	})
 
@@ -519,12 +519,12 @@ func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
 			"fork":           true,
 			"parent":         map[string]any{"full_name": "o/upstream"},
 		})
-		_, _, parent, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		_, facts, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
 		if err != nil {
 			t.Fatalf("validateTemplateRepo: %v", err)
 		}
-		if parent != "" {
-			t.Errorf("crossOrgForkParent = %q, want empty for a same-org fork", parent)
+		if facts.CrossOrgForkParent != "" {
+			t.Errorf("CrossOrgForkParent = %q, want empty for a same-org fork", facts.CrossOrgForkParent)
 		}
 	})
 
@@ -536,12 +536,34 @@ func TestValidateTemplateRepo_CrossOrgFork(t *testing.T) {
 			"private":        true,
 			"fork":           false,
 		})
-		_, _, parent, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		_, facts, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
 		if err != nil {
 			t.Fatalf("validateTemplateRepo: %v", err)
 		}
-		if parent != "" {
-			t.Errorf("crossOrgForkParent = %q, want empty for a non-fork", parent)
+		if facts.CrossOrgForkParent != "" {
+			t.Errorf("CrossOrgForkParent = %q, want empty for a non-fork", facts.CrossOrgForkParent)
+		}
+	})
+
+	// A private template's team read is inherited by its private forks, so add
+	// needs the count to warn (an omitted forks_count reads as zero).
+	t.Run("reports the fork count", func(t *testing.T) {
+		client := newClient(t, map[string]any{
+			"is_template":    true,
+			"size":           1,
+			"default_branch": "main",
+			"private":        true,
+			"forks_count":    312,
+		})
+		_, facts, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		if err != nil {
+			t.Fatalf("validateTemplateRepo: %v", err)
+		}
+		if facts.ForksCount != 312 {
+			t.Errorf("ForksCount = %d, want 312", facts.ForksCount)
+		}
+		if !facts.Private {
+			t.Errorf("Private = false, want true")
 		}
 	})
 }
@@ -662,7 +684,7 @@ func TestValidateTemplateRepo_Emptiness(t *testing.T) {
 			map[string]any{"is_template": true, "size": 0, "default_branch": "main", "private": true},
 			[]map[string]any{{"name": "main"}},
 		)
-		ref, _, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		ref, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
 		if err != nil {
 			t.Fatalf("validateTemplateRepo: %v", err)
 		}
@@ -677,7 +699,7 @@ func TestValidateTemplateRepo_Emptiness(t *testing.T) {
 			map[string]any{"is_template": true, "size": 0, "default_branch": "main", "private": true},
 			[]map[string]any{},
 		)
-		_, _, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		_, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
 		if err == nil || !strings.Contains(err.Error(), "has no commits") {
 			t.Fatalf("err = %v, want it to contain %q", err, "has no commits")
 		}
@@ -688,7 +710,7 @@ func TestValidateTemplateRepo_Emptiness(t *testing.T) {
 			map[string]any{"is_template": true, "size": 0, "default_branch": "main", "private": true, "fork": true},
 			nil,
 		)
-		ref, _, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
+		ref, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o")
 		if err != nil {
 			t.Fatalf("validateTemplateRepo: %v", err)
 		}
@@ -705,7 +727,7 @@ func TestValidateTemplateRepo_Emptiness(t *testing.T) {
 			map[string]any{"is_template": true, "size": 12, "default_branch": "main", "private": true},
 			nil,
 		)
-		if _, _, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o"); err != nil {
+		if _, _, err := validateTemplateRepo(client, templateArg{Owner: "o", Repo: "tmpl"}, "o"); err != nil {
 			t.Fatalf("validateTemplateRepo: %v", err)
 		}
 		if *probed {

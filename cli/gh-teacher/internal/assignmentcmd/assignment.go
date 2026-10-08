@@ -754,11 +754,11 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		inOrg           bool
 	)
 	if tmpl != nil {
-		ref, private, crossOrgForkParent, err := validateTemplateRepo(client, *tmpl, org)
+		ref, facts, err := validateTemplateRepo(client, *tmpl, org)
 		if err != nil {
 			return err
 		}
-		templatePrivate = private
+		templatePrivate = facts.Private
 
 		// Private-template access matrix: a private template outside the org
 		// can't be shared with the classroom team, so reject up front rather
@@ -771,10 +771,16 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// A cross-org fork works only while its upstream org keeps Classroom 50
 		// approved — if that approval is removed, `student accept` 403s copying
 		// the fork (issue #468). Warn, don't block: it generates fine today.
-		if crossOrgForkParent != "" {
+		if facts.CrossOrgForkParent != "" {
+			parent := facts.CrossOrgForkParent
 			_, _ = fmt.Fprintf(errOut,
 				"Warning: template %s/%s is a fork of a repo in the %q organization. Copying it works only while %q keeps the Classroom 50 app approved; if that approval is removed, students will fail to accept. Use a fresh (non-fork) template repo to avoid depending on %q.\n",
-				ref.Owner, ref.Repo, crossOrgForkParent, crossOrgForkParent, crossOrgForkParent)
+				ref.Owner, ref.Repo, parent, parent, parent)
+		}
+		// The grant below is a fresh team-to-template association, which reaches
+		// the template's forks (see warnPrivateTemplateForks).
+		if templatePrivate && inOrg {
+			warnPrivateTemplateForks(errOut, ref.Owner, ref.Repo, facts.ForksCount, forksRemedyFreshTemplate)
 		}
 		// Working assumption is `main`. A non-main template default branch is
 		// supported (student repos inherit it), but warn so the teacher knows
@@ -1396,19 +1402,57 @@ func dueZoneName(loc *time.Location, t time.Time) string {
 	return abbr
 }
 
+// templateProbe is the slice of GET /repos every grant path reads: whether the
+// template is private (decides the classroom-team read grant) and how many
+// forks inherit that read. Decoded once here so add, unlock, and reuse cannot
+// drift on the field names.
+type templateProbe struct {
+	Private    bool `json:"private"`
+	ForksCount int  `json:"forks_count"`
+}
+
+// templateFacts is what add warns or decides on about a validated template,
+// beyond its resolved ref.
+type templateFacts struct {
+	templateProbe
+	// Owner of the upstream when the template is a fork of another org's repo
+	// (issue #468); empty otherwise.
+	CrossOrgForkParent string
+}
+
+// Next step in the private-template forks warning. Add can still pick another
+// template; unlock and reuse act on a registered one, where the wiki's
+// remediation order applies (switch first: revoking does not cascade to the
+// forks, and the next grant re-propagates to any fork cleaned by hand).
+const (
+	forksRemedyFreshTemplate = "If they belong to students (for example, repositories GitHub Classroom created from this starter code), use a fresh template instead: create a new repository, copy this one's contents into it, and enable \"Template repository\"."
+	forksRemedyRegistered    = "If they belong to students, switch the assignment to a fresh, fork-free copy of the template first, then remove the forks from the team: under the organization's Teams, open the team, click Repositories, select the forks, and choose \"Remove from team\"."
+)
+
+// warnPrivateTemplateForks is the one wording for every path that grants the
+// classroom team read on a private in-org template: GitHub copies a team's
+// permission on a private repo onto every private fork, so the grant reaches
+// the template's forks (commonly GitHub Classroom student repos, forks of the
+// starter since 2024). Silent for a fork-free template.
+func warnPrivateTemplateForks(errOut io.Writer, owner, repo string, forks int, remedy string) {
+	if forks == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(errOut,
+		"Warning: template %s/%s has %d fork(s). The classroom team's read access on a private template is inherited by every private fork of it, so students could read those forks too. %s See https://github.com/%s/%s/forks\n",
+		owner, repo, forks, remedy, owner, repo)
+}
+
 // validateTemplateRepo checks <owner>/<repo> exists and is a template repo,
-// then resolves a missing @branch to default_branch. Also returns whether the
-// template is private (so add can decide the classroom-team read grant) and the
-// fork's cross-org parent owner when it is one (empty otherwise), so add can
-// warn that a cross-org fork depends on the upstream org keeping the app
-// approved (issue #468). Post-HTTP decisions live in resolveTemplateBranch so
-// they're unit-testable without httptest.
-func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (ref assignment.TemplateRef, private bool, crossOrgForkParent string, err error) {
+// then resolves a missing @branch to default_branch, returning the ref plus the
+// templateFacts add warns or decides on. Post-HTTP decisions live in
+// resolveTemplateBranch so they're unit-testable without httptest.
+func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (ref assignment.TemplateRef, facts templateFacts, err error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(t.Owner), url.PathEscape(t.Repo))
 	var resp struct {
+		templateProbe
 		IsTemplate    bool   `json:"is_template"`
 		DefaultBranch string `json:"default_branch"`
-		Private       bool   `json:"private"`
 		Fork          bool   `json:"fork"`
 		// Repo size in KB. size is populated by an async background job, so a
 		// freshly-created/pushed repo with real commits reads 0 for minutes
@@ -1423,10 +1467,10 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 	}
 	if err := client.Get(path, &resp); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return assignment.TemplateRef{}, false, "", fmt.Errorf("template `%s/%s` is not visible to your account: either make it public, or copy it into your org and reference the copy",
+			return assignment.TemplateRef{}, templateFacts{}, fmt.Errorf("template `%s/%s` is not visible to your account: either make it public, or copy it into your org and reference the copy",
 				t.Owner, t.Repo)
 		}
-		return assignment.TemplateRef{}, false, "", fmt.Errorf("GET %s: %w", path, err)
+		return assignment.TemplateRef{}, templateFacts{}, fmt.Errorf("GET %s: %w", path, err)
 	}
 	// Resolve emptiness only for an actual template (mirrors the web path, which
 	// returns not-template before probing): a non-template short-circuits in
@@ -1439,18 +1483,19 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 	}
 	ref, err = resolveTemplateBranch(t, resp.IsTemplate, hasCommits, resp.DefaultBranch)
 	if err != nil {
-		return assignment.TemplateRef{}, false, "", err
+		return assignment.TemplateRef{}, templateFacts{}, err
 	}
+	facts = templateFacts{templateProbe: resp.templateProbe}
 	// A fork whose upstream lives in a DIFFERENT org: generate copies the fork's
 	// own objects, but the copy is governed by the upstream org's OAuth-App
 	// policy, so accept fails if that org ever revokes the app.
 	if resp.Fork {
 		if parentOwner, _, found := strings.Cut(resp.Parent.FullName, "/"); found &&
 			parentOwner != "" && !strings.EqualFold(parentOwner, org) {
-			crossOrgForkParent = parentOwner
+			facts.CrossOrgForkParent = parentOwner
 		}
 	}
-	return ref, resp.Private, crossOrgForkParent, nil
+	return ref, facts, nil
 }
 
 // templateInOrg reports whether the template repo is owned by <org>

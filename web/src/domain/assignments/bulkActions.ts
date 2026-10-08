@@ -1,5 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { Assignment } from "@/types/classroom"
+import type { LocalizedMessage } from "@/types/localizedMessage"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
@@ -14,7 +15,12 @@ import {
   buildReusedEntry,
   reuseTemplateNeedsGrant,
 } from "./copyReuse"
-import { reconcileLockTemplateAccess, resolveTemplateGrant } from "./createEdit"
+import {
+  reconcileLockTemplateAccess,
+  resolveTemplateGrant,
+  type LockTemplateReconcile,
+} from "./createEdit"
+import { templateForksNotice } from "./templateWarnings"
 
 // Batched counterparts of setAssignmentLock and deleteAssignment. Looping the
 // single-assignment writers over a selection would be N commits to one file,
@@ -28,6 +34,9 @@ export type BulkAssignmentOutcome = {
   // Non-fatal: the flag was committed but the template read could not be
   // reconciled. Never set for deletes.
   templateAccessWarning?: string
+  // An unlock granted the team read on a private template that has forks,
+  // which inherit it. Not a failure, so kept apart from the warning above.
+  templateForksNotice?: LocalizedMessage
 }
 
 export type BulkLockResult = {
@@ -108,7 +117,7 @@ export async function setAssignmentsLock(
 
   // Reconcile every present assignment, not only the changed ones: a previous
   // run may have committed the flag and then failed the grant/revoke.
-  const warnings = await reconcilePerTemplate(
+  const reconciled = await reconcilePerTemplate(
     present.map((slug) => ({ slug, template: bySlug.get(slug)?.template })),
     (slug, template) =>
       reconcileLockTemplateAccess(
@@ -121,10 +130,14 @@ export async function setAssignmentsLock(
         nextAssignments.assignments,
       ),
   )
-  const outcomes = present.map((slug) => ({
-    slug,
-    templateAccessWarning: warnings.get(slug),
-  }))
+  const outcomes = present.map((slug) => {
+    const r: LockTemplateReconcile = reconciled.get(slug) ?? {}
+    return {
+      slug,
+      templateAccessWarning: r.accessWarning,
+      templateForksNotice: r.forksNotice,
+    }
+  })
 
   return { changed, missing, outcomes, newCommitSha }
 }
@@ -133,16 +146,13 @@ const templateKey = (template: NonNullable<Assignment["template"]>) =>
   `${template.owner}/${template.repo}`.toLowerCase()
 
 // One write per distinct template covers every assignment on it. Each of
-// those slugs gets the warning; its text names the first, but the team and
-// repo it points at are the same for all. Concurrent is safe: each write
+// those slugs gets the result; a warning's text names the first, but the team
+// and repo it points at are the same for all. Concurrent is safe: each write
 // targets a different repo, never the config repo's ref.
-async function reconcilePerTemplate(
+async function reconcilePerTemplate<T>(
   items: { slug: string; template: Assignment["template"] }[],
-  reconcile: (
-    slug: string,
-    template: Assignment["template"],
-  ) => Promise<string | undefined>,
-): Promise<Map<string, string | undefined>> {
+  reconcile: (slug: string, template: Assignment["template"]) => Promise<T>,
+): Promise<Map<string, T>> {
   const groups = new Map<string, string[]>()
   for (const { slug, template } of items) {
     const key = template ? templateKey(template) : `slug:${slug}`
@@ -155,11 +165,11 @@ async function reconcilePerTemplate(
     async (slugs) =>
       [slugs, await reconcile(slugs[0], byTemplate.get(slugs[0]))] as const,
   )
-  const warnings = new Map<string, string | undefined>()
-  for (const [slugs, warning] of results) {
-    for (const slug of slugs) warnings.set(slug, warning)
+  const out = new Map<string, T>()
+  for (const [slugs, result] of results) {
+    for (const slug of slugs) out.set(slug, result)
   }
-  return warnings
+  return out
 }
 
 export function setAssignmentsLockWithConflictRetry(
@@ -239,6 +249,9 @@ export type BulkCopyOutcome = {
   // Non-fatal: the copy landed, but students can't accept it until the target
   // team is granted read on the private template.
   templateAccessWarning?: string
+  // The copy landed and the target team was (or will be) granted read on a
+  // private template that has forks, which inherit it. Not a failure.
+  templateForksNotice?: LocalizedMessage
 }
 
 export type BulkCopyResult = {
@@ -340,30 +353,43 @@ export async function copyAssignments(
   )
 
   // A locked source copies as locked, so withhold the grant like create and
-  // the CLI's reuse do; unlocking the copy grants it.
+  // the CLI's reuse do; unlocking the copy grants it. The target team is a new
+  // team-to-template association, so the template's forks inherit it.
   const granting = entries.filter(
     ({ entry, needsGrant }) => needsGrant && entry.template && !entry.locked,
   )
-  const warnings = await reconcilePerTemplate(
+  const grants = await reconcilePerTemplate(
     granting.map(({ entry }) => ({
       slug: entry.slug,
       template: entry.template,
     })),
-    (slug, template) =>
-      template
-        ? resolveTemplateGrant(
-            client,
-            org,
-            targetClassroom,
-            slug,
-            template,
-            canGrantTemplateAccess,
-          )
-        : Promise.resolve(undefined),
+    async (slug, template) => {
+      if (!template) return {}
+      const probe = probes.get(templateKey(template))
+      const warning = await resolveTemplateGrant(
+        client,
+        org,
+        targetClassroom,
+        slug,
+        template,
+        canGrantTemplateAccess,
+      )
+      return {
+        warning,
+        forks: templateForksNotice(
+          template,
+          probe && "repo" in probe ? probe.repo : null,
+          warning === undefined,
+        ),
+      }
+    },
   )
   for (const outcome of outcomes) {
-    const warning = outcome.targetSlug && warnings.get(outcome.targetSlug)
-    if (warning) outcome.templateAccessWarning = warning
+    const grant = outcome.targetSlug
+      ? grants.get(outcome.targetSlug)
+      : undefined
+    if (grant?.warning) outcome.templateAccessWarning = grant.warning
+    if (grant?.forks) outcome.templateForksNotice = grant.forks
   }
 
   return { outcomes, newCommitSha }

@@ -20,6 +20,7 @@ import {
 import { slugify } from "@/util/slug"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { renamedFromSlugs, type Assignment } from "@/types/classroom"
+import { resolveLocalizedMessage } from "@/types/localizedMessage"
 
 // The plural ReuseAssignmentModal, on the same shell so it reads as the same
 // operation. Picking the target reveals one editable slug field per selected
@@ -101,6 +102,17 @@ export function BulkReuseAssignmentsModal({
         return groups
       }, new Map<string, string[]>()),
   ]
+  // Same grouping for the forks notice, which is not a failure and so gets
+  // its own section rather than the "could not be granted" one.
+  const templateForked = [
+    ...copied
+      .filter((o) => o.templateForksNotice)
+      .reduce((groups, o) => {
+        const key = resolveLocalizedMessage(t, o.templateForksNotice!)
+        groups.set(key, [...(groups.get(key) ?? []), o.targetSlug ?? o.slug])
+        return groups
+      }, new Map<string, string[]>()),
+  ]
 
   const summary = finished
     ? [
@@ -129,7 +141,11 @@ export function BulkReuseAssignmentsModal({
       isPending={reuse.isPending}
       warning={summary}
       warningTone={
-        failed.length > 0 || templateWarned.length > 0 ? "warning" : "success"
+        failed.length > 0 ||
+        templateWarned.length > 0 ||
+        templateForked.length > 0
+          ? "warning"
+          : "success"
       }
       // Without the target's assignments the taken-slug set is empty, so a
       // collision would only surface server-side. Block the run instead. A
@@ -284,6 +300,16 @@ export function BulkReuseAssignmentsModal({
                 key: `tpl-${slugs.join(",")}`,
                 label: slugs.join(", "),
                 detail: warning,
+              }))}
+            />
+          )}
+          {templateForked.length > 0 && (
+            <BulkResultSection
+              title={t("assignments.bulk.reuseTemplateForksTitle")}
+              rows={templateForked.map(([notice, slugs]) => ({
+                key: `forks-${slugs.join(",")}`,
+                label: slugs.join(", "),
+                detail: notice,
               }))}
             />
           )}

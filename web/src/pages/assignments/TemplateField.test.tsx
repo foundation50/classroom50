@@ -372,6 +372,81 @@ describe("TemplateField — outage hint on inconclusive verdicts", () => {
   })
 })
 
+describe("TemplateField — private template with forks", () => {
+  const FORKS_KEY = "assignments.template.privateHasForks"
+  const okInOrgPrivate = (forksCount: number) => ({
+    kind: "ok",
+    owner: ORG,
+    repo: "tmpl",
+    branch: "main",
+    visibility: "private",
+    inOrg: true,
+    forksCount,
+  })
+
+  it("warns when a private in-org template has forks (the team read reaches them)", async () => {
+    verifyTemplateAccess.mockResolvedValue(okInOrgPrivate(3))
+    teamHasRepoAccess.mockResolvedValue(false)
+    renderField()
+    expect(await screen.findByText(FORKS_KEY)).toBeTruthy()
+    // The remediation renders as a list, one step per key.
+    for (const step of ["StepCreate", "StepCopy", "StepEnable"]) {
+      expect(
+        screen.getByText(`assignments.template.privateHasForks${step}`),
+      ).toBeTruthy()
+    }
+    // The success verdict (and its Fix action) still render alongside.
+    expect(
+      screen.getByText("assignments.template.privateWillGrant", {
+        exact: false,
+      }),
+    ).toBeTruthy()
+    expect(screen.getByText(ACTION_KEY)).toBeTruthy()
+  })
+
+  it("stays quiet for a private in-org template with no forks", async () => {
+    verifyTemplateAccess.mockResolvedValue(okInOrgPrivate(0))
+    teamHasRepoAccess.mockResolvedValue(false)
+    renderField()
+    await screen.findByText("assignments.template.privateWillGrant", {
+      exact: false,
+    })
+    expect(screen.queryByText(FORKS_KEY)).toBeNull()
+  })
+
+  it("stays quiet for a public template with forks (no team grant happens)", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      ...okInOrgPrivate(40),
+      visibility: "public",
+    })
+    renderField()
+    await screen.findByText("assignments.template.okPublicInOrg", {
+      exact: false,
+    })
+    expect(screen.queryByText(FORKS_KEY)).toBeNull()
+  })
+
+  // The team grant fires for a private-fork verdict too, so its forks are just
+  // as exposed as a plain private template's.
+  it("warns for a private in-org template that is itself a fork and has forks", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "private-fork",
+      owner: ORG,
+      repo: "tmpl",
+      branch: "main",
+      parent: `${ORG}/upstream`,
+      parentInOrg: true,
+      forksCount: 5,
+    })
+    renderField()
+    expect(await screen.findByText(FORKS_KEY)).toBeTruthy()
+    const link = screen.getByText("assignments.template.viewForks").closest("a")
+    expect(link?.getAttribute("href")).toBe(
+      `https://github.com/${ORG}/tmpl/forks`,
+    )
+  })
+})
+
 describe("TemplateField — empty-template verdict", () => {
   it("renders the empty-template error copy for a commitless template", async () => {
     verifyTemplateAccess.mockResolvedValue({
