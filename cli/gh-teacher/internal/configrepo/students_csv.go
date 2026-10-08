@@ -942,6 +942,10 @@ func isFormulaTrigger(b byte) bool {
 	return false
 }
 
+// DefangCSVCell is defangCSVCell for other CSV writers (the group-membership
+// export), so every CSV the CLI emits guards formula cells the same way.
+func DefangCSVCell(s string) string { return defangCSVCell(s) }
+
 // defangCSVCell prepends `'` when the first byte is a formula trigger so a
 // roster row can't smuggle a payload to a co-teacher opening it in Excel.
 func defangCSVCell(s string) string {
