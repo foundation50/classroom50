@@ -1420,7 +1420,7 @@ type templateFacts struct {
 // forks, and the next grant re-propagates to any fork cleaned by hand).
 const (
 	forksRemedyFreshTemplate = "If they belong to students (for example, repositories GitHub Classroom created from this starter code), use a fresh template instead: create a new repository, copy this one's contents into it, and enable \"Template repository\"."
-	forksRemedyRegistered    = "If they belong to students, switch the assignment to a fresh, fork-free copy of the template first, then remove the team from each fork in its Collaborators and teams settings."
+	forksRemedyRegistered    = "If they belong to students, switch the assignment to a fresh, fork-free copy of the template first, then remove the forks from the team: under the organization's Teams, open the team, click Repositories, select the forks, and choose \"Remove from team\"."
 )
 
 // warnPrivateTemplateForks is the one wording for every path that grants the

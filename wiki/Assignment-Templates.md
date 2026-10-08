@@ -167,10 +167,15 @@ organization is rejected (students can't be granted access, so accept would
     team is added to the template and leaves those copies in place when the
     team is removed from it, so the forks stay readable while the template
     itself is locked.
-  - **Cleaning the forks by hand, alone.** Removing the team from each fork
+  - **Cleaning the forks by hand, alone.** Removing the forks from the team
     works until the team is added to the template again, which unlocking, a
     re-save, or "Fix template access" all do. Switch the assignment to a
-    fork-free copy first, then remove the team from the forks.
+    fork-free copy first, then remove the forks from the team: under your
+    organization's **Teams**, open the classroom team, click
+    **Repositories**, select the forks, and choose **Remove from team**. That
+    page lists every repository the team can read, so one pass covers them
+    all; the fork-by-fork route through each repository's own settings does
+    the same thing one repository at a time.
 - **Only the default branch is copied** unless the assignment enables
   **Include all branches** (`include_all_branches`), which passes every branch
   through to each generated student repository.
