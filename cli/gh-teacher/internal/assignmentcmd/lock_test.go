@@ -33,6 +33,7 @@ type lockServerConfig struct {
 	classroom       string // dst/classroom.json body ("" => 404 => no team)
 	templatePrivate bool
 	templateMissing bool
+	templateForks   int // forks_count on the template
 }
 
 func newLockServer(t *testing.T, cfg lockServerConfig) (*httptest.Server, *lockFixture) {
@@ -73,6 +74,7 @@ func newLockServer(t *testing.T, cfg lockServerConfig) (*httptest.Server, *lockF
 			"size":           1,
 			"default_branch": "main",
 			"private":        cfg.templatePrivate,
+			"forks_count":    cfg.templateForks,
 		})
 	})
 
@@ -431,6 +433,68 @@ func TestRunAssignmentAdd_LockedFlagOnPublicTemplateIsConfirmed(t *testing.T) {
 	}
 	if strings.Contains(errOut.String(), "was not granted read") {
 		t.Errorf("a public template has no read to withhold; got the private-template note %q", errOut.String())
+	}
+}
+
+// TestRunAssignmentAdd_PrivateTemplateWithForksWarns: the classroom team's read
+// on a private template is inherited by its private forks, so add warns with the
+// count and the forks URL. Still a warning, never an error: the forks may be
+// staff-owned.
+func TestRunAssignmentAdd_PrivateTemplateWithForksWarns(t *testing.T) {
+	server, _ := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+		templateForks:   3,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:        "o",
+		Classroom:  "dst",
+		Slug:       "exam",
+		Name:       "Exam",
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
+		Mode:       assignment.ModeIndividual,
+		Autograder: "default",
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(private template with forks): %v", err)
+	}
+	for _, want := range []string{"has 3 fork(s)", "https://github.com/o/hello-template/forks"} {
+		if !strings.Contains(errOut.String(), want) {
+			t.Errorf("stderr should contain %q, got %q", want, errOut.String())
+		}
+	}
+}
+
+// TestRunAssignmentAdd_PublicTemplateWithForksStaysQuiet: no team is granted on
+// a public template, so its forks inherit nothing and the warning must not fire.
+func TestRunAssignmentAdd_PublicTemplateWithForksStaysQuiet(t *testing.T) {
+	server, _ := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: false,
+		templateForks:   3,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:        "o",
+		Classroom:  "dst",
+		Slug:       "exam",
+		Name:       "Exam",
+		Tmpl:       &templateArg{Owner: "o", Repo: "hello-template"},
+		Mode:       assignment.ModeIndividual,
+		Autograder: "default",
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(public template with forks): %v", err)
+	}
+	if strings.Contains(errOut.String(), "fork(s)") {
+		t.Errorf("a public template grants no team read; got the forks warning %q", errOut.String())
 	}
 }
 
