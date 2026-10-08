@@ -397,7 +397,8 @@ organization's **Teams**, open the team, click **Repositories**, select the
 forks, and choose **Remove from team**. The order matters: GitHub leaves the
 copied grant on each fork when the team is removed from the template (so
 locking the assignment doesn't help), and adds it back to every fork the next
-time the team is granted on the template (which unlocking or re-saving does).
+time the team is added to the template (which unlocking does, and a re-save or
+"Fix template access" does once the team has been removed from it).
 See
 [Template requirements and gotchas](Assignment-Templates#template-requirements-and-gotchas).
 

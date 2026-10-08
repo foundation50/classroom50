@@ -173,9 +173,10 @@ organization is rejected (students can't be granted access, so accept would
     test revoking the team from the template left them, and the copied grant,
     in place.)
   - **Cleaning the forks by hand, alone.** Removing the forks from the team
-    works until the team is added to the template again, which unlocking, a
-    re-save, or "Fix template access" all do. Switch the assignment to a
-    fork-free copy first, then remove the forks from the team: under your
+    works until the team is added to the template again, which unlocking does
+    (and a re-save or "Fix template access" does once the team has been
+    removed from the template, for example by locking). Switch the assignment
+    to a fork-free copy first, then remove the forks from the team: under your
     organization's **Teams**, open the classroom team, click
     **Repositories**, select the forks, and choose **Remove from team**. That
     page lists every repository the team can read, so one pass covers them
