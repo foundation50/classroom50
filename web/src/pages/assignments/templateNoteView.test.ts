@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { templateForkNoteView } from "./templateNoteView"
+import { teamGrantTemplate, templateForkNoteView } from "./templateNoteView"
 
 describe("templateForkNoteView", () => {
   const base = {
@@ -32,5 +32,45 @@ describe("templateForkNoteView", () => {
   it("selects the no-parent copy when the parent is absent", () => {
     const view = templateForkNoteView({ ...base, parentInOrg: false })
     expect(view.messageKey).toBe("assignments.template.privateForkNoParent")
+  })
+})
+
+describe("teamGrantTemplate", () => {
+  const okBase = {
+    kind: "ok" as const,
+    owner: "cs50",
+    repo: "tmpl",
+    branch: "main",
+    forksCount: 4,
+  }
+
+  it("returns the template for an in-org private ok verdict", () => {
+    expect(
+      teamGrantTemplate({ ...okBase, visibility: "private", inOrg: true }),
+    ).toEqual({ owner: "cs50", repo: "tmpl", branch: "main", forksCount: 4 })
+  })
+
+  it("returns the template for every private-fork verdict", () => {
+    expect(
+      teamGrantTemplate({
+        kind: "private-fork",
+        owner: "cs50",
+        repo: "hw1",
+        branch: "main",
+        parentInOrg: true,
+        forksCount: 2,
+      }),
+    ).toEqual({ owner: "cs50", repo: "hw1", branch: "main", forksCount: 2 })
+  })
+
+  it("is null when no team grant fires", () => {
+    expect(
+      teamGrantTemplate({ ...okBase, visibility: "public", inOrg: true }),
+    ).toBeNull()
+    expect(
+      teamGrantTemplate({ ...okBase, visibility: "private", inOrg: false }),
+    ).toBeNull()
+    expect(teamGrantTemplate({ kind: "empty" })).toBeNull()
+    expect(teamGrantTemplate(null)).toBeNull()
   })
 })

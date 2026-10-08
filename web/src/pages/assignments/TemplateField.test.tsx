@@ -389,6 +389,12 @@ describe("TemplateField — private template with forks", () => {
     teamHasRepoAccess.mockResolvedValue(false)
     renderField()
     expect(await screen.findByText(FORKS_KEY)).toBeTruthy()
+    // The remediation renders as a list, one step per key.
+    for (const step of ["StepCreate", "StepCopy", "StepEnable"]) {
+      expect(
+        screen.getByText(`assignments.template.privateHasForks${step}`),
+      ).toBeTruthy()
+    }
     // The success verdict (and its Fix action) still render alongside.
     expect(
       screen.getByText("assignments.template.privateWillGrant", {

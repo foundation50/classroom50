@@ -17,6 +17,7 @@ import {
 } from "@/hooks/mutations/useBulkAssignmentActions"
 import { BulkReuseAssignmentsModal } from "@/components/modals/BulkReuseAssignmentsModal"
 import type { Assignment } from "@/types/classroom"
+import { resolveLocalizedMessage } from "@/types/localizedMessage"
 
 // The assignments toolbar's selection cluster (count + Actions menu + Clear),
 // shown only while rows are selected. Always mounted, like the roster's, so a
@@ -129,6 +130,26 @@ export function AssignmentsBulkBar({
         message: t("assignments.bulk.templateWarnings", {
           count: warned.length,
           slugs: warned.map((o) => o.slug).join(", "),
+        }),
+      })
+    }
+    // A successful unlock on a forked template is not a failure, so it gets
+    // its own toast, grouped per distinct notice (one per template).
+    const forkNotices = new Map<string, { notice: string; slugs: string[] }>()
+    for (const o of result.outcomes) {
+      if (!o.templateForksNotice) continue
+      const notice = resolveLocalizedMessage(t, o.templateForksNotice)
+      const group = forkNotices.get(notice) ?? { notice, slugs: [] }
+      group.slugs.push(o.slug)
+      forkNotices.set(notice, group)
+    }
+    for (const { notice, slugs: forked } of forkNotices.values()) {
+      notify({
+        tone: "warning",
+        key: `assignments-bulk-template-forks:${classroom}:${forked[0]}`,
+        message: t("assignments.bulk.templateForks", {
+          slugs: forked.join(", "),
+          notice,
         }),
       })
     }

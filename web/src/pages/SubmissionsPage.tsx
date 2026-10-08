@@ -118,7 +118,7 @@ import { downloadBlob } from "@/util/downloadBlob"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { isClassroomArchived } from "@/types/classroom"
-import { errorText } from "@/types/localizedMessage"
+import { errorText, resolveLocalizedMessage } from "@/types/localizedMessage"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import useAcceptShareSummary from "@/hooks/useAcceptShareSummary"
@@ -1128,8 +1128,15 @@ const SubmissionsPageContent = () => {
   // and surfaces the non-fatal template-access warning; the menu just triggers
   // the confirm. Gated on authoring rights at the call site.
   const setLock = useSetAssignmentLock(org ?? "", classroom ?? "", (result) => {
+    // Kept as toasts: non-fatal outcomes with no page anchor. The forks notice
+    // is not a failure, so it never replaces the success announcement.
+    if (result.templateForksNotice) {
+      notify({
+        tone: "warning",
+        message: resolveLocalizedMessage(t, result.templateForksNotice),
+      })
+    }
     if (result.templateAccessWarning) {
-      // Kept as a toast: a non-fatal partial outcome with no page anchor.
       notify({ tone: "warning", message: result.templateAccessWarning })
       return
     }

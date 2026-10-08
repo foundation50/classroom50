@@ -1,5 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { Assignment } from "@/types/classroom"
+import type { LocalizedMessage } from "@/types/localizedMessage"
 import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import { nextAvailableSlug } from "@/util/slug"
 import { validateReleaseAssets } from "@/util/releaseAssets"
@@ -11,12 +12,8 @@ import {
   commitAssignments,
   readAssignmentsForWriteAt,
 } from "./assignmentsWrite"
-import {
-  joinWarnings,
-  resolveTemplateGrant,
-  templateForksWarning,
-  type CreateAssignmentResult,
-} from "./createEdit"
+import { resolveTemplateGrant, type CreateAssignmentResult } from "./createEdit"
+import { templateForksNotice } from "./templateWarnings"
 
 export type CopyAssignmentInput = {
   org: string
@@ -172,7 +169,7 @@ export function assertSlugFreeInTarget(
     current.assignments.some((a) => a.renamed_from?.toLowerCase() === lower)
   ) {
     throw new Error(
-      `Slug "${slug}" is reserved in classroom "${targetClassroom}": it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on — choose a different slug.`,
+      `Slug "${slug}" is reserved in classroom "${targetClassroom}": it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on. Choose a different slug.`,
     )
   }
 }
@@ -238,23 +235,22 @@ export async function copyAssignmentToClassroom(
 
   // A locked source copies as locked, so withhold the grant like create and
   // the CLI's reuse do; unlocking the copy grants it. The target team is a new
-  // team-to-template association, so the template's forks inherit it: warn.
+  // team-to-template association, so the template's forks inherit it.
   let templateGrantWarning: string | undefined
+  let templateForks: LocalizedMessage | undefined
   if (needsTeamGrant && entry.template && !entry.locked) {
-    templateGrantWarning = joinWarnings(
-      await resolveTemplateGrant(
-        client,
-        org,
-        targetClassroom,
-        entry.slug,
-        entry.template,
-        input.canGrantTemplateAccess,
-      ),
-      templateForksWarning(
-        `Assignment "${entry.slug}" was reused into "${targetClassroom}"`,
-        entry.template,
-        repo,
-      ),
+    templateGrantWarning = await resolveTemplateGrant(
+      client,
+      org,
+      targetClassroom,
+      entry.slug,
+      entry.template,
+      input.canGrantTemplateAccess,
+    )
+    templateForks = templateForksNotice(
+      entry.template,
+      repo,
+      templateGrantWarning === undefined,
     )
   }
 
@@ -263,6 +259,7 @@ export async function copyAssignmentToClassroom(
     baseTreeSha: ctx.baseTreeSha,
     ...written,
     templateGrantWarning,
+    templateForksNotice: templateForks,
   }
 }
 

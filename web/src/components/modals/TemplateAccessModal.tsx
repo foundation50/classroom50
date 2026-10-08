@@ -5,6 +5,7 @@ import {
   LinkExternalIcon,
   MarkGithubIcon,
   ShieldCheckIcon,
+  AlertIcon,
 } from "@/components/ui/icons"
 
 import {
@@ -14,14 +15,16 @@ import {
   ModalIcon,
   OutcomeAlert,
   InlineSpinner,
+  ExternalLink,
 } from "@/components/ui"
 import type { AlertOutcome } from "@/components/ui"
+import { InlineNote } from "@/components/InlineNote"
 import type { Assignment } from "@/types/classroom"
 import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
-import { repoTeamsQuery } from "@/github-core/queries"
+import { repoQuery, repoTeamsQuery } from "@/github-core/queries"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
@@ -70,6 +73,15 @@ export const TemplateAccessModal = ({
   const teamsQuery = useQuery(
     repoTeamsQuery(client, template?.owner ?? "", template?.repo ?? ""),
   )
+  // Fix is a fresh team-to-template association, which GitHub propagates to
+  // every private fork of the template (see templateForksNotice). Probe the
+  // count so the dialog says so above the button, not after the grant.
+  const repoProbe = useQuery({
+    ...repoQuery(client, template?.owner ?? "", template?.repo ?? ""),
+    enabled: Boolean(template && inOrg),
+  })
+  const forksCount =
+    repoProbe.data?.private && inOrg ? (repoProbe.data.forks_count ?? 0) : 0
 
   // The modal is only opened for templated assignments; narrow defensively
   // (after all hooks, to keep hook order stable).
@@ -179,6 +191,25 @@ export const TemplateAccessModal = ({
     >
       <section className="mt-5">
         <OutcomeAlert outcome={fixOutcome} className="mb-4 text-sm" />
+        {forksCount > 0 && (
+          <InlineNote tone="warning" icon={AlertIcon} className="mb-4">
+            <span>
+              {t("assignments.template.accessModal.forksNote", {
+                count: forksCount,
+              })}
+            </span>
+            <ExternalLink
+              href={`https://github.com/${template.owner}/${template.repo}/forks`}
+              variant="plain"
+              className="mt-1 flex font-semibold underline"
+            >
+              {t("assignments.template.viewForks", {
+                owner: template.owner,
+                repo: template.repo,
+              })}
+            </ExternalLink>
+          </InlineNote>
+        )}
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-sm font-semibold text-base-content/80">
             {t("assignments.template.accessModal.templateHeading")}

@@ -2123,6 +2123,7 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     storedLocked?: boolean
     // A second, unlocked assignment on the same template.
     siblingOnTemplate?: boolean
+    templateForks?: number
   }): {
     client: GitHubClient
     grants: () => string[]
@@ -2143,6 +2144,7 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
       private: templatePrivate,
       is_template: templateIsTemplate,
       default_branch: "main",
+      forks_count: opts.templateForks ?? 0,
     })
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
@@ -2613,6 +2615,45 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
       expect(revokes()).toEqual([])
     })
 
+    // The edit form's unlock is the same fresh team-to-template association as
+    // the row action's, so it carries the same forks notice.
+    it("edit true-to-false reports the forks notice when the template has forks", async () => {
+      const { client, grants } = makeGrantClient({
+        classroomJson: studentOnly,
+        storedLocked: true,
+        templateForks: 2,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: false,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(grants()).toContain("classroom50-cs50")
+      expect(result.templateGrantWarning).toBeUndefined()
+      expect(result.templateForksNotice).toEqual({
+        key: "assignments.template.forksInherit",
+        params: { owner: ORG, repo: "tmpl", count: 2 },
+      })
+    })
+
+    // An ordinary save re-affirms the grant with a no-op PUT, which does not
+    // propagate, so the notice would be noise.
+    it("edit that stays unlocked re-affirms the grant without a forks notice", async () => {
+      const { client } = makeGrantClient({
+        classroomJson: studentOnly,
+        templateForks: 2,
+      })
+
+      const result = await editAssignment(
+        client,
+        editInput("tmpl") as Parameters<typeof editAssignment>[1],
+      )
+
+      expect(result.templateForksNotice).toBeUndefined()
+    })
+
     it("edit that stays locked: no grant, no revoke", async () => {
       const { client, grants, revokes, committed } = makeGrantClient({
         classroomJson: studentOnly,
@@ -2962,7 +3003,7 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
 
   // Reuse grants the TARGET classroom's team, a new team-to-template
   // association, which is what fans out to the template's private forks.
-  it("warns when the reused private template has forks, and still grants", async () => {
+  it("reports the forks notice when the reused private template has forks, and still grants", async () => {
     const { client, grants } = makeClient({
       name: "hw1-fork",
       full_name: `${ORG}/hw1-fork`,
@@ -2980,10 +3021,36 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
     })
 
     expect(grants()).toEqual(["classroom50-cs51"])
-    expect(result.templateGrantWarning).toContain('reused into "cs51"')
-    expect(result.templateGrantWarning).toContain("3 forks")
-    expect(result.templateGrantWarning).toContain(
-      `https://github.com/${ORG}/hw1-fork/forks`,
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(result.templateForksNotice).toEqual({
+      key: "assignments.template.forksInherit",
+      params: { owner: ORG, repo: "hw1-fork", count: 3 },
+    })
+  })
+
+  // A non-owner's grant is withheld, so the forks have not inherited anything
+  // yet; the notice switches tense rather than contradicting the warning.
+  it("uses the future-tense notice when the grant was withheld for an owner", async () => {
+    const { client, grants } = makeClient({
+      name: "hw1-fork",
+      full_name: `${ORG}/hw1-fork`,
+      private: true,
+      is_template: true,
+      default_branch: "main",
+      forks_count: 3,
+    })
+
+    const result = await copyAssignmentToClassroom(client, {
+      org: ORG,
+      source: forkSource,
+      targetClassroom: "cs51",
+      canGrantTemplateAccess: false,
+    })
+
+    expect(grants()).toEqual([])
+    expect(result.templateGrantWarning).toContain("organization owner")
+    expect(result.templateForksNotice?.key).toBe(
+      "assignments.template.forksWillInherit",
     )
   })
 
@@ -3006,6 +3073,7 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
 
     expect(grants()).toEqual([])
     expect(result.templateGrantWarning).toBeUndefined()
+    expect(result.templateForksNotice).toBeUndefined()
   })
 })
 
@@ -5443,8 +5511,9 @@ describe("setAssignmentLock", () => {
   })
 
   // Unlock is a fresh team-to-template association, so it fans the read out to
-  // the template's private forks again (lock never revoked it from them).
-  it("unlock warns when the private template has forks, and still grants", async () => {
+  // the template's private forks again (lock never revoked it from them). The
+  // notice is its own field: the access warning means the grant failed.
+  it("unlock reports the forks notice alongside a successful grant", async () => {
     const { client, grants } = makeLockClient({
       locked: true,
       templateForks: 2,
@@ -5456,11 +5525,11 @@ describe("setAssignmentLock", () => {
       locked: false,
     })
     expect(grants()).toContain("classroom50-cs50")
-    expect(result.templateAccessWarning).toContain("was unlocked")
-    expect(result.templateAccessWarning).toContain("2 forks")
-    expect(result.templateAccessWarning).toContain(
-      `https://github.com/${ORG}/tmpl/forks`,
-    )
+    expect(result.templateAccessWarning).toBeUndefined()
+    expect(result.templateForksNotice).toEqual({
+      key: "assignments.template.forksInherit",
+      params: { owner: ORG, repo: "tmpl", count: 2 },
+    })
   })
 
   it("lock stays quiet about forks (it revokes, nothing new fans out)", async () => {
@@ -5472,6 +5541,7 @@ describe("setAssignmentLock", () => {
       locked: true,
     })
     expect(result.templateAccessWarning).toBeUndefined()
+    expect(result.templateForksNotice).toBeUndefined()
   })
 
   it("flips the flag in place instead of moving the row to the end", async () => {

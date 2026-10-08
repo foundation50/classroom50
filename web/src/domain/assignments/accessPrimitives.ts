@@ -367,8 +367,7 @@ export type TemplateAccessVerification =
       branch: string
       visibility: "public" | "private"
       inOrg: boolean
-      // 0 when GitHub omits the count; the field warns on it for a private
-      // in-org template (see TemplateField's privateForksNote).
+      // 0 when GitHub omits the count.
       forksCount: number
     }
   // Reachable third-party org template (neither the classroom org nor the
@@ -394,8 +393,8 @@ export type TemplateAccessVerification =
       branch: string
       parent?: string
       parentInOrg: boolean
-      // Always an in-org private template, so the team grant still fires and
-      // its own forks inherit it exactly as on the `ok` verdict.
+      // In-org private by construction, so the team grant (and its fork
+      // fan-out) fires here too; see teamGrantTemplate.
       forksCount: number
     }
 
@@ -593,13 +592,18 @@ export async function verifyTemplateAccess(
 // Resolve a template ref against GitHub, mirroring the CLI: must be a template
 // repo, an omitted @branch falls back to its default, and an out-of-org private
 // template is rejected (students could never be granted access). Returns the
-// resolved block plus whether it's an in-org private template needing a team
-// read grant. Exported for tests.
+// resolved block, whether it's an in-org private template needing a team read
+// grant, and its fork count (the grant is inherited by private forks; 0 when
+// GitHub omits it). Exported for tests.
 export async function resolveTemplate(
   client: GitHubClient,
   org: string,
   parsed: ParsedTemplate,
-): Promise<{ template: Assignment["template"]; needsTeamGrant: boolean }> {
+): Promise<{
+  template: Assignment["template"]
+  needsTeamGrant: boolean
+  forksCount: number
+}> {
   // getRepo is 404-tolerant (returns null), so a missing/invisible template
   // surfaces as null.
   const repo = await getRepo(client, parsed.owner, parsed.repo)
@@ -649,6 +653,7 @@ export async function resolveTemplate(
   return {
     template: { owner: parsed.owner, repo: parsed.repo, branch },
     needsTeamGrant: Boolean(repo.private && inOrg),
+    forksCount: repo.forks_count ?? 0,
   }
 }
 
