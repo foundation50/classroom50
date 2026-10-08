@@ -505,10 +505,15 @@ func TestRunAssignmentAdd_PrivateTemplateWithForksWarns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runAssignmentAdd(private template with forks): %v", err)
 	}
-	for _, want := range []string{"has 3 fork(s)", "https://github.com/o/hello-template/forks"} {
+	for _, want := range []string{"has 3 fork(s)", "use a fresh template instead", "https://github.com/o/hello-template/forks"} {
 		if !strings.Contains(errOut.String(), want) {
 			t.Errorf("stderr should contain %q, got %q", want, errOut.String())
 		}
+	}
+	// Add can still pick another template, so it must not get the registered-
+	// template remedy that unlock and reuse print.
+	if strings.Contains(errOut.String(), "fork-free copy") {
+		t.Errorf("add should use the fresh-template remedy, not the registered one: %q", errOut.String())
 	}
 }
 

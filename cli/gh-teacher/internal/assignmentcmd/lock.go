@@ -156,12 +156,9 @@ func runAssignmentLock(client githubapi.Client, out, errOut io.Writer, org, clas
 		return revokeClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, template.Owner, template.Repo)
 	}
 	// Unlock: re-grant the student team (and, per that path, the staff teams)
-	// read on the private template so students can accept again. Locking did
-	// not revoke the read from the template's forks, and this grant re-adds it
-	// to any fork cleaned by hand, so warn before it fires.
-	if probe.ForksCount > 0 {
-		warnPrivateTemplateForks(errOut, template.Owner, template.Repo, probe.ForksCount, forksRemedyRegistered)
-	}
+	// read on the private template so students can accept again. A fresh
+	// association, so it reaches the forks (see warnPrivateTemplateForks).
+	warnPrivateTemplateForks(errOut, template.Owner, template.Repo, probe.ForksCount, forksRemedyRegistered)
 	return grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, template.Owner, template.Repo,
 		grantContext{verb: "unlocked", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment lock ... --unlock`"})
 }

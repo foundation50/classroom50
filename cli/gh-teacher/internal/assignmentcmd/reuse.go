@@ -345,11 +345,9 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 			slug, tmpl.Owner, tmpl.Repo, classroom, org)
 		return nil
 	}
-	// The target classroom's team is a new team-to-template association, which
-	// is exactly what fans out to the template's private forks.
-	if probe.ForksCount > 0 {
-		warnPrivateTemplateForks(errOut, tmpl.Owner, tmpl.Repo, probe.ForksCount, forksRemedyRegistered)
-	}
+	// The target team is a new team-to-template association (see
+	// warnPrivateTemplateForks).
+	warnPrivateTemplateForks(errOut, tmpl.Owner, tmpl.Repo, probe.ForksCount, forksRemedyRegistered)
 	return grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, tmpl.Owner, tmpl.Repo, grantContext{verb: "reused", classroomNoun: "target classroom"})
 }
 
@@ -438,26 +436,15 @@ func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, 
 	}
 }
 
-// templateProbe is the slice of GET /repos that lock and reuse act on for an
-// already registered template.
-type templateProbe struct {
-	Private    bool
-	ForksCount int
-}
-
-// probeTemplate reports a registered template's probe, or visible=false on a
-// 404 (deleted, renamed, or private outside the token's reach).
+// probeTemplate reports a registered template's grant-relevant fields, or
+// visible=false on a 404 (deleted, renamed, or private outside the token's reach).
 func probeTemplate(client githubapi.Client, owner, repo string) (probe templateProbe, visible bool, err error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
-	var resp struct {
-		Private    bool `json:"private"`
-		ForksCount int  `json:"forks_count"`
-	}
-	if err := client.Get(path, &resp); err != nil {
+	if err := client.Get(path, &probe); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
 			return templateProbe{}, false, nil
 		}
 		return templateProbe{}, false, fmt.Errorf("GET %s: %w", path, err)
 	}
-	return templateProbe{Private: resp.Private, ForksCount: resp.ForksCount}, true, nil
+	return probe, true, nil
 }

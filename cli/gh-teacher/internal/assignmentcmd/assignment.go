@@ -777,11 +777,9 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 				"Warning: template %s/%s is a fork of a repo in the %q organization. Copying it works only while %q keeps the Classroom 50 app approved; if that approval is removed, students will fail to accept. Use a fresh (non-fork) template repo to avoid depending on %q.\n",
 				ref.Owner, ref.Repo, parent, parent, parent)
 		}
-		// GitHub propagates a team's permission on a private repo to every
-		// private fork of it, so the classroom-team read granted below would also
-		// open each fork to the roster. A starter repo GitHub Classroom forked
-		// student repos from (its default since 2024) is the common case.
-		if templatePrivate && inOrg && facts.ForksCount > 0 {
+		// The grant below is a fresh team-to-template association, which reaches
+		// the template's forks (see warnPrivateTemplateForks).
+		if templatePrivate && inOrg {
 			warnPrivateTemplateForks(errOut, ref.Owner, ref.Repo, facts.ForksCount, forksRemedyFreshTemplate)
 		}
 		// Working assumption is `main`. A non-main template default branch is
@@ -1404,14 +1402,22 @@ func dueZoneName(loc *time.Location, t time.Time) string {
 	return abbr
 }
 
+// templateProbe is the slice of GET /repos every grant path reads: whether the
+// template is private (decides the classroom-team read grant) and how many
+// forks inherit that read. Decoded once here so add, unlock, and reuse cannot
+// drift on the field names.
+type templateProbe struct {
+	Private    bool `json:"private"`
+	ForksCount int  `json:"forks_count"`
+}
+
 // templateFacts is what add warns or decides on about a validated template,
 // beyond its resolved ref.
 type templateFacts struct {
-	Private bool
+	templateProbe
 	// Owner of the upstream when the template is a fork of another org's repo
 	// (issue #468); empty otherwise.
 	CrossOrgForkParent string
-	ForksCount         int
 }
 
 // Next step in the private-template forks warning. Add can still pick another
@@ -1424,8 +1430,14 @@ const (
 )
 
 // warnPrivateTemplateForks is the one wording for every path that grants the
-// classroom team read on a private in-org template with forks.
+// classroom team read on a private in-org template: GitHub copies a team's
+// permission on a private repo onto every private fork, so the grant reaches
+// the template's forks (commonly GitHub Classroom student repos, forks of the
+// starter since 2024). Silent for a fork-free template.
 func warnPrivateTemplateForks(errOut io.Writer, owner, repo string, forks int, remedy string) {
+	if forks == 0 {
+		return
+	}
 	_, _ = fmt.Fprintf(errOut,
 		"Warning: template %s/%s has %d fork(s). The classroom team's read access on a private template is inherited by every private fork of it, so students could read those forks too. %s See https://github.com/%s/%s/forks\n",
 		owner, repo, forks, remedy, owner, repo)
@@ -1438,11 +1450,10 @@ func warnPrivateTemplateForks(errOut io.Writer, owner, repo string, forks int, r
 func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (ref assignment.TemplateRef, facts templateFacts, err error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(t.Owner), url.PathEscape(t.Repo))
 	var resp struct {
+		templateProbe
 		IsTemplate    bool   `json:"is_template"`
 		DefaultBranch string `json:"default_branch"`
-		Private       bool   `json:"private"`
 		Fork          bool   `json:"fork"`
-		ForksCount    int    `json:"forks_count"`
 		// Repo size in KB. size is populated by an async background job, so a
 		// freshly-created/pushed repo with real commits reads 0 for minutes
 		// (issue #544) — size alone is NOT a reliable emptiness signal. A non-fork
@@ -1474,7 +1485,7 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 	if err != nil {
 		return assignment.TemplateRef{}, templateFacts{}, err
 	}
-	facts = templateFacts{Private: resp.Private, ForksCount: resp.ForksCount}
+	facts = templateFacts{templateProbe: resp.templateProbe}
 	// A fork whose upstream lives in a DIFFERENT org: generate copies the fork's
 	// own objects, but the copy is governed by the upstream org's OAuth-App
 	// policy, so accept fails if that org ever revokes the app.
