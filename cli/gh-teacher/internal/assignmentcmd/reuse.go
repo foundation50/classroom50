@@ -328,7 +328,7 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 	if tmpl == nil {
 		return nil
 	}
-	private, ok, err := templateVisibility(client, tmpl.Owner, tmpl.Repo)
+	probe, ok, err := probeTemplate(client, tmpl.Owner, tmpl.Repo)
 	if err != nil {
 		return fmt.Errorf("assignment reused, but checking the template %s/%s failed: %w", tmpl.Owner, tmpl.Repo, err)
 	}
@@ -337,13 +337,18 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 			slug, tmpl.Owner, tmpl.Repo)
 		return nil
 	}
-	if !private {
+	if !probe.Private {
 		return nil // public template needs no grant
 	}
 	if !templateInOrg(tmpl.Owner, org) {
 		_, _ = fmt.Fprintf(errOut, "Warning: reused %q references the private out-of-org template %s/%s, which can't be team-granted to classroom %q (reuse is in-org only for private templates). Students won't be able to accept; copy the template into %s and re-add.\n",
 			slug, tmpl.Owner, tmpl.Repo, classroom, org)
 		return nil
+	}
+	// The target classroom's team is a new team-to-template association, which
+	// is exactly what fans out to the template's private forks.
+	if probe.ForksCount > 0 {
+		warnPrivateTemplateForks(errOut, tmpl.Owner, tmpl.Repo, probe.ForksCount, forksRemedyRegistered)
 	}
 	return grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, tmpl.Owner, tmpl.Repo, grantContext{verb: "reused", classroomNoun: "target classroom"})
 }
@@ -433,19 +438,26 @@ func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, 
 	}
 }
 
-// templateVisibility probes a template repo for the reuse grant decision:
-// returns (private, visible, err). A 404 is the "not visible" case; other
-// transport errors propagate.
-func templateVisibility(client githubapi.Client, owner, repo string) (private bool, visible bool, err error) {
+// templateProbe is the slice of GET /repos that lock and reuse act on for an
+// already registered template.
+type templateProbe struct {
+	Private    bool
+	ForksCount int
+}
+
+// probeTemplate reports a registered template's probe, or visible=false on a
+// 404 (deleted, renamed, or private outside the token's reach).
+func probeTemplate(client githubapi.Client, owner, repo string) (probe templateProbe, visible bool, err error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
 	var resp struct {
-		Private bool `json:"private"`
+		Private    bool `json:"private"`
+		ForksCount int  `json:"forks_count"`
 	}
 	if err := client.Get(path, &resp); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return false, false, nil
+			return templateProbe{}, false, nil
 		}
-		return false, false, fmt.Errorf("GET %s: %w", path, err)
+		return templateProbe{}, false, fmt.Errorf("GET %s: %w", path, err)
 	}
-	return resp.Private, true, nil
+	return templateProbe{Private: resp.Private, ForksCount: resp.ForksCount}, true, nil
 }

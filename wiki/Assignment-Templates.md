@@ -158,7 +158,8 @@ organization is rejected (students can't be granted access, so accept would
   student repositories as forks since 2024, so registering the old starter as
   a template would let the whole roster read those students' work. The
   assignment form and `gh teacher assignment add` warn when a private
-  template has forks. Don't reuse such a repository. Create a new repository,
+  template has forks, and so do unlock and reuse, since each grants the team
+  on the template again. Don't reuse such a repository. Create a new repository,
   copy the starter's contents into it, and flag the copy as the template.
   Repositories Classroom 50 generates are not forks and never inherit this
   access. Two things do not undo the exposure once it has happened:

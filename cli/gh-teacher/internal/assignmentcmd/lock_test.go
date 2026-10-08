@@ -266,6 +266,49 @@ func TestRunAssignmentLock_UnlockRegrantsStudentTeam(t *testing.T) {
 	}
 }
 
+// TestRunAssignmentLock_UnlockWarnsOnTemplateForks: unlock is a fresh
+// team-to-template association, so it fans the read out to the template's
+// private forks like add does. Warn, never fail: the forks may be staff-owned.
+func TestRunAssignmentLock_UnlockWarnsOnTemplateForks(t *testing.T) {
+	server, _ := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(true),
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+		templateForks:   2,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentLock(client, &out, &errOut, "o", "dst", "hello", false); err != nil {
+		t.Fatalf("runAssignmentLock(unlock, forks): %v", err)
+	}
+	for _, want := range []string{"has 2 fork(s)", "fork-free copy", "https://github.com/o/hello-template/forks"} {
+		if !strings.Contains(errOut.String(), want) {
+			t.Errorf("stderr should contain %q, got %q", want, errOut.String())
+		}
+	}
+}
+
+// TestRunAssignmentLock_LockStaysQuietOnTemplateForks: locking revokes rather
+// than grants, so there is nothing new to fan out and the warning must not fire.
+func TestRunAssignmentLock_LockStaysQuietOnTemplateForks(t *testing.T) {
+	server, _ := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+		templateForks:   2,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentLock(client, &out, &errOut, "o", "dst", "hello", true); err != nil {
+		t.Fatalf("runAssignmentLock(lock, forks): %v", err)
+	}
+	if strings.Contains(errOut.String(), "fork(s)") {
+		t.Errorf("lock grants nothing; got the forks warning %q", errOut.String())
+	}
+}
+
 // TestRunAssignmentLock_PublicTemplateNoAccessChange: a public template is a
 // UX-gate-only lock — the flag flips but no team access is changed.
 func TestRunAssignmentLock_PublicTemplateNoAccessChange(t *testing.T) {

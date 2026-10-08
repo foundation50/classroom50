@@ -2959,6 +2959,54 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
 
     expect(result.newCommitSha).toBe("newcommit")
   })
+
+  // Reuse grants the TARGET classroom's team, a new team-to-template
+  // association, which is what fans out to the template's private forks.
+  it("warns when the reused private template has forks, and still grants", async () => {
+    const { client, grants } = makeClient({
+      name: "hw1-fork",
+      full_name: `${ORG}/hw1-fork`,
+      private: true,
+      is_template: true,
+      default_branch: "main",
+      forks_count: 3,
+    })
+
+    const result = await copyAssignmentToClassroom(client, {
+      org: ORG,
+      source: forkSource,
+      targetClassroom: "cs51",
+      canGrantTemplateAccess: true,
+    })
+
+    expect(grants()).toEqual(["classroom50-cs51"])
+    expect(result.templateGrantWarning).toContain('reused into "cs51"')
+    expect(result.templateGrantWarning).toContain("3 forks")
+    expect(result.templateGrantWarning).toContain(
+      `https://github.com/${ORG}/hw1-fork/forks`,
+    )
+  })
+
+  it("stays quiet about forks on a public template (no grant happens)", async () => {
+    const { client, grants } = makeClient({
+      name: "hw1-fork",
+      full_name: `${ORG}/hw1-fork`,
+      private: false,
+      is_template: true,
+      default_branch: "main",
+      forks_count: 3,
+    })
+
+    const result = await copyAssignmentToClassroom(client, {
+      org: ORG,
+      source: forkSource,
+      targetClassroom: "cs51",
+      canGrantTemplateAccess: true,
+    })
+
+    expect(grants()).toEqual([])
+    expect(result.templateGrantWarning).toBeUndefined()
+  })
 })
 
 describe("parseTemplateRef", () => {
@@ -5218,6 +5266,7 @@ describe("setAssignmentLock", () => {
     locked?: boolean
     template?: { owner: string; repo: string; branch: string } | null
     templatePrivate?: boolean
+    templateForks?: number
     team?: { id: number; slug: string } | null
     onDeleteThrows?: boolean
   }): {
@@ -5325,6 +5374,7 @@ describe("setAssignmentLock", () => {
           name: "tmpl",
           private: templatePrivate,
           default_branch: "main",
+          forks_count: opts.templateForks ?? 0,
         }
       }
       if (url.endsWith("/git/trees")) return { sha: "newtree" }
@@ -5390,6 +5440,38 @@ describe("setAssignmentLock", () => {
     // Unlock collapses to absent-is-false: no `"locked"` key in the wire.
     expect(committed()).not.toContain(`"locked"`)
     expect(grants()).toContain("classroom50-cs50")
+  })
+
+  // Unlock is a fresh team-to-template association, so it fans the read out to
+  // the template's private forks again (lock never revoked it from them).
+  it("unlock warns when the private template has forks, and still grants", async () => {
+    const { client, grants } = makeLockClient({
+      locked: true,
+      templateForks: 2,
+    })
+    const result = await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: false,
+    })
+    expect(grants()).toContain("classroom50-cs50")
+    expect(result.templateAccessWarning).toContain("was unlocked")
+    expect(result.templateAccessWarning).toContain("2 forks")
+    expect(result.templateAccessWarning).toContain(
+      `https://github.com/${ORG}/tmpl/forks`,
+    )
+  })
+
+  it("lock stays quiet about forks (it revokes, nothing new fans out)", async () => {
+    const { client } = makeLockClient({ locked: false, templateForks: 2 })
+    const result = await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: true,
+    })
+    expect(result.templateAccessWarning).toBeUndefined()
   })
 
   it("flips the flag in place instead of moving the row to the end", async () => {

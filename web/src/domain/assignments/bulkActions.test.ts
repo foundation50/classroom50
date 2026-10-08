@@ -43,16 +43,25 @@ const reconcileLockTemplateAccess =
   >()
 const resolveTemplateGrant =
   vi.fn<(...args: unknown[]) => Promise<string | undefined>>()
-vi.mock("./createEdit", () => ({
-  reconcileLockTemplateAccess: (...args: unknown[]) =>
-    reconcileLockTemplateAccess(
-      ...(args as Parameters<typeof reconcileLockTemplateAccess>),
-    ),
-  resolveTemplateGrant: (...args: unknown[]) => resolveTemplateGrant(...args),
-}))
+vi.mock("./createEdit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./createEdit")>()
+  return {
+    // Pure helpers: keep the real ones so the forks warning is exercised.
+    templateForksWarning: actual.templateForksWarning,
+    joinWarnings: actual.joinWarnings,
+    reconcileLockTemplateAccess: (...args: unknown[]) =>
+      reconcileLockTemplateAccess(
+        ...(args as Parameters<typeof reconcileLockTemplateAccess>),
+      ),
+    resolveTemplateGrant: (...args: unknown[]) => resolveTemplateGrant(...args),
+  }
+})
 
 // The target's view of each template repo; null is a 404.
-const repos = new Map<string, { private: boolean } | null>()
+const repos = new Map<
+  string,
+  { private: boolean; forks_count?: number } | null
+>()
 const getRepo = vi.fn(
   async (_client: unknown, owner: string, repo: string) =>
     repos.get(`${owner}/${repo}`) ?? null,
@@ -450,6 +459,21 @@ describe("copyAssignments", () => {
       "owner required",
       "owner required",
     ])
+  })
+
+  // The target team is a new team-to-template association, which fans out to
+  // the template's private forks; the warning rides on the grant outcome.
+  it("warns when a reused private template has forks", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    repos.set(`${ORG}/tpl`, { private: true, forks_count: 2 })
+
+    const result = await copy([item("a1", "a1", { template })], true)
+
+    expect(resolveTemplateGrant).toHaveBeenCalledTimes(1)
+    expect(result.outcomes[0].templateAccessWarning).toContain("2 forks")
+    expect(result.outcomes[0].templateAccessWarning).toContain(
+      `https://github.com/${ORG}/tpl/forks`,
+    )
   })
 
   // A transient probe failure is that template's problem, not the batch's.

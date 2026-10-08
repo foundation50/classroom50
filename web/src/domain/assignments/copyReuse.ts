@@ -11,7 +11,12 @@ import {
   commitAssignments,
   readAssignmentsForWriteAt,
 } from "./assignmentsWrite"
-import { resolveTemplateGrant, type CreateAssignmentResult } from "./createEdit"
+import {
+  joinWarnings,
+  resolveTemplateGrant,
+  templateForksWarning,
+  type CreateAssignmentResult,
+} from "./createEdit"
 
 export type CopyAssignmentInput = {
   org: string
@@ -232,16 +237,24 @@ export async function copyAssignmentToClassroom(
   )
 
   // A locked source copies as locked, so withhold the grant like create and
-  // the CLI's reuse do; unlocking the copy grants it.
+  // the CLI's reuse do; unlocking the copy grants it. The target team is a new
+  // team-to-template association, so the template's forks inherit it: warn.
   let templateGrantWarning: string | undefined
   if (needsTeamGrant && entry.template && !entry.locked) {
-    templateGrantWarning = await resolveTemplateGrant(
-      client,
-      org,
-      targetClassroom,
-      entry.slug,
-      entry.template,
-      input.canGrantTemplateAccess,
+    templateGrantWarning = joinWarnings(
+      await resolveTemplateGrant(
+        client,
+        org,
+        targetClassroom,
+        entry.slug,
+        entry.template,
+        input.canGrantTemplateAccess,
+      ),
+      templateForksWarning(
+        `Assignment "${entry.slug}" was reused into "${targetClassroom}"`,
+        entry.template,
+        repo,
+      ),
     )
   }
 

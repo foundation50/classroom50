@@ -1,4 +1,5 @@
 import type { GitHubClient } from "@/github-core/client"
+import type { GitHubRepo } from "@/github-core/types"
 import type { Assignment } from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
@@ -1153,6 +1154,38 @@ export function templateGrantOwnerRequiredWarning(
   )
 }
 
+// GitHub copies a team's permission on a private repo onto every private fork,
+// so a fresh team-to-template association also opens the template's forks to
+// the roster. The create form's pre-flight (TemplateField) warns before the
+// first grant; this is the same warning for the re-grant paths that run with no
+// form in front of them (unlock, reuse). Revoking does not cascade to the forks
+// and the next grant re-propagates, hence the remediation order. Never a block:
+// the forks may be staff-owned.
+export function templateForksWarning(
+  action: string,
+  template: NonNullable<Assignment["template"]>,
+  repo: Pick<GitHubRepo, "private" | "forks_count"> | null,
+): string | undefined {
+  const forks = repo?.forks_count ?? 0
+  if (!repo?.private || forks === 0) return undefined
+  const name = `${template.owner}/${template.repo}`
+  const those = forks === 1 ? "that fork" : "those forks"
+  return (
+    `${action}, and the classroom team's read on the private template ${name} is inherited by its ` +
+    `${forks} ${forks === 1 ? "fork" : "forks"}, so students could read ${those} too. ` +
+    `If they belong to students, switch the assignment to a fresh, fork-free copy of the template first, ` +
+    `then remove the team from each fork in its Collaborators and teams settings. See https://github.com/${name}/forks`
+  )
+}
+
+// Two independent non-fatal warnings from one write, surfaced as one message.
+export function joinWarnings(
+  ...warnings: (string | undefined)[]
+): string | undefined {
+  const present = warnings.filter((w): w is string => Boolean(w))
+  return present.length > 0 ? present.join(" ") : undefined
+}
+
 // The one grant-decision recipe shared by create / edit / reuse: attempt the
 // owner-only team read-grant when canGrantTemplateAccess is set, else return the
 // owner-required warning rather than silently skipping (a silent skip would 404
@@ -1497,9 +1530,15 @@ export async function reconcileLockTemplateAccess(
   }
   if (!repo?.private) return undefined
 
-  return locked
-    ? revokeStudentTeamTemplateRead(client, org, classroom, slug, template)
-    : tryGrantTeamTemplateRead(client, org, classroom, slug, template)
+  if (locked) {
+    return revokeStudentTeamTemplateRead(client, org, classroom, slug, template)
+  }
+  // Unlock re-grants, which fans the read out to the template's forks again
+  // (lock never revoked it from them), so warn alongside the grant outcome.
+  return joinWarnings(
+    await tryGrantTeamTemplateRead(client, org, classroom, slug, template),
+    templateForksWarning(`Assignment "${slug}" was unlocked`, template, repo),
+  )
 }
 
 export function templateStillInUse(

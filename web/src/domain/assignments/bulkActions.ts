@@ -14,7 +14,12 @@ import {
   buildReusedEntry,
   reuseTemplateNeedsGrant,
 } from "./copyReuse"
-import { reconcileLockTemplateAccess, resolveTemplateGrant } from "./createEdit"
+import {
+  joinWarnings,
+  reconcileLockTemplateAccess,
+  resolveTemplateGrant,
+  templateForksWarning,
+} from "./createEdit"
 
 // Batched counterparts of setAssignmentLock and deleteAssignment. Looping the
 // single-assignment writers over a selection would be N commits to one file,
@@ -349,17 +354,25 @@ export async function copyAssignments(
       slug: entry.slug,
       template: entry.template,
     })),
-    (slug, template) =>
-      template
-        ? resolveTemplateGrant(
-            client,
-            org,
-            targetClassroom,
-            slug,
-            template,
-            canGrantTemplateAccess,
-          )
-        : Promise.resolve(undefined),
+    async (slug, template) => {
+      if (!template) return undefined
+      const probe = probes.get(templateKey(template))
+      return joinWarnings(
+        await resolveTemplateGrant(
+          client,
+          org,
+          targetClassroom,
+          slug,
+          template,
+          canGrantTemplateAccess,
+        ),
+        templateForksWarning(
+          `Assignment "${slug}" was reused into "${targetClassroom}"`,
+          template,
+          probe && "repo" in probe ? probe.repo : null,
+        ),
+      )
+    },
   )
   for (const outcome of outcomes) {
     const warning = outcome.targetSlug && warnings.get(outcome.targetSlug)

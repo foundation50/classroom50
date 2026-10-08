@@ -782,9 +782,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// open each fork to the roster. A starter repo GitHub Classroom forked
 		// student repos from (its default since 2024) is the common case.
 		if templatePrivate && inOrg && facts.ForksCount > 0 {
-			_, _ = fmt.Fprintf(errOut,
-				"Warning: template %s/%s has %d fork(s). The classroom team's read access on a private template is inherited by every private fork of it, so students could read those forks too. If they belong to students (for example, repositories GitHub Classroom created from this starter code), use a fresh template instead: create a new repository, copy this one's contents into it, and enable \"Template repository\". See https://github.com/%s/%s/forks\n",
-				ref.Owner, ref.Repo, facts.ForksCount, ref.Owner, ref.Repo)
+			warnPrivateTemplateForks(errOut, ref.Owner, ref.Repo, facts.ForksCount, forksRemedyFreshTemplate)
 		}
 		// Working assumption is `main`. A non-main template default branch is
 		// supported (student repos inherit it), but warn so the teacher knows
@@ -1414,6 +1412,23 @@ type templateFacts struct {
 	// (issue #468); empty otherwise.
 	CrossOrgForkParent string
 	ForksCount         int
+}
+
+// Next step in the private-template forks warning. Add can still pick another
+// template; unlock and reuse act on a registered one, where the wiki's
+// remediation order applies (switch first: revoking does not cascade to the
+// forks, and the next grant re-propagates to any fork cleaned by hand).
+const (
+	forksRemedyFreshTemplate = "If they belong to students (for example, repositories GitHub Classroom created from this starter code), use a fresh template instead: create a new repository, copy this one's contents into it, and enable \"Template repository\"."
+	forksRemedyRegistered    = "If they belong to students, switch the assignment to a fresh, fork-free copy of the template first, then remove the team from each fork in its Collaborators and teams settings."
+)
+
+// warnPrivateTemplateForks is the one wording for every path that grants the
+// classroom team read on a private in-org template with forks.
+func warnPrivateTemplateForks(errOut io.Writer, owner, repo string, forks int, remedy string) {
+	_, _ = fmt.Fprintf(errOut,
+		"Warning: template %s/%s has %d fork(s). The classroom team's read access on a private template is inherited by every private fork of it, so students could read those forks too. %s See https://github.com/%s/%s/forks\n",
+		owner, repo, forks, remedy, owner, repo)
 }
 
 // validateTemplateRepo checks <owner>/<repo> exists and is a template repo,
