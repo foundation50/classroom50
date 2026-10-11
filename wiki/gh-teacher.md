@@ -1149,21 +1149,30 @@ The default output is a table with a one-line summary on stderr. `--csv`
 writes the same rows the web app's **Download groups (CSV)** action produces,
 with the header
 
-```
+```csv
 group,group_name,team_slug,repo,username,first_name,last_name,email,section,github_id,role,in_roster,note
 ```
 
-`group` is the group's key (`group-<n>` for a team assignment, the founder's
-login for a legacy group) and matches the `group` column of the scores exports
-(`gh teacher download`'s `scores.csv`, the web **Download scores (CSV)**), so
-the two files join; `group_name` and `team_slug` are blank for a legacy group,
-and an unnamed team exports as `Group <n>` in English regardless of the
-viewer's language. The member columns are exactly `roster.csv`'s, so the file
-joins against the roster or an LMS export without renaming. A group whose
-membership could not be read (a failed collaborator or team-member listing)
-gets one row with `note` set instead of exporting as empty, and a warning on
-stderr. `--json` emits an array of objects with the same keys and takes
-precedence over `--csv`.
+- `group`: the group's key, `group-<n>` for a team assignment or the founder's
+  login for a legacy group. It matches the `group` column of the scores exports
+  (`gh teacher download`'s `scores.csv`, the web **Download scores (CSV)**), so
+  the two files join.
+- `group_name`, `team_slug`, `repo`: blank for a legacy group's name and team,
+  and for a team whose repository hasn't been created yet. An unnamed team
+  exports as `Group <n>` in English regardless of the viewer's language.
+- `username` through `role`: exactly `roster.csv`'s columns, so the file joins
+  against the roster or an LMS export without renaming. A member the roster
+  doesn't know exports their lowercased GitHub login with `in_roster` set to
+  `no`.
+- `note`: set when a group's membership could not be read (a failed
+  collaborator or team-member listing), so it is never mistaken for an empty
+  group; the command also warns on stderr.
+
+Members order the same way in both tools: by last name, then first name, then
+login, comparing characters by code point with numbers compared numerically.
+
+`--json` emits an array of objects with the same keys and takes precedence over
+`--csv`.
 
 ## `autograder`
 

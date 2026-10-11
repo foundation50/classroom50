@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import type { GitHubUser } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
 import { groupExportName } from "@/util/groupTeam"
 import {
   GROUP_MEMBERSHIP_CSV_COLUMNS,
   GROUP_MEMBERSHIP_NOTE_UNREADABLE,
   buildGroupMembershipCsvRows,
+  downloadGroupsDisabledReason,
+  groupMembershipSources,
+  naturalCompare,
   type GroupMember,
 } from "./groupMembershipCsv"
 
@@ -74,47 +79,133 @@ describe("buildGroupMembershipCsvRows (shared cases)", () => {
   }
 })
 
-describe("buildGroupMembershipCsvRows (web-only cases)", () => {
-  const student = (
-    username: string,
-    first: string,
-    last: string,
-    extra: Partial<Student> = {},
-  ): Student => ({
-    username,
-    first_name: first,
-    last_name: last,
-    email: `${username}@x.edu`,
-    section: "A",
-    github_id: "",
-    role: "student",
-    ...extra,
+describe("naturalCompare", () => {
+  it("orders digit runs numerically, ignoring leading zeros and case", () => {
+    const sorted = [
+      "group-10",
+      "Group-2",
+      "group-01",
+      "a10",
+      "a9",
+      "b",
+    ].toSorted(naturalCompare)
+    expect(sorted).toEqual([
+      "a9",
+      "a10",
+      "b",
+      "group-01",
+      "Group-2",
+      "group-10",
+    ])
+    expect(naturalCompare("group-01", "group-1")).toBe(0)
   })
 
-  it("trims whitespace on both sides of the join and skips a blank login", () => {
-    const rows = buildGroupMembershipCsvRows(
-      [{ group: "group-1", members: [{ login: " alice " }, { login: "  " }] }],
-      [student(" alice ", " Alice ", " Ada ", { github_id: " 1 " })],
-    )
-    expect(rows).toEqual([
-      expect.objectContaining({
-        username: "alice",
-        first_name: "Alice",
-        last_name: "Ada",
-        github_id: "1",
-        in_roster: "yes",
-      }),
+  it("compares code points, not locale order", () => {
+    expect(naturalCompare("f-oo", "f_oo")).toBeLessThan(0)
+    expect(naturalCompare("zed", "éclair")).toBeLessThan(0)
+  })
+})
+
+const user = (login: string, id: number): GitHubUser =>
+  ({ login, id }) as GitHubUser
+const team = (n: number, name?: string): GroupTeamRef => ({
+  slug: `classroom50-group-abcdef0123456789-${n}`,
+  id: 500 + n,
+  n,
+  name,
+})
+
+describe("groupMembershipSources", () => {
+  it("lists every live team with its repo and id-bearing members", () => {
+    const t1 = team(1, "The Sharks")
+    const t2 = team(2)
+    const sources = groupMembershipSources({
+      isTeamAssignment: true,
+      teamByOwner: new Map([
+        ["group-1", t1],
+        ["group-2", t2],
+      ]),
+      teamMembersBySlug: new Map([[t1.slug, [user("alice", 1)]]]),
+      groupRepoList: [{ owner: "group-1", repoName: "cs-hw1-group-1" }],
+      groupCollabByRepo: new Map(),
+    })
+    expect(sources).toEqual([
+      {
+        group: "group-1",
+        name: "The Sharks",
+        teamSlug: t1.slug,
+        repoName: "cs-hw1-group-1",
+        members: [{ login: "alice", id: 1 }],
+      },
+      // No repo yet, and no member read for this slug: unreadable, not empty.
+      {
+        group: "group-2",
+        name: "Group 2",
+        teamSlug: t2.slug,
+        repoName: undefined,
+        members: undefined,
+      },
     ])
   })
 
-  it("keeps the first roster row when two rows share a username or github_id", () => {
-    const rows = buildGroupMembershipCsvRows(
-      [{ group: "group-1", members: [{ login: "alice", id: 1 }] }],
-      [
-        student("alice", "Alice", "Ada", { github_id: "1" }),
-        student("ALICE", "Dup", "Row", { github_id: "1" }),
+  it("lists every legacy repo with its collaborators and the founder as a fallback", () => {
+    const sources = groupMembershipSources({
+      isTeamAssignment: false,
+      teamByOwner: new Map(),
+      teamMembersBySlug: new Map(),
+      groupRepoList: [
+        { owner: "alice", repoName: "cs-hw1-alice" },
+        { owner: "bob", repoName: "cs-hw1-bob" },
       ],
-    )
-    expect(rows.map((r) => r.last_name)).toEqual(["Ada"])
+      groupCollabByRepo: new Map([
+        ["cs-hw1-alice", [user("ada-lovelace", 1), user("Carol", 3)]],
+      ]),
+    })
+    expect(sources).toEqual([
+      {
+        group: "alice",
+        repoName: "cs-hw1-alice",
+        members: [
+          { login: "ada-lovelace", id: 1 },
+          { login: "Carol", id: 3 },
+          { login: "alice", fallback: true },
+        ],
+      },
+      // Collaborator read failed: unreadable, not empty.
+      { group: "bob", repoName: "cs-hw1-bob", members: undefined },
+    ])
+  })
+})
+
+describe("downloadGroupsDisabledReason", () => {
+  it("reports loading before unavailable before empty", () => {
+    expect(
+      downloadGroupsDisabledReason({
+        loading: true,
+        unavailable: true,
+        sourceCount: 0,
+      }),
+    ).toBe("loading")
+    expect(
+      downloadGroupsDisabledReason({
+        loading: false,
+        unavailable: true,
+        sourceCount: 0,
+      }),
+    ).toBe("unavailable")
+    expect(
+      downloadGroupsDisabledReason({
+        loading: false,
+        unavailable: false,
+        sourceCount: 0,
+      }),
+    ).toBe("empty")
+    expect(
+      downloadGroupsDisabledReason({
+        loading: false,
+        unavailable: false,
+        sourceCount: 2,
+      }),
+    ).toBeUndefined()
   })
 })

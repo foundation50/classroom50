@@ -1231,14 +1231,16 @@ columns. Each row carries:
   the roster by GitHub id first, then by username, so a student who renamed
   their GitHub account keeps their roster row.
 - `in_roster`: `no` for a collaborator or team member the roster doesn't
-  know, so an extra account on a repository stands out. The item stays
-  disabled until the roster and every group's membership have loaded.
+  know, so an extra account on a repository stands out. Such a member's
+  `username` is their lowercased GitHub login.
 - `note`: set when a group's membership could not be read, so it is never
   mistaken for an empty group.
 
 The export reads live membership (repository collaborators or GitHub Team
 members), not the last collected snapshot, so a group that hasn't submitted
-yet is included. The menu item is disabled until membership has loaded.
+yet is included. The menu item stays disabled until the roster and every
+group's membership have loaded, and when one of those reads failed, so a
+reload is the fix rather than a file that marks everyone unrostered.
 `gh teacher group list --csv` writes the same file from the command line; see
 [`group list`](gh-teacher#group-list).
 

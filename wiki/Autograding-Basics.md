@@ -759,7 +759,7 @@ submission's data:
 | `late` | `yes` / `no` against the due date; blank for non-submitters. |
 | `commit` / `review` / `release` | Links: the graded commit, the full starter-to-graded diff, and the Release. |
 | `provenance_warning` | Why the autograde workflow didn't publish the latest Release (who did); blank when it did. See [How much to trust a collected score](#how-much-to-trust-a-collected-score). |
-| `group` | The group's key for a group or team assignment (`group-<n>`, or the founder's username), the same value in the `group` column of [Download groups (CSV)](Web-Teacher-Guide#download-groups), so the two files join. Blank for an individual assignment. |
+| `group` | The group's key for a group or team assignment (`group-<n>`, or the founder's username), the same value in the `group` column of [Download groups (CSV)](Web-Teacher-Guide#download-groups), so the two files join. Blank for an individual assignment and for a non-submitter row (a member whose group hasn't submitted is listed only in the groups file). |
 
 #### CLI: `gh teacher download`
 
@@ -780,7 +780,7 @@ newest first), plus one blank-score line per non-submitter:
 | `late` | `true` / `false` against the due date; blank when unknown. |
 | `override` | `true` when a teacher override is in effect for the entry. |
 | `provenance_warning` | Why the autograde workflow didn't publish this attempt's Release (who did); blank when it did. |
-| `group` | The group's key for a group or team assignment (`group-<n>`, or the founder's username), the same value in the `group` column of `gh teacher group list --csv`, so the two files join. Blank for an individual assignment. |
+| `group` | The group's key for a group or team assignment (`group-<n>`, or the founder's username), the same value in the `group` column of `gh teacher group list --csv`, so the two files join. Blank for an individual assignment and for a non-submitter row. |
 
 Per-test breakdowns aren't in either CSV. They're in each attempt's Release
 (and in the per-repository `result.json` / `results.json` files the download

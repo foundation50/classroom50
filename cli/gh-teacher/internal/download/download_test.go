@@ -521,6 +521,56 @@ func TestWriteScoresCSV_GroupFanOut(t *testing.T) {
 	}
 }
 
+// The `group` key comes from the bucket's mode and is lowercased like the
+// groups export's key, so the two files join case-sensitively even when the
+// collector recorded a mixed-case founder login.
+func TestWriteScoresCSV_TeamAndMixedCaseOwner(t *testing.T) {
+	scores := scoresschema.File{
+		Schema: scoresschema.SchemaV1,
+		Assignments: map[string]scoresschema.AssignmentBucket{
+			"project": {
+				Type: "team",
+				Entries: []map[string]any{
+					{
+						"owner":            "group-2",
+						"member_usernames": []any{"alice"},
+						"team_slug":        "classroom50-group-abcdef0123456789-2",
+						"submissions": []any{
+							map[string]any{
+								"score": float64(7), "max-score": float64(10),
+								"datetime": "2026-06-01T14:33:11Z", "submission": "submit/x",
+								"review": "https://example.test/r", "late": false,
+							},
+						},
+					},
+					// A legacy-shaped founder key with the collector's casing, and
+					// an override-only entry with no submissions.
+					{"owner": "Bob", "member_usernames": []any{"Bob"}, "override": true, "submissions": []any{}},
+				},
+			},
+		},
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "scores.csv")
+	if err := writeScoresCSV(path, scores, "project", []string{"alice", "bob", "carol"}, nil); err != nil {
+		t.Fatalf("writeScoresCSV: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning,group",
+		"alice,,,,,7,10,2026-06-01T14:33:11Z,submit/x,,https://example.test/r,false,,,group-2",
+		"bob,,,,,,,,,,,,true,,bob",
+		"carol,,,,,,,,,,,,,,",
+		"",
+	}, "\n")
+	if string(got) != want {
+		t.Fatalf("scores.csv mismatch:\n got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestWriteScoresCSV_EmptyRoster(t *testing.T) {
 	// No team members yields just the header — the file still
 	// exists so a teacher checking the download root sees the

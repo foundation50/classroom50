@@ -753,7 +753,11 @@ func decodeAssignments(raw json.RawMessage) (map[string]scoresschema.AssignmentB
 // contributes N lines (newest first); a non-submitter contributes one blank
 // line. Per-test breakdowns live in the per-repo result.json / results.json.
 func writeScoresCSV(path string, scores scoresschema.File, assignment string, teamLogins []string, metaByLogin map[string]RosterMeta) error {
-	entries := entriesForAssignment(scores, assignment)
+	bucket := bucketForAssignment(scores, assignment)
+	entries := bucket.Entries
+	// The `group` column is keyed by the bucket's mode, like the web export,
+	// not by what an entry happens to carry.
+	shared := bucket.Type == "group" || bucket.Type == "team"
 	// Map each credited student (lowercased) → gradebook entry. Group entries
 	// credit every member_usernames; individual entries credit the owner.
 	byStudent := make(map[string]map[string]any, len(entries))
@@ -770,7 +774,7 @@ func writeScoresCSV(path string, scores scoresschema.File, assignment string, te
 	}
 	for _, username := range teamLogins {
 		meta := metaByLogin[strings.ToLower(username)]
-		for _, record := range scoresCSVRows(username, meta, byStudent[strings.ToLower(username)]) {
+		for _, record := range scoresCSVRows(username, meta, byStudent[strings.ToLower(username)], shared) {
 			if err := w.Write(record); err != nil {
 				return fmt.Errorf("write %s: %w", username, err)
 			}
@@ -788,7 +792,7 @@ func writeScoresCSV(path string, scores scoresschema.File, assignment string, te
 // submission (newest first), each with its score columns; the entry-level
 // `override` flag repeats on every line. An entry with no usable submissions
 // still yields one blank line. `meta` is the best-effort roster join.
-func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]string {
+func scoresCSVRows(username string, meta RosterMeta, entry map[string]any, shared bool) [][]string {
 	// Display metadata is teacher/student-controllable free text: guard it
 	// against spreadsheet formula injection like the other string cells.
 	firstName := csvSafeCell(meta.FirstName)
@@ -802,7 +806,13 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]s
 		return [][]string{metaCells("", "", "", "", "", "", "", "", "", "")}
 	}
 	override := csvSafeCell(stringifyOverride(entry["override"]))
-	group := csvSafeCell(groupKey(entry))
+	group := ""
+	if shared {
+		// Lowercased like the groups export's `group` (sliced from the repo
+		// name) so a case-sensitive join between the two files matches.
+		owner, _ := entry["owner"].(string)
+		group = csvSafeCell(strings.ToLower(strings.TrimSpace(owner)))
+	}
 	subs := submissionRecords(entry)
 	if len(subs) == 0 {
 		return [][]string{metaCells("", "", "", "", "", "", "", override, "", group)}
@@ -831,32 +841,12 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]s
 	return out
 }
 
-// groupKey is a group or team entry's owner (`group-<n>` or the founder's
-// login); "" for an individual entry, whose owner is just the student.
-func groupKey(entry map[string]any) string {
-	if _, shared := entry["member_usernames"]; !shared {
-		return ""
-	}
-	owner, _ := entry["owner"].(string)
-	return owner
-}
-
-// csvSafeCell neutralizes CSV formula injection. A spreadsheet evaluates a cell
-// whose first char is = + - @ (or a leading tab/CR) as a formula. Several
-// scores.csv columns carry student-controlled strings (a student owns their
-// repo and publishes result.json), so a crafted "=HYPERLINK(...)" would execute
-// on open. encoding/csv quotes structural chars but not formulas, so we prefix
-// a single quote to any at-risk cell. Empty cells stay blank.
-func csvSafeCell(s string) string {
-	if s == "" {
-		return s
-	}
-	switch s[0] {
-	case '=', '+', '-', '@', '\t', '\r':
-		return "'" + s
-	}
-	return s
-}
+// csvSafeCell neutralizes CSV formula injection in scores.csv, whose string
+// cells are student-controlled (a student owns their repo and publishes
+// result.json). encoding/csv quotes structural chars but not a leading formula
+// trigger, so this is the roster writer's guard, shared so the trigger set
+// lives in one place.
+func csvSafeCell(s string) string { return configrepo.DefangCSVCell(s) }
 
 // submittedByUsername returns the pusher login from a submission's
 // `submitted_by` block, or "" when absent/malformed. For a group submission
@@ -887,15 +877,21 @@ func submissionRecords(entry map[string]any) []map[string]any {
 // lookup is case-insensitive since a hand-edited scores.json key might not
 // match the lowercased slug exactly.
 func entriesForAssignment(scores scoresschema.File, assignment string) []map[string]any {
+	return bucketForAssignment(scores, assignment).Entries
+}
+
+// bucketForAssignment is the assignment's gradebook bucket (slug matched
+// case-insensitively), or the zero bucket when the assignment has none.
+func bucketForAssignment(scores scoresschema.File, assignment string) scoresschema.AssignmentBucket {
 	if bucket, ok := scores.Assignments[assignment]; ok {
-		return bucket.Entries
+		return bucket
 	}
 	for slug, bucket := range scores.Assignments {
 		if strings.EqualFold(slug, assignment) {
-			return bucket.Entries
+			return bucket
 		}
 	}
-	return nil
+	return scoresschema.AssignmentBucket{}
 }
 
 // creditedUsernames returns the lowercased set of usernames that already have a

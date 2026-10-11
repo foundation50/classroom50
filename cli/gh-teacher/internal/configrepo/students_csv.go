@@ -376,12 +376,12 @@ func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, err
 		return RosterRow{}, err
 	}
 	row := RosterRow{
-		Username:  strings.TrimSpace(undefangCSVCell(layout.cell(record, "username"))),
-		FirstName: undefangCSVCell(layout.cell(record, "first_name")),
-		LastName:  undefangCSVCell(layout.cell(record, "last_name")),
-		Email:     strings.TrimSpace(undefangCSVCell(layout.cell(record, "email"))),
-		Section:   undefangCSVCell(layout.cell(record, "section")),
-		Role:      strings.TrimSpace(undefangCSVCell(layout.cell(record, "role"))),
+		Username:  strings.TrimSpace(unDefangCSVCell(layout.cell(record, "username"))),
+		FirstName: unDefangCSVCell(layout.cell(record, "first_name")),
+		LastName:  unDefangCSVCell(layout.cell(record, "last_name")),
+		Email:     strings.TrimSpace(unDefangCSVCell(layout.cell(record, "email"))),
+		Section:   unDefangCSVCell(layout.cell(record, "section")),
+		Role:      strings.TrimSpace(unDefangCSVCell(layout.cell(record, "role"))),
 	}
 	githubIDCell := layout.cell(record, "github_id")
 	// A row needs at least one cell that identifies or DESCRIBES a student. An
@@ -414,7 +414,7 @@ func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, err
 		row.Extra = make(map[string]string, len(layout.extraIndex))
 		row.ExtraOrder = layout.extraNames
 		for k, idx := range layout.extraIndex {
-			row.Extra[layout.extraNames[k]] = undefangCSVCell(record[idx])
+			row.Extra[layout.extraNames[k]] = unDefangCSVCell(record[idx])
 		}
 	}
 	return row, nil
@@ -448,7 +448,7 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 			}
 			record := make([]string, len(row.raw))
 			for i, cell := range row.raw {
-				record[i] = defangCSVCell(cell)
+				record[i] = DefangCSVCell(cell)
 			}
 			if err := w.Write(record); err != nil {
 				return nil, fmt.Errorf("write preserved row: %w", err)
@@ -462,16 +462,16 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 		// Defang formula-trigger cells; a resolved github_id is numeric so never
 		// matches, and a preserved raw one must round-trip byte-exact.
 		record := []string{
-			defangCSVCell(row.Username),
-			defangCSVCell(row.FirstName),
-			defangCSVCell(row.LastName),
-			defangCSVCell(row.Email),
-			defangCSVCell(row.Section),
+			DefangCSVCell(row.Username),
+			DefangCSVCell(row.FirstName),
+			DefangCSVCell(row.LastName),
+			DefangCSVCell(row.Email),
+			DefangCSVCell(row.Section),
 			githubID,
-			defangCSVCell(row.Role),
+			DefangCSVCell(row.Role),
 		}
 		for _, name := range extraColumns {
-			record = append(record, defangCSVCell(row.Extra[name]))
+			record = append(record, DefangCSVCell(row.Extra[name]))
 		}
 		if err := w.Write(record); err != nil {
 			return nil, fmt.Errorf("write row %q: %w", row.Username, err)
@@ -942,22 +942,19 @@ func isFormulaTrigger(b byte) bool {
 	return false
 }
 
-// DefangCSVCell is defangCSVCell for other CSV writers (the group-membership
-// export), so every CSV the CLI emits guards formula cells the same way.
-func DefangCSVCell(s string) string { return defangCSVCell(s) }
-
-// defangCSVCell prepends `'` when the first byte is a formula trigger so a
-// roster row can't smuggle a payload to a co-teacher opening it in Excel.
-func defangCSVCell(s string) string {
+// DefangCSVCell prepends `'` when the first byte is a formula trigger so a
+// roster row can't smuggle a payload to a co-teacher opening it in Excel. The
+// one guard every CSV the CLI writes goes through (roster, scores, groups).
+func DefangCSVCell(s string) string {
 	if s == "" || !isFormulaTrigger(s[0]) {
 		return s
 	}
 	return "'" + s
 }
 
-// undefangCSVCell inverts defangCSVCell. Cells without the exact `'<trigger>`
+// undefangCSVCell inverts DefangCSVCell. Cells without the exact `'<trigger>`
 // pattern pass through (preserving user-typed apostrophes).
-func undefangCSVCell(s string) string {
+func unDefangCSVCell(s string) string {
 	if len(s) >= 2 && s[0] == '\'' && isFormulaTrigger(s[1]) {
 		return s[1:]
 	}

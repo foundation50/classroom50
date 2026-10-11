@@ -51,8 +51,9 @@ func groupListCmd() *cobra.Command {
 			"no members or no repository yet still gets a row); for a legacy\n" +
 			"group assignment they are the existing group repositories, each\n" +
 			"with its founder and direct collaborators.\n\n" +
-			"Each member is joined against <classroom>/roster.csv by username,\n" +
-			"and `in_roster` is `no` for a collaborator or team member the roster\n" +
+			"Each member is joined against <classroom>/roster.csv by GitHub id,\n" +
+			"then by username, so a renamed account keeps its roster row;\n" +
+			"`in_roster` is `no` for a collaborator or team member the roster\n" +
 			"doesn't know, so an extra account on a repository stands out.\n\n" +
 			"Default output is an aligned table on stdout with a one-line\n" +
 			"summary on stderr. Pass --csv for the same rows as CSV with the\n" +
@@ -187,11 +188,9 @@ func teamGroups(client githubapi.Client, errOut io.Writer, s scope) ([]groupSour
 }
 
 // legacyGroups resolves a legacy group assignment's groups from its existing
-// repos: `<classroom>-<assignment>-<founder>`, each with the founder plus its
-// direct collaborators. A repo whose collaborator read fails is kept with nil
-// members rather than dropped, except on a rate limit: every later read would
-// fail the same way, so the command stops instead of exporting a file where
-// every remaining group looks unreadable.
+// `<classroom>-<assignment>-<founder>` repos: the founder plus direct
+// collaborators. A failed collaborator read keeps the group with nil members;
+// a rate limit aborts, as in ListAssignmentGroupTeamsLenient.
 func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings []string) ([]groupSource, error) {
 	names, err := orgrepos.ListNames(client, s.Org)
 	if err != nil {
@@ -213,9 +212,7 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings [
 		case err != nil:
 			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", lower, err)
 		default:
-			// Collaborators first so the founder (login only, from the repo
-			// name) dedupes onto their id-bearing collaborator entry.
-			g.Members = append(collaborators, member{Login: founder})
+			g.Members = append(collaborators, member{Login: founder, Fallback: true})
 		}
 		groups = append(groups, g)
 	}
@@ -249,9 +246,7 @@ func hasAnyPrefix(name string, prefixes []string) bool {
 }
 
 // listDirectCollaborators reads a repo's direct collaborators (org-inherited
-// access excluded, matching the web's group membership read). Logins are
-// lowercased like the founder segment and the web's collaborator read, so an
-// unrostered member exports with the same spelling from both surfaces.
+// access excluded, matching the web's group membership read).
 func listDirectCollaborators(client githubapi.Client, org, repo string) ([]member, error) {
 	base := fmt.Sprintf("repos/%s/%s/collaborators?affiliation=direct", url.PathEscape(org), url.PathEscape(repo))
 	subject := org + "/" + repo
@@ -270,7 +265,7 @@ func listDirectCollaborators(client githubapi.Client, org, repo string) ([]membe
 	}
 	members := make([]member, 0, len(collabs))
 	for _, c := range collabs {
-		members = append(members, member{Login: strings.ToLower(c.Login), ID: c.ID})
+		members = append(members, member{Login: c.Login, ID: c.ID})
 	}
 	return members, nil
 }

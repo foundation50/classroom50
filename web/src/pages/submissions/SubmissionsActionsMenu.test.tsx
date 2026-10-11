@@ -223,6 +223,16 @@ describe("SubmissionsActionsMenu — Download groups item", () => {
       <SubmissionsActionsMenu
         {...baseProps}
         onDownloadGroups={onDownloadGroups}
+        downloadGroupsDisabledReason="unavailable"
+      />,
+    )
+    expect(button().disabled).toBe(true)
+    expect(button().title).toBe("submissions.downloadGroups.titleUnavailable")
+
+    rerender(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        onDownloadGroups={onDownloadGroups}
         downloadGroupsDisabledReason="empty"
       />,
     )

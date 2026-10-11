@@ -49,8 +49,9 @@ type sharedCases struct {
 			TeamSlug string `json:"team_slug"`
 			Repo     string `json:"repo"`
 			Members  *[]struct {
-				Login string `json:"login"`
-				ID    int64  `json:"id"`
+				Login    string `json:"login"`
+				ID       int64  `json:"id"`
+				Fallback bool   `json:"fallback"`
 			} `json:"members"`
 		} `json:"groups"`
 		Rows [][]string `json:"rows"`
@@ -81,12 +82,11 @@ func TestBuildRows_SharedCases(t *testing.T) {
 		t.Run(c.Name, func(t *testing.T) {
 			roster := make([]configrepo.RosterRow, 0, len(c.Roster))
 			for _, r := range c.Roster {
-				var id int64
-				if r.GitHubID != "" {
-					id, err = strconv.ParseInt(r.GitHubID, 10, 64)
-					if err != nil {
-						t.Fatal(err)
-					}
+				// The fixture carries raw roster.csv text; resolve it the way the
+				// roster reader does (zero-padded resolves, anything else is 0).
+				id, parseErr := strconv.ParseInt(strings.TrimSpace(r.GitHubID), 10, 64)
+				if parseErr != nil || id <= 0 {
+					id = 0
 				}
 				roster = append(roster, configrepo.RosterRow{
 					Username: r.Username, FirstName: r.FirstName, LastName: r.LastName,
@@ -99,7 +99,7 @@ func TestBuildRows_SharedCases(t *testing.T) {
 				if g.Members != nil {
 					src.Members = make([]member, 0, len(*g.Members))
 					for _, m := range *g.Members {
-						src.Members = append(src.Members, member{Login: m.Login, ID: m.ID})
+						src.Members = append(src.Members, member{Login: m.Login, ID: m.ID, Fallback: m.Fallback})
 					}
 				}
 				groups = append(groups, src)
@@ -125,24 +125,6 @@ func TestBuildRows_SharedCases(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestBuildRows_LegacyGroupLeavesTeamBlockBlank(t *testing.T) {
-	rows := buildRows([]groupSource{
-		{Group: "alice", Repo: "cs-hw1-alice", Members: logins("alice", "bob")},
-	}, []configrepo.RosterRow{{Username: "alice"}, {Username: "bob"}})
-	if len(rows) != 2 || rows[0].GroupName != "" || rows[0].TeamSlug != "" || rows[0].Repo != "cs-hw1-alice" {
-		t.Fatalf("rows = %+v", rows)
-	}
-}
-
-// logins builds id-less members, as a legacy founder arrives.
-func logins(names ...string) []member {
-	out := make([]member, 0, len(names))
-	for _, n := range names {
-		out = append(out, member{Login: n})
-	}
-	return out
 }
 
 func TestNaturalLess(t *testing.T) {
@@ -208,6 +190,8 @@ type groupServer struct {
 	collabThrottled map[string]bool
 	// Teams whose member read answers the given status.
 	memberFailures map[string]int
+	// Teams whose member read answers 403 with the primary-quota header.
+	memberThrottled map[string]bool
 }
 
 const (
@@ -260,6 +244,12 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 			_ = json.NewEncoder(w).Encode(s.orgTeams)
 		case strings.HasPrefix(path, "/orgs/"+testOrg+"/teams/") && strings.HasSuffix(path, "/members"):
 			slug := strings.TrimSuffix(strings.TrimPrefix(path, "/orgs/"+testOrg+"/teams/"), "/members")
+			if s.memberThrottled[slug] {
+				w.Header().Set("X-RateLimit-Remaining", "0")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+				return
+			}
 			if status, ok := s.memberFailures[slug]; ok {
 				w.WriteHeader(status)
 				_, _ = w.Write([]byte(`{"message":"nope"}`))
@@ -395,6 +385,30 @@ func TestRunGroupList_TeamMode_UnreadableTeamKeepsRow(t *testing.T) {
 		if strings.Join(records[i+1], "|") != strings.Join(w, "|") {
 			t.Errorf("row %d:\n got %q\nwant %q", i, records[i+1], w)
 		}
+	}
+}
+
+// A throttled team-member read aborts like a throttled collaborator read: the
+// lenient listing keeps only non-throttle failures as unreadable teams.
+func TestRunGroupList_TeamMode_RateLimitAborts(t *testing.T) {
+	slug1 := contract.GroupTeamName(testClassroom, testAssignment, 1)
+	slug2 := contract.GroupTeamName(testClassroom, testAssignment, 2)
+	named, _ := configrepo.MarshalGroupDescription(testClassroom, testAssignment, "The Sharks")
+	state := &groupServer{
+		mode: "team",
+		orgTeams: []map[string]any{
+			{"id": 501, "slug": slug1, "description": named},
+			{"id": 502, "slug": slug2, "description": named},
+		},
+		membersBySlug:   map[string][]string{slug2: {"alice"}},
+		memberThrottled: map[string]bool{slug1: true},
+	}
+	out, _, err := run(t, state, false, true)
+	if err == nil || !strings.Contains(err.Error(), slug1) {
+		t.Fatalf("err = %v, want a rate-limit failure naming the team", err)
+	}
+	if out != "" {
+		t.Errorf("no CSV should be written on a rate limit, got:\n%s", out)
 	}
 }
 

@@ -1020,8 +1020,8 @@ describe("buildScoresCsvRows", () => {
       submissionCount: 1,
     })
     const legacy = row({
-      usernames: ["=alice", "dave"],
-      owner: "=alice",
+      usernames: ["=Alice", "dave"],
+      owner: "=Alice",
       datetime: "2026-06-20T10:00:00Z",
       score: 5,
       "max-score": 10,
@@ -1035,8 +1035,10 @@ describe("buildScoresCsvRows", () => {
       DEFAULT_NAME_ORDER,
       true,
     )
+    // The key is lowercased like the groups export's `group`, so the files
+    // join case-sensitively; `usernames` keeps the collector's spelling.
     expect(out.map((r) => [r.usernames, r.group])).toEqual([
-      ["'=alice, dave", "'=alice"],
+      ["'=Alice, dave", "'=alice"],
       ["bob, carol", "group-2"],
     ])
     // Individual assignments (the default) leave the column blank even though

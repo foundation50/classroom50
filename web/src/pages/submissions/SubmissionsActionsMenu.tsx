@@ -22,12 +22,22 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { Dropdown, DropdownMenu } from "@/components/ui"
+import type { DownloadGroupsDisabledReason } from "@/domain/submissions/groupMembershipCsv"
 
 // Consolidates the workflow actions (Collect now / Regrade all / View workflow)
 // plus the CSV export and Metrics into one dropdown so the toolbar stays
 // compact and the roster surfaces higher. Share (accept link) is a standalone
 // button next to the search bar (its own prominent affordance), not in here.
 // Disabled/loading gating mirrors the former inline buttons.
+const DOWNLOAD_GROUPS_DISABLED_TITLE: Record<
+  DownloadGroupsDisabledReason,
+  string
+> = {
+  loading: "submissions.downloadGroups.titleLoading",
+  unavailable: "submissions.downloadGroups.titleUnavailable",
+  empty: "submissions.downloadGroups.titleEmpty",
+}
+
 export function SubmissionsActionsMenu({
   collecting,
   regrading,
@@ -90,9 +100,9 @@ export function SubmissionsActionsMenu({
   // hidden) for an individual assignment, which has no groups to list.
   onDownloadGroups?: () => void
   // Why the item is disabled: the roster or membership reads are still
-  // loading (an early file would flag every member unrostered), or the
-  // assignment has no groups yet.
-  downloadGroupsDisabledReason?: "loading" | "empty"
+  // loading (an early file would flag every member unrostered), one of them
+  // failed, or the assignment has no groups yet.
+  downloadGroupsDisabledReason?: DownloadGroupsDisabledReason
   // Read-only (any viewer), so not owner-gated like Open-all-PRs; hidden only
   // when there's nothing to fetch (via downloadAllDisabled).
   onDownloadAll: () => void
@@ -422,13 +432,11 @@ export function SubmissionsActionsMenu({
             icon={PeopleIcon}
             label={t("submissions.downloadGroups.menuLabel")}
             disabled={downloadGroupsDisabledReason !== undefined}
-            title={
-              downloadGroupsDisabledReason === "loading"
-                ? t("submissions.downloadGroups.titleLoading")
-                : downloadGroupsDisabledReason === "empty"
-                  ? t("submissions.downloadGroups.titleEmpty")
-                  : t("submissions.downloadGroups.title")
-            }
+            title={t(
+              downloadGroupsDisabledReason
+                ? DOWNLOAD_GROUPS_DISABLED_TITLE[downloadGroupsDisabledReason]
+                : "submissions.downloadGroups.title",
+            )}
             onSelect={onDownloadGroups}
           />
         )}

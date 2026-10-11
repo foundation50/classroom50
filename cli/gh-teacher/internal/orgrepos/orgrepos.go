@@ -1,7 +1,6 @@
 // Package orgrepos is the shared org-repository lister: a paginated walk of GET
-// /orgs/{org}/repos returning every repo name. Consumed by download
-// (pattern mode) and teardown (wildcard nuke), each of which filters the list
-// itself.
+// /orgs/{org}/repos returning every repo name. Callers filter the list
+// themselves.
 package orgrepos
 
 import (
@@ -18,8 +17,7 @@ const (
 	pagesMax = 100
 )
 
-// ListNames returns every repo name in the org. Shared by download (pattern
-// mode) and teardown (wildcard nuke), which filter it themselves.
+// ListNames returns every repo name in the org.
 func ListNames(client githubapi.Client, org string) ([]string, error) {
 	repos, err := githubapi.PaginateAll[struct {
 		Name string `json:"name"`

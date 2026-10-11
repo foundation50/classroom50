@@ -12,11 +12,15 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 )
 
-// member is one live group member. ID is 0 when the read carried no id (a
-// legacy founder derived from the repo name).
+// member is one group member. ID is 0 when the read carried no id. A Fallback
+// member is derived from the repository name (a legacy founder), not from a
+// live read: it is exported only when it resolves to a roster row or the group
+// has no other member, so a founder who renamed their account does not
+// reappear as a stranger beside their id-bearing collaborator entry.
 type member struct {
-	Login string
-	ID    int64
+	Login    string
+	ID       int64
+	Fallback bool
 }
 
 // groupSource is one group as either mode resolves it; a legacy group leaves
@@ -103,17 +107,21 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			rows = append(rows, base)
 			continue
 		}
-		if len(g.Members) == 0 {
-			rows = append(rows, base)
-			continue
-		}
 		type resolved struct {
 			row   configrepo.RosterRow
 			key   string
 			known bool
 		}
+		live := 0
+		for _, m := range g.Members {
+			if !m.Fallback {
+				live++
+			}
+		}
 		// Dedupe on the resolved identity: a legacy founder is also a
-		// collaborator, possibly under a renamed login.
+		// collaborator, possibly under a renamed login. An unrostered member's
+		// username is the lowercased live login so both surfaces spell it the
+		// same way.
 		seen := map[string]bool{}
 		members := make([]resolved, 0, len(g.Members))
 		for _, m := range g.Members {
@@ -123,7 +131,10 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			}
 			r, known := resolve(m)
 			if !known {
-				r = configrepo.RosterRow{Username: login}
+				if m.Fallback && live > 0 {
+					continue
+				}
+				r = configrepo.RosterRow{Username: strings.ToLower(login)}
 			}
 			key := strings.ToLower(strings.TrimSpace(r.Username))
 			if seen[key] {
@@ -132,9 +143,13 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			seen[key] = true
 			members = append(members, resolved{row: r, key: sortKey(r), known: known})
 		}
-		// Natural order on the same key the web sorts by (compareStudentsByName
-		// with numeric collation), so both files list a group's members in the
-		// same order.
+		if len(members) == 0 {
+			rows = append(rows, base)
+			continue
+		}
+		// Natural order on the same key the web sorts by (naturalCompare over
+		// studentSortKeyByLastName), so both files list a group's members in the
+		// same order in every locale.
 		sort.SliceStable(members, func(i, j int) bool {
 			if members[i].key != members[j].key {
 				return naturalLess(members[i].key, members[j].key)
@@ -176,8 +191,11 @@ func sortKey(r configrepo.RosterRow) string {
 	return strings.ToLower(name)
 }
 
-// naturalLess orders strings with embedded numbers numerically, so team keys
-// sort group-2 < group-10 while founder logins still sort alphabetically.
+// naturalLess is a locale-independent natural order: case-folded code points
+// (UTF-8 byte order equals code-point order) with digit runs compared as
+// numbers, leading zeros ignored. Mirrors naturalCompare in
+// web/src/domain/submissions/groupMembershipCsv.ts, pinned by the shared
+// fixture, so both exports order groups and members identically.
 func naturalLess(a, b string) bool {
 	a, b = strings.ToLower(a), strings.ToLower(b)
 	for a != "" && b != "" {

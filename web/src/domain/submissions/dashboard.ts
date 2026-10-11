@@ -1276,7 +1276,11 @@ export function buildScoresCsvRows(
           provenance_warning: escapeCsvFormulaInjection(
             rest.provenance?.kind === "recorded" ? rest.provenance.reason : "",
           ),
-          group: groupFlavor ? escapeCsvFormulaInjection(rest.owner) : "",
+          // Lowercased like the groups export's `group` (sliced from the repo
+          // name) so a case-sensitive join between the two files matches.
+          group: groupFlavor
+            ? escapeCsvFormulaInjection(rest.owner.trim().toLowerCase())
+            : "",
         },
         student,
         time: Number.isFinite(ms) ? ms : null,
