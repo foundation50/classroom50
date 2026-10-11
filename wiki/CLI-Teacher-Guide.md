@@ -770,8 +770,9 @@ gh teacher group list cs50-fall-2026 cs-principles project --json | jq '.[] | se
 One row per member, joined against the roster (name, email, section,
 `github_id`), with `in_roster` set to `no` for a collaborator or team member
 the roster doesn't know. The CSV matches the web app's **Download groups
-(CSV)** export and keys each group the way the scores export does, so the two
-files join. See [`group list`](gh-teacher#group-list).
+(CSV)** export row for row, and its `group` column matches the `group` column
+of `scores.csv` from `gh teacher download`, so the two files join. See
+[`group list`](gh-teacher#group-list).
 
 ## 8. Remove people when needed
 

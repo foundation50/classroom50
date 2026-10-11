@@ -1219,11 +1219,13 @@ which group: one row per member, with the roster's name, email, section, and
 columns. Each row carries:
 
 - `group`: the group's key, `group-<n>` for a team assignment or the founder's
-  username for a legacy group. It is the same key the scores export uses, so
-  the two files join.
-- `group_name`, `team_slug`, `repo`: the group's display name and GitHub Team
-  (team assignments only) and its repository, blank for a team whose
-  repository hasn't been created yet.
+  username for a legacy group. **Download scores (CSV)** carries the same value
+  in its own `group` column, so the two files join.
+- `group_name`, `team_slug`, `repo`: the group's name and GitHub Team (team
+  assignments only) and its repository, blank for a team whose repository
+  hasn't been created yet. A team the students haven't named exports as
+  `Group <n>` in English regardless of your display language, so the file
+  reads the same as the CLI's.
 - `username`, `first_name`, `last_name`, `email`, `section`, `github_id`,
   `role`: the member, as `roster.csv` records them. A member is matched to
   the roster by GitHub id first, then by username, so a student who renamed

@@ -132,11 +132,14 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			seen[key] = true
 			members = append(members, resolved{row: r, key: sortKey(r), known: known})
 		}
+		// Natural order on the same key the web sorts by (compareStudentsByName
+		// with numeric collation), so both files list a group's members in the
+		// same order.
 		sort.SliceStable(members, func(i, j int) bool {
 			if members[i].key != members[j].key {
-				return members[i].key < members[j].key
+				return naturalLess(members[i].key, members[j].key)
 			}
-			return strings.ToLower(members[i].row.Username) < strings.ToLower(members[j].row.Username)
+			return naturalLess(members[i].row.Username, members[j].row.Username)
 		})
 		for _, m := range members {
 			row := base

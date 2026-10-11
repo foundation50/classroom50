@@ -284,6 +284,18 @@ var GroupMembershipCSVColumns = []string{
 	"in_roster", "note",
 }
 
+// GroupExportName is the `group_name` cell for a team: the recorded name, or
+// the untranslated "Group <n>" for a team the students have not named. The
+// export is data, not UI, so the fallback is English on every surface and in
+// every locale. Hand-mirrored with NO compile-time link in the web GUI
+// (groupExportName in web/src/util/groupTeam.ts).
+func GroupExportName(recorded string, counter int) string {
+	if recorded != "" {
+		return recorded
+	}
+	return fmt.Sprintf("Group %d", counter)
+}
+
 const (
 
 	// ServiceTokenSecretName is the repo-level Actions secret on the classroom50 repository

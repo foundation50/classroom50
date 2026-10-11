@@ -71,7 +71,9 @@ const assetDownloadTimeout = 30 * time.Second
 
 // scoresCSVHeader: stable column order. `late` and `override` are tri-state
 // ("true"/"false"/"") so readers can distinguish an explicit flag from a
-// non-submission or older row.
+// non-submission or older row. `group` is the scores.json owner key of a group
+// or team entry (the same value `gh teacher group list` writes in its `group`
+// column, so the two files join); blank for an individual entry.
 var scoresCSVHeader = []string{
 	"username",
 	"first_name",
@@ -87,6 +89,7 @@ var scoresCSVHeader = []string{
 	"late",
 	"override",
 	"provenance_warning",
+	"group",
 }
 
 // options carries the per-run flags shared by both download modes.
@@ -796,12 +799,13 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]s
 		return append([]string{csvSafeCell(username), firstName, lastName, email, section}, rest...)
 	}
 	if entry == nil {
-		return [][]string{metaCells("", "", "", "", "", "", "", "", "")}
+		return [][]string{metaCells("", "", "", "", "", "", "", "", "", "")}
 	}
 	override := csvSafeCell(stringifyOverride(entry["override"]))
+	group := csvSafeCell(groupKey(entry))
 	subs := submissionRecords(entry)
 	if len(subs) == 0 {
-		return [][]string{metaCells("", "", "", "", "", "", "", override, "")}
+		return [][]string{metaCells("", "", "", "", "", "", "", override, "", group)}
 	}
 	out := make([][]string, 0, len(subs))
 	for _, sub := range subs {
@@ -821,9 +825,20 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]s
 			csvSafeCell(stringifyOverride(sub["late"])),
 			override,
 			csvSafeCell(stringifyString(sub["provenance_warning"])),
+			group,
 		))
 	}
 	return out
+}
+
+// groupKey is a group or team entry's owner (`group-<n>` or the founder's
+// login); "" for an individual entry, whose owner is just the student.
+func groupKey(entry map[string]any) string {
+	if _, shared := entry["member_usernames"]; !shared {
+		return ""
+	}
+	owner, _ := entry["owner"].(string)
+	return owner
 }
 
 // csvSafeCell neutralizes CSV formula injection. A spreadsheet evaluates a cell

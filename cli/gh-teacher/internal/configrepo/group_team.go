@@ -289,14 +289,31 @@ func AttachRepoToGroupTeam(client githubapi.Client, org, slug, repo string) erro
 // each carrying its parsed AND verified description record plus the current
 // member logins. A team whose record is missing or fails verification is
 // skipped — it is not attributable to this assignment, so acting on it would
-// trust a hand-edited description. Sorted by counter.
+// trust a hand-edited description. Sorted by counter. A failed member read
+// fails the whole listing; a caller that would rather keep the team and report
+// it wants ListAssignmentGroupTeamsLenient.
 func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignment string) ([]GroupTeamInfo, error) {
+	teams, _, err := listAssignmentGroupTeams(client, org, classroom, assignment, false)
+	return teams, err
+}
+
+// ListAssignmentGroupTeamsLenient is ListAssignmentGroupTeams for a read-only
+// report: a team whose member read fails is kept with nil Members/MemberRefs
+// and its error returned in `unreadable` (keyed by slug) instead of aborting,
+// so one bad team cannot hide the rest. A rate limit still aborts, since every
+// later read would fail the same way.
+func ListAssignmentGroupTeamsLenient(client githubapi.Client, org, classroom, assignment string) (teams []GroupTeamInfo, unreadable map[string]error, err error) {
+	return listAssignmentGroupTeams(client, org, classroom, assignment, true)
+}
+
+func listAssignmentGroupTeams(client githubapi.Client, org, classroom, assignment string, lenient bool) ([]GroupTeamInfo, map[string]error, error) {
 	prefix := contract.GroupTeamAssignmentPrefix(classroom, assignment)
 	teams, err := listOrgGroupTeams(client, org, prefix)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []GroupTeamInfo
+	unreadable := map[string]error{}
 	for _, t := range teams {
 		counter, ok := contract.ParseGroupTeamCounter(t.Slug, classroom, assignment)
 		if !ok {
@@ -306,25 +323,24 @@ func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 		if !ok || !VerifyGroupDescription(t.Slug, record) {
 			continue
 		}
+		info := GroupTeamInfo{ID: t.ID, Slug: t.Slug, Counter: counter, Record: record}
 		refs, err := ListTeamMembersWithIDs(client, org, t.Slug)
-		if err != nil {
-			return nil, err
+		switch {
+		case err == nil:
+			info.Members = make([]string, 0, len(refs))
+			for _, m := range refs {
+				info.Members = append(info.Members, m.Login)
+			}
+			info.MemberRefs = refs
+		case lenient && !cliutil.IsRateLimited(err):
+			unreadable[t.Slug] = err
+		default:
+			return nil, nil, err
 		}
-		members := make([]string, 0, len(refs))
-		for _, m := range refs {
-			members = append(members, m.Login)
-		}
-		out = append(out, GroupTeamInfo{
-			ID:         t.ID,
-			Slug:       t.Slug,
-			Counter:    counter,
-			Record:     record,
-			Members:    members,
-			MemberRefs: refs,
-		})
+		out = append(out, info)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Counter < out[j].Counter })
-	return out, nil
+	return out, unreadable, nil
 }
 
 // DeleteGroupTeam removes one group team, fail-closed on every axis a

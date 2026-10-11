@@ -1,0 +1,354 @@
+{
+  "_comment": "Cross-language oracle for the group-membership export. cli/gh-teacher/internal/groupcmd (buildRows + defangCells) and web/src/domain/submissions/groupMembershipCsv.ts (buildGroupMembershipCsvRows) must both reproduce every case's `rows` byte for byte, in `columns` order, and both must map `default_name` inputs to its outputs. Members carry an optional GitHub `id`; `members: null` is an unreadable group, `[]` a group with no members yet.",
+  "columns": [
+    "group",
+    "group_name",
+    "team_slug",
+    "repo",
+    "username",
+    "first_name",
+    "last_name",
+    "email",
+    "section",
+    "github_id",
+    "role",
+    "in_roster",
+    "note"
+  ],
+  "note_unreadable": "membership could not be read",
+  "default_name": [
+    { "recorded": "", "counter": 2, "name": "Group 2" },
+    { "recorded": "", "counter": 10, "name": "Group 10" },
+    { "recorded": "The Sharks", "counter": 1, "name": "The Sharks" }
+  ],
+  "cases": [
+    {
+      "name": "roster join, id-first resolution, dedupe, natural group and member order",
+      "roster": [
+        {
+          "username": "alice",
+          "first_name": "Alice",
+          "last_name": "Ada",
+          "email": "alice@x.edu",
+          "section": "A",
+          "github_id": "1",
+          "role": "student"
+        },
+        {
+          "username": "bob",
+          "first_name": "Bob",
+          "last_name": "Babbage",
+          "email": "bob@x.edu",
+          "section": "B",
+          "github_id": "2",
+          "role": "student"
+        },
+        {
+          "username": "Cat",
+          "first_name": "Cat",
+          "last_name": "Curry",
+          "email": "",
+          "section": "",
+          "github_id": "",
+          "role": "ta"
+        },
+        {
+          "username": "jdoe10",
+          "first_name": "",
+          "last_name": "",
+          "email": "",
+          "section": "",
+          "github_id": "10",
+          "role": "student"
+        },
+        {
+          "username": "jdoe9",
+          "first_name": "",
+          "last_name": "",
+          "email": "",
+          "section": "",
+          "github_id": "9",
+          "role": "student"
+        }
+      ],
+      "groups": [
+        {
+          "group": "group-10",
+          "name": "Tens",
+          "team_slug": "slug-10",
+          "repo": "cs-hw1-group-10",
+          "members": [
+            { "login": "jdoe10", "id": 10 },
+            { "login": "jdoe9", "id": 9 },
+            { "login": "zed2" },
+            { "login": "zed10" }
+          ]
+        },
+        {
+          "group": "group-2",
+          "name": "Twos",
+          "team_slug": "slug-2",
+          "repo": "cs-hw1-group-2",
+          "members": [
+            { "login": "bob", "id": 2 },
+            { "login": "alice" },
+            { "login": "ada-lovelace", "id": 1 },
+            { "login": "cat" },
+            { "login": "stranger", "id": 99 }
+          ]
+        },
+        {
+          "group": "group-3",
+          "name": "Empty",
+          "team_slug": "slug-3",
+          "repo": "",
+          "members": []
+        },
+        {
+          "group": "group-1",
+          "name": "Broken",
+          "team_slug": "slug-1",
+          "repo": "cs-hw1-group-1",
+          "members": null
+        }
+      ],
+      "rows": [
+        [
+          "group-1",
+          "Broken",
+          "slug-1",
+          "cs-hw1-group-1",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "membership could not be read"
+        ],
+        [
+          "group-2",
+          "Twos",
+          "slug-2",
+          "cs-hw1-group-2",
+          "alice",
+          "Alice",
+          "Ada",
+          "alice@x.edu",
+          "A",
+          "1",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-2",
+          "Twos",
+          "slug-2",
+          "cs-hw1-group-2",
+          "bob",
+          "Bob",
+          "Babbage",
+          "bob@x.edu",
+          "B",
+          "2",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-2",
+          "Twos",
+          "slug-2",
+          "cs-hw1-group-2",
+          "Cat",
+          "Cat",
+          "Curry",
+          "",
+          "",
+          "",
+          "ta",
+          "yes",
+          ""
+        ],
+        [
+          "group-2",
+          "Twos",
+          "slug-2",
+          "cs-hw1-group-2",
+          "stranger",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "no",
+          ""
+        ],
+        ["group-3", "Empty", "slug-3", "", "", "", "", "", "", "", "", "", ""],
+        [
+          "group-10",
+          "Tens",
+          "slug-10",
+          "cs-hw1-group-10",
+          "jdoe9",
+          "",
+          "",
+          "",
+          "",
+          "9",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-10",
+          "Tens",
+          "slug-10",
+          "cs-hw1-group-10",
+          "jdoe10",
+          "",
+          "",
+          "",
+          "",
+          "10",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-10",
+          "Tens",
+          "slug-10",
+          "cs-hw1-group-10",
+          "zed2",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "no",
+          ""
+        ],
+        [
+          "group-10",
+          "Tens",
+          "slug-10",
+          "cs-hw1-group-10",
+          "zed10",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "no",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "legacy group: blank team block, founder dedupes onto id-bearing collaborator, lowercased unrostered login",
+      "roster": [
+        {
+          "username": "alice",
+          "first_name": "Alice",
+          "last_name": "Ada",
+          "email": "alice@x.edu",
+          "section": "A",
+          "github_id": "1",
+          "role": "student"
+        }
+      ],
+      "groups": [
+        {
+          "group": "alice",
+          "name": "",
+          "team_slug": "",
+          "repo": "cs-hw1-alice",
+          "members": [
+            { "login": "alice", "id": 1 },
+            { "login": "strangerdev", "id": 7 },
+            { "login": "alice" }
+          ]
+        }
+      ],
+      "rows": [
+        [
+          "alice",
+          "",
+          "",
+          "cs-hw1-alice",
+          "alice",
+          "Alice",
+          "Ada",
+          "alice@x.edu",
+          "A",
+          "1",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "alice",
+          "",
+          "",
+          "cs-hw1-alice",
+          "strangerdev",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "no",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "formula-shaped cells are neutralized, github_id and the enum columns are byte-exact",
+      "roster": [
+        {
+          "username": "=evil",
+          "first_name": "=first",
+          "last_name": "-last",
+          "email": "+e@x.edu",
+          "section": "@S",
+          "github_id": "42",
+          "role": "-role"
+        }
+      ],
+      "groups": [
+        {
+          "group": "=cmd()",
+          "name": "+SUM(1)",
+          "team_slug": "-slug",
+          "repo": "@repo",
+          "members": [{ "login": "=evil", "id": 42 }]
+        }
+      ],
+      "rows": [
+        [
+          "'=cmd()",
+          "'+SUM(1)",
+          "'-slug",
+          "'@repo",
+          "'=evil",
+          "'=first",
+          "'-last",
+          "'+e@x.edu",
+          "'@S",
+          "42",
+          "'-role",
+          "yes",
+          ""
+        ]
+      ]
+    }
+  ]
+}

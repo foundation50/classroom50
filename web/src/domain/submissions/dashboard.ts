@@ -1191,6 +1191,10 @@ export type ScoresCsvRow = {
   // The collector's recorded reason when the latest release wasn't the
   // workflow's own; blank otherwise. Snapshot rows only, so never a live kind.
   provenance_warning: string
+  // The scores.json owner key of a group or team row (`group-<n>`, or the
+  // founder's login), the same value the groups export writes in its `group`
+  // column so the two files join. Blank on an individual assignment.
+  group: string
 }
 
 export function buildScoresCsvRows(
@@ -1205,6 +1209,9 @@ export function buildScoresCsvRows(
   // The user's name order for the `name` column. The `first_name`/`last_name`
   // columns stay split for sheets that sort themselves.
   nameOrder: NameOrder = DEFAULT_NAME_ORDER,
+  // Whether rows are group or team repos, so `group` carries the owner key;
+  // an individual assignment's owner is just the student and the column is blank.
+  groupFlavor = false,
 ): ScoresCsvRow[] {
   // Carry the resolved student alongside each row so the final ordering can use
   // the shared name comparator (last name, then first, then username) — the
@@ -1269,6 +1276,7 @@ export function buildScoresCsvRows(
           provenance_warning: escapeCsvFormulaInjection(
             rest.provenance?.kind === "recorded" ? rest.provenance.reason : "",
           ),
+          group: groupFlavor ? escapeCsvFormulaInjection(rest.owner) : "",
         },
         student,
         time: Number.isFinite(ms) ? ms : null,
@@ -1292,6 +1300,7 @@ export function buildScoresCsvRows(
       review: "",
       release: "",
       provenance_warning: "",
+      group: "",
     },
     student,
     time: null,

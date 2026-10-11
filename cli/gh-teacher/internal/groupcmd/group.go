@@ -134,7 +134,7 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, asJSO
 
 	var groups []groupSource
 	if entry.Mode == assignment.ModeTeam {
-		groups, err = teamGroups(client, s)
+		groups, err = teamGroups(client, errOut, s)
 	} else {
 		groups, err = legacyGroups(client, errOut, s, siblingPrefixes(file.Assignments, s))
 	}
@@ -147,9 +147,11 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, asJSO
 }
 
 // teamGroups resolves a team assignment's groups from its live GitHub Teams,
-// attaching each team's repo when it has been created.
-func teamGroups(client githubapi.Client, s scope) ([]groupSource, error) {
-	teams, err := configrepo.ListAssignmentGroupTeams(client, s.Org, s.Classroom, s.Assignment)
+// attaching each team's repo when it has been created. A team whose member
+// read fails is kept with nil members (reported as unreadable) rather than
+// dropped, matching legacyGroups and the web.
+func teamGroups(client githubapi.Client, errOut io.Writer, s scope) ([]groupSource, error) {
+	teams, unreadable, err := configrepo.ListAssignmentGroupTeamsLenient(client, s.Org, s.Classroom, s.Assignment)
 	if err != nil {
 		return nil, err
 	}
@@ -165,22 +167,21 @@ func teamGroups(client githubapi.Client, s scope) ([]groupSource, error) {
 	}
 	groups := make([]groupSource, 0, len(teams))
 	for _, t := range teams {
-		name := t.Record.Name
-		if name == "" {
-			// Mirrors the web's default display name (groupTeams.defaultName).
-			name = fmt.Sprintf("Group %d", t.Counter)
-		}
-		members := make([]member, 0, len(t.MemberRefs))
-		for _, m := range t.MemberRefs {
-			members = append(members, member{Login: m.Login, ID: m.ID})
-		}
-		groups = append(groups, groupSource{
+		g := groupSource{
 			Group:    fmt.Sprintf("%s%d", contract.GroupRepoSegment, t.Counter),
-			Name:     name,
+			Name:     contract.GroupExportName(t.Record.Name, t.Counter),
 			TeamSlug: t.Slug,
 			Repo:     repoByCounter[t.Counter],
-			Members:  members,
-		})
+		}
+		if readErr, failed := unreadable[t.Slug]; failed {
+			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", t.Slug, readErr)
+		} else {
+			g.Members = make([]member, 0, len(t.MemberRefs))
+			for _, m := range t.MemberRefs {
+				g.Members = append(g.Members, member{Login: m.Login, ID: m.ID})
+			}
+		}
+		groups = append(groups, g)
 	}
 	return groups, nil
 }

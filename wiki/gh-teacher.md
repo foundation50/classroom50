@@ -1153,13 +1153,17 @@ with the header
 group,group_name,team_slug,repo,username,first_name,last_name,email,section,github_id,role,in_roster,note
 ```
 
-`group` is the key the scores export uses for the group (`group-<n>` for a
-team assignment, the founder's login for a legacy group), so the two files
-join; `group_name` and `team_slug` are blank for a legacy group. The member
-columns are exactly `roster.csv`'s, so the file joins against the roster or an
-LMS export without renaming. A group whose membership could not be read gets
-one row with `note` set instead of exporting as empty. `--json` emits an array
-of objects with the same keys and takes precedence over `--csv`.
+`group` is the group's key (`group-<n>` for a team assignment, the founder's
+login for a legacy group) and matches the `group` column of the scores exports
+(`gh teacher download`'s `scores.csv`, the web **Download scores (CSV)**), so
+the two files join; `group_name` and `team_slug` are blank for a legacy group,
+and an unnamed team exports as `Group <n>` in English regardless of the
+viewer's language. The member columns are exactly `roster.csv`'s, so the file
+joins against the roster or an LMS export without renaming. A group whose
+membership could not be read (a failed collaborator or team-member listing)
+gets one row with `note` set instead of exporting as empty, and a warning on
+stderr. `--json` emits an array of objects with the same keys and takes
+precedence over `--csv`.
 
 ## `autograder`
 

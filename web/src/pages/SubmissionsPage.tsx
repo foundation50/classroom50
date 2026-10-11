@@ -110,7 +110,7 @@ import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { sortStudentsByName } from "@/util/students"
 import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
-import { groupDisplayName } from "@/util/groupTeam"
+import { groupDisplayName, groupExportName } from "@/util/groupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
@@ -1247,6 +1247,7 @@ const SubmissionsPageContent = () => {
       students,
       sort,
       nameOrder,
+      isGroupFlavor,
     )
 
     const csv = Papa.unparse(rows, {
@@ -1272,7 +1273,7 @@ const SubmissionsPageContent = () => {
     if (isTeamAssignment) {
       return [...teamByOwner].map(([owner, team]) => ({
         group: owner,
-        name: groupDisplayNames?.get(owner),
+        name: groupExportName(team),
         teamSlug: team.slug,
         repoName: repoByOwner.get(owner),
         members: teamMembersBySlug
@@ -1297,7 +1298,6 @@ const SubmissionsPageContent = () => {
     isGroupFlavor,
     isTeamAssignment,
     teamByOwner,
-    groupDisplayNames,
     teamMembersBySlug,
     groupCollabByRepo,
     groupRepoList,

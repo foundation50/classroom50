@@ -67,6 +67,7 @@ import {
 } from "./dashboard"
 import type { DetectedSubmitter } from "./scores"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import { DEFAULT_NAME_ORDER } from "@/types/preferences"
 
 // Minimal row factory — only the fields the dashboard logic reads.
 const row = (over: Partial<SubmissionRow> = {}): SubmissionRow => ({
@@ -982,6 +983,7 @@ describe("buildScoresCsvRows", () => {
       review: "r1",
       release: "rel1",
       provenance_warning: "published by 'alice', not by the autograde workflow",
+      group: "",
     })
     // The group row keeps all credited logins but takes the owner's name.
     expect(out[1].usernames).toBe("bob, carol")
@@ -1004,7 +1006,42 @@ describe("buildScoresCsvRows", () => {
       review: "",
       release: "",
       provenance_warning: "",
+      group: "",
     })
+  })
+
+  it("fills `group` with the owner key for a group or team assignment so the file joins the groups export", () => {
+    const team = row({
+      usernames: ["bob", "carol"],
+      owner: "group-2",
+      datetime: "2026-06-21T10:00:00Z",
+      score: 9,
+      "max-score": 10,
+      submissionCount: 1,
+    })
+    const legacy = row({
+      usernames: ["=alice", "dave"],
+      owner: "=alice",
+      datetime: "2026-06-20T10:00:00Z",
+      score: 5,
+      "max-score": 10,
+      submissionCount: 1,
+    })
+    const out = buildScoresCsvRows(
+      [team, legacy],
+      [],
+      [],
+      "name-last",
+      DEFAULT_NAME_ORDER,
+      true,
+    )
+    expect(out.map((r) => [r.usernames, r.group])).toEqual([
+      ["'=alice, dave", "'=alice"],
+      ["bob, carol", "group-2"],
+    ])
+    // Individual assignments (the default) leave the column blank even though
+    // every row has an owner.
+    expect(buildScoresCsvRows([team], [], []).map((r) => r.group)).toEqual([""])
   })
 
   it("leaves name columns blank (falling back to login order) for an off-roster login", () => {

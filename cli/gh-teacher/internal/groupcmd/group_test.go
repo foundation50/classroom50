@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -16,43 +18,112 @@ import (
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
 
-func TestBuildRows_JoinsRosterAndOrders(t *testing.T) {
-	roster := []configrepo.RosterRow{
-		{Username: "alice", FirstName: "Alice", LastName: "Ada", Email: "alice@x.edu", Section: "A", GitHubID: 1, Role: "student"},
-		{Username: "bob", FirstName: "Bob", LastName: "Babbage", Email: "bob@x.edu", Section: "B", GitHubID: 2, Role: "student"},
-		{Username: "Cat", FirstName: "Cat", LastName: "Curry", Role: "ta"},
-	}
-	rows := buildRows([]groupSource{
-		{Group: "group-10", Name: "Tens", TeamSlug: "slug-10", Repo: "cs-hw1-group-10", Members: logins("bob")},
-		// Founder repeats as a collaborator; case differs. Alice renamed her
-		// account, so her live login no longer matches roster.csv but her id does.
-		{Group: "group-2", Name: "Twos", TeamSlug: "slug-2", Repo: "cs-hw1-group-2", Members: []member{
-			{Login: "bob"}, {Login: "alice"}, {Login: "ada-lovelace", ID: 1}, {Login: "cat"}, {Login: "stranger", ID: 99},
-		}},
-		{Group: "group-3", Name: "Empty", TeamSlug: "slug-3", Members: []member{}},
-		{Group: "group-1", Name: "Broken", TeamSlug: "slug-1", Repo: "cs-hw1-group-1", Members: nil},
-	}, roster)
+// sharedCasesPath is the cross-language oracle for the export: the web suite
+// (groupMembershipCsv.test.ts) asserts the same file, so a one-sided change to
+// the join, dedupe, ordering, escaping, or default name fails on the other
+// language's copy.
+const sharedCasesPath = "../../../shared/testdata/group_membership_cases.json"
 
-	got := make([]string, 0, len(rows))
-	for _, r := range rows {
-		got = append(got, strings.Join(r.cells(), "|"))
+type sharedCases struct {
+	Columns        []string `json:"columns"`
+	NoteUnreadable string   `json:"note_unreadable"`
+	DefaultName    []struct {
+		Recorded string `json:"recorded"`
+		Counter  int    `json:"counter"`
+		Name     string `json:"name"`
+	} `json:"default_name"`
+	Cases []struct {
+		Name   string `json:"name"`
+		Roster []struct {
+			Username  string `json:"username"`
+			FirstName string `json:"first_name"`
+			LastName  string `json:"last_name"`
+			Email     string `json:"email"`
+			Section   string `json:"section"`
+			GitHubID  string `json:"github_id"`
+			Role      string `json:"role"`
+		} `json:"roster"`
+		Groups []struct {
+			Group    string `json:"group"`
+			Name     string `json:"name"`
+			TeamSlug string `json:"team_slug"`
+			Repo     string `json:"repo"`
+			Members  *[]struct {
+				Login string `json:"login"`
+				ID    int64  `json:"id"`
+			} `json:"members"`
+		} `json:"groups"`
+		Rows [][]string `json:"rows"`
+	} `json:"cases"`
+}
+
+func TestBuildRows_SharedCases(t *testing.T) {
+	data, err := os.ReadFile(sharedCasesPath)
+	if err != nil {
+		t.Fatal(err)
 	}
-	want := []string{
-		"group-1|Broken|slug-1|cs-hw1-group-1||||||||" + "|" + contract.GroupMembershipNoteUnreadable,
-		"group-2|Twos|slug-2|cs-hw1-group-2|alice|Alice|Ada|alice@x.edu|A|1|student|yes|",
-		"group-2|Twos|slug-2|cs-hw1-group-2|bob|Bob|Babbage|bob@x.edu|B|2|student|yes|",
-		"group-2|Twos|slug-2|cs-hw1-group-2|Cat|Cat|Curry|||" + "|ta|yes|",
-		"group-2|Twos|slug-2|cs-hw1-group-2|stranger|||||||no|",
-		"group-3|Empty|slug-3||||||||||",
-		"group-10|Tens|slug-10|cs-hw1-group-10|bob|Bob|Babbage|bob@x.edu|B|2|student|yes|",
+	var doc sharedCases
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
 	}
-	if len(got) != len(want) {
-		t.Fatalf("got %d rows, want %d:\n%s", len(got), len(want), strings.Join(got, "\n"))
+	if got, want := strings.Join(doc.Columns, ","), strings.Join(contract.GroupMembershipCSVColumns, ","); got != want {
+		t.Fatalf("fixture columns = %q, want %q", got, want)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("row %d:\n got %q\nwant %q", i, got[i], want[i])
+	if doc.NoteUnreadable != contract.GroupMembershipNoteUnreadable {
+		t.Fatalf("fixture note = %q, want %q", doc.NoteUnreadable, contract.GroupMembershipNoteUnreadable)
+	}
+	for _, d := range doc.DefaultName {
+		if got := contract.GroupExportName(d.Recorded, d.Counter); got != d.Name {
+			t.Errorf("GroupExportName(%q, %d) = %q, want %q", d.Recorded, d.Counter, got, d.Name)
 		}
+	}
+	for _, c := range doc.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			roster := make([]configrepo.RosterRow, 0, len(c.Roster))
+			for _, r := range c.Roster {
+				var id int64
+				if r.GitHubID != "" {
+					id, err = strconv.ParseInt(r.GitHubID, 10, 64)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				roster = append(roster, configrepo.RosterRow{
+					Username: r.Username, FirstName: r.FirstName, LastName: r.LastName,
+					Email: r.Email, Section: r.Section, GitHubID: id, Role: r.Role,
+				})
+			}
+			groups := make([]groupSource, 0, len(c.Groups))
+			for _, g := range c.Groups {
+				src := groupSource{Group: g.Group, Name: g.Name, TeamSlug: g.TeamSlug, Repo: g.Repo}
+				if g.Members != nil {
+					src.Members = make([]member, 0, len(*g.Members))
+					for _, m := range *g.Members {
+						src.Members = append(src.Members, member{Login: m.Login, ID: m.ID})
+					}
+				}
+				groups = append(groups, src)
+			}
+			rows := buildRows(groups, roster)
+			got := make([]string, 0, len(rows))
+			for _, r := range rows {
+				// The web escapes inside its builder; the CLI escapes when it
+				// writes CSV, so compare the written cells.
+				got = append(got, strings.Join(defangCells(r.cells()), "|"))
+			}
+			want := make([]string, 0, len(c.Rows))
+			for _, r := range c.Rows {
+				want = append(want, strings.Join(r, "|"))
+			}
+			if len(got) != len(want) {
+				t.Fatalf("got %d rows, want %d:\n%s", len(got), len(want), strings.Join(got, "\n"))
+			}
+			for i := range want {
+				if got[i] != want[i] {
+					t.Errorf("row %d:\n got %q\nwant %q", i, got[i], want[i])
+				}
+			}
+		})
 	}
 }
 
@@ -135,6 +206,8 @@ type groupServer struct {
 	collabFailures map[string]int
 	// Repos whose collaborator read answers 403 with the primary-quota header.
 	collabThrottled map[string]bool
+	// Teams whose member read answers the given status.
+	memberFailures map[string]int
 }
 
 const (
@@ -187,6 +260,11 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 			_ = json.NewEncoder(w).Encode(s.orgTeams)
 		case strings.HasPrefix(path, "/orgs/"+testOrg+"/teams/") && strings.HasSuffix(path, "/members"):
 			slug := strings.TrimSuffix(strings.TrimPrefix(path, "/orgs/"+testOrg+"/teams/"), "/members")
+			if status, ok := s.memberFailures[slug]; ok {
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"message":"nope"}`))
+				return
+			}
 			members := make([]map[string]any, 0)
 			for i, login := range s.membersBySlug[slug] {
 				members = append(members, map[string]any{"login": login, "id": i + 1})
@@ -266,6 +344,49 @@ func TestRunGroupList_TeamMode_CSV(t *testing.T) {
 		{"group-1", "The Sharks", slug1, "cs101-project-group-1", "bob", "Bob", "Babbage", "bob@x.edu", "B", "2", "student", "yes", ""},
 		{"group-1", "The Sharks", slug1, "cs101-project-group-1", "eve", "", "", "", "", "", "", "no", ""},
 		{"group-2", "Group 2", slug2, "", "", "", "", "", "", "", "", "", ""},
+	}
+	if len(records)-1 != len(want) {
+		t.Fatalf("got %d rows, want %d:\n%s", len(records)-1, len(want), out)
+	}
+	for i, w := range want {
+		if strings.Join(records[i+1], "|") != strings.Join(w, "|") {
+			t.Errorf("row %d:\n got %q\nwant %q", i, records[i+1], w)
+		}
+	}
+}
+
+// One team's member read failing must not hide the other teams: the team is
+// kept as an unreadable row, like a legacy repo whose collaborator read failed
+// and like the web export.
+func TestRunGroupList_TeamMode_UnreadableTeamKeepsRow(t *testing.T) {
+	slug1 := contract.GroupTeamName(testClassroom, testAssignment, 1)
+	slug2 := contract.GroupTeamName(testClassroom, testAssignment, 2)
+	named, _ := configrepo.MarshalGroupDescription(testClassroom, testAssignment, "The Sharks")
+	unnamed, _ := configrepo.MarshalGroupDescription(testClassroom, testAssignment, "")
+	state := &groupServer{
+		mode:     "team",
+		orgRepos: []string{contract.GroupRepoName(testClassroom, testAssignment, 2)},
+		orgTeams: []map[string]any{
+			{"id": 501, "slug": slug1, "description": named},
+			{"id": 502, "slug": slug2, "description": unnamed},
+		},
+		membersBySlug:  map[string][]string{slug2: {"alice"}},
+		memberFailures: map[string]int{slug1: http.StatusForbidden},
+	}
+	out, errOut, err := run(t, state, false, true)
+	if err != nil {
+		t.Fatalf("runGroupList: %v", err)
+	}
+	if !strings.Contains(errOut, "warning: "+slug1) {
+		t.Errorf("stderr should warn about the unreadable team, got %q", errOut)
+	}
+	records, err := csv.NewReader(strings.NewReader(out)).ReadAll()
+	if err != nil {
+		t.Fatalf("parse csv: %v\n%s", err, out)
+	}
+	want := [][]string{
+		{"group-1", "The Sharks", slug1, "", "", "", "", "", "", "", "", "", contract.GroupMembershipNoteUnreadable},
+		{"group-2", "Group 2", slug2, "cs101-project-group-2", "alice", "Alice", "Ada", "alice@x.edu", "A", "1", "student", "yes", ""},
 	}
 	if len(records)-1 != len(want) {
 		t.Fatalf("got %d rows, want %d:\n%s", len(records)-1, len(want), out)
