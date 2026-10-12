@@ -1,5 +1,5 @@
 {
-  "_comment": "Cross-language oracle for the group-membership export. cli/gh-teacher/internal/groupcmd (buildRows + defangCells) and web/src/domain/submissions/groupMembershipCsv.ts (buildGroupMembershipCsvRows) must both reproduce every case's `rows` byte for byte, in `columns` order, and both must map `default_name` inputs to its outputs. `roster_csv` is the raw roster.csv text: each side feeds it through the production reader its export uses (Go configrepo.ParseRosterLenient; web Papa with the csvFileQuery options plus toStudent), so the oracle also pins how a padded, zero-padded, unparsable, short, or overlong cell reaches the builder and that the two readers admit the same students. Members carry an optional GitHub `id`; `fallback: true` marks a member derived from the repository name (a legacy founder) rather than a live read; `members: null` is an unreadable group, `[]` a group with no members yet.",
+  "_comment": "Cross-language oracle for the group-membership export. cli/gh-teacher/internal/groupcmd (buildRows + defangCells) and web/src/domain/submissions/groupMembershipCsv.ts (buildGroupMembershipCsvRows) must both reproduce every case's `rows` byte for byte, in `columns` order, and both must map `default_name` inputs to its outputs. `roster_csv` is the raw roster.csv text: each side feeds it through the production reader its export uses (Go configrepo.ParseRosterLenient; web parseCsvRowsStrictWidth plus toStudent), so the oracle also pins how a padded, zero-padded, unparsable, short, or overlong cell reaches the builder and that the two readers admit the same students: a row short by exactly one trailing cell joins, a row short by two or more or carrying surplus cells does not. Members carry an optional GitHub `id`; `fallback: true` marks a member derived from the repository name (a legacy founder) rather than a live read; `members: null` is an unreadable group, `[]` a group with no members yet.",
   "columns": [
     "group",
     "group_name",
@@ -859,6 +859,79 @@
           "1",
           "",
           "yes",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "rows neither reader admits: short by two cells, surplus cells",
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\nok,Ok,Ay,ok@x.edu,A,1,student\nshorty,Sho,Rt,s@x.edu,A\nsurplus,Sur,Plus,,A,3,student,extra\n",
+      "groups": [
+        {
+          "group": "group-1",
+          "name": "Widths",
+          "team_slug": "slug-1",
+          "repo": "",
+          "members": [
+            {
+              "login": "ok",
+              "id": 1
+            },
+            {
+              "login": "shorty",
+              "id": 2
+            },
+            {
+              "login": "surplus",
+              "id": 3
+            }
+          ]
+        }
+      ],
+      "rows": [
+        [
+          "group-1",
+          "Widths",
+          "slug-1",
+          "",
+          "ok",
+          "Ok",
+          "Ay",
+          "ok@x.edu",
+          "A",
+          "1",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-1",
+          "Widths",
+          "slug-1",
+          "",
+          "shorty",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "no",
+          ""
+        ],
+        [
+          "group-1",
+          "Widths",
+          "slug-1",
+          "",
+          "surplus",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "no",
           ""
         ]
       ]

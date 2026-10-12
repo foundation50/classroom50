@@ -1546,6 +1546,52 @@ func TestEncodeRoster_RefusesRawRowThatWouldRealign(t *testing.T) {
 	if _, err = EncodeRoster(rows); err == nil || !strings.Contains(err.Error(), "line 3") {
 		t.Fatalf("EncodeRoster (pre-role + extra): err = %v, want a line 3 refusal", err)
 	}
+
+	// One cell short of the rewritten header is just as dangerous: the lenient
+	// reader pads a row short by one, so a 6-cell raw row written verbatim under
+	// the 7-column header would come back as a student with every cell under
+	// the wrong column on the next read. Refused the same way.
+	in = []byte("username,email,github_id\n" +
+		"alice,alice@x.edu,1,x,y,z\n")
+	rows, err = ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if len(rows) != 1 || !rows[0].isRaw() {
+		t.Fatalf("want one raw row, got %#v", rows)
+	}
+	if _, err = EncodeRoster(rows); err == nil || !strings.Contains(err.Error(), "line 2") || !strings.Contains(err.Error(), "wrong columns") {
+		t.Fatalf("EncodeRoster (one short of rewrite width): err = %v, want a line 2 refusal", err)
+	}
+}
+
+// An unmatched opening quote under LazyQuotes would swallow every later row
+// into one cell, and the rewrite would store that as valid CSV. The lenient
+// reader refuses the file and names the line; strict already rejected it.
+func TestParseRosterLenient_RefusesCellSpanningLines(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,A,alice@example.edu,s1,1,\"student\n" +
+		"bob,Bob,B,bob@example.edu,s1,2,student\n" +
+		"carol,Carol,C,carol@example.edu,s1,3,student\n")
+
+	if _, err := ParseRoster(in); err == nil {
+		t.Fatal("strict ParseRoster must still reject the unmatched quote")
+	}
+	_, err := ParseRosterLenient(in)
+	if err == nil || !strings.Contains(err.Error(), "line 2") || !strings.Contains(err.Error(), "line break") {
+		t.Fatalf("ParseRosterLenient: err = %v, want a line 2 line-break refusal", err)
+	}
+
+	// The same quote in the github_id cell leaves a 6-field record that the
+	// width-1 padding would otherwise promote to a parsed student carrying the
+	// rest of the file; it is refused before the padding runs.
+	in = []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,A,alice@example.edu,s1,\"1,student\n" +
+		"bob,Bob,B,bob@example.edu,s1,2,student\n")
+	_, err = ParseRosterLenient(in)
+	if err == nil || !strings.Contains(err.Error(), "line 2") {
+		t.Fatalf("ParseRosterLenient (github_id cell): err = %v, want a line 2 refusal", err)
+	}
 }
 
 func TestParseRoster_RejectsDuplicateCanonicalColumn(t *testing.T) {

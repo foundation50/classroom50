@@ -498,8 +498,7 @@ var (
 // blobReadTimeout sizes the deadline for a git-blobs read to the file:
 // teacherFileTimeout plus the time the base64 wire payload (4/3 of size)
 // takes at blobTransferFloorBytesPerSec, capped at gitNetworkTimeout. An
-// unknown size (0) keeps the base deadline. The REST client honors a request's
-// own deadline up to ghauth.RequestCeiling, so every value here is reachable.
+// unknown size (0) keeps the base deadline.
 func blobReadTimeout(size int64) time.Duration {
 	if size <= 0 {
 		return teacherFileTimeout

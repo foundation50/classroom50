@@ -202,6 +202,8 @@ const SubmissionsPageContent = () => {
   // but only records a repo that exists.
   const {
     students: csvStudents,
+    exportStudents: csvExportStudents,
+    exportStudentsLoading: csvExportStudentsLoading,
     isLoading: csvStudentsLoading,
     isError: csvStudentsError,
   } = useGetStudents(org, classroom)
@@ -1290,6 +1292,7 @@ const SubmissionsPageContent = () => {
     loading:
       groupMembersPending ||
       csvStudentsLoading ||
+      csvExportStudentsLoading ||
       (isGroupFlavor && orgReposPending),
     unavailable:
       csvStudentsError ||
@@ -1301,7 +1304,7 @@ const SubmissionsPageContent = () => {
   const downloadGroupsCsv = () => {
     const rows = buildGroupMembershipCsvRows(
       groupMembershipSourceList,
-      csvStudents,
+      csvExportStudents,
     )
     downloadCsv(
       serializeGroupMembershipCsv(rows),

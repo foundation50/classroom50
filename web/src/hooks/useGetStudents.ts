@@ -9,6 +9,7 @@ import {
 } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { parseCsvRowsStrictWidth } from "@/util/csv"
 import { toStudent } from "@/util/roster"
 import { rosterPath } from "@/util/configRepoPaths"
 import { parseRosterCsv, type RosterCsvProblem } from "@/domain/students"
@@ -62,6 +63,7 @@ const useGetStudents = (
     data: rawRoster,
     refetch: refetchRawRoster,
     isFetching: rawRosterFetching,
+    isLoading: rawRosterLoading,
   } = useQuery(
     rosterRawFileQuery(
       client,
@@ -79,9 +81,21 @@ const useGetStudents = (
         : EMPTY_PROBLEMS,
     [rawRoster],
   )
+  // The group export joins against the width-strict read of the same bytes so
+  // it answers in_roster exactly as `gh teacher group export` does; the display
+  // read above stays tolerant so a partial file still renders what it can.
+  const exportStudents = useMemo(
+    () =>
+      typeof rawRoster === "string"
+        ? parseCsvRowsStrictWidth<Student>(rawRoster).map(toStudent)
+        : EMPTY_STUDENTS,
+    [rawRoster],
+  )
 
   return {
     students: students ?? EMPTY_STUDENTS,
+    exportStudents,
+    exportStudentsLoading: rawRosterLoading,
     isLoading,
     // Surfaced so a failed roster read never renders as an empty roster
     // (Primer degraded-experiences: error-as-empty reads as data loss).

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { GitHubUser } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
-import { parseCsvRows } from "@/util/csv"
+import { parseCsvRowsStrictWidth } from "@/util/csv"
 import { groupExportName } from "@/util/groupTeam"
 import { toStudent } from "@/util/roster"
 import {
@@ -61,10 +61,13 @@ describe("buildGroupMembershipCsvRows (shared cases)", () => {
 
   for (const c of doc.cases) {
     it(c.name, () => {
-      // The fixture carries raw roster.csv text; read it the way the page does
-      // (csvFileQuery's Papa options, then toStudent), so the oracle also pins
-      // that this reader and the CLI's lenient reader admit the same students.
-      const roster = parseCsvRows<Student>(c.roster_csv).map(toStudent)
+      // The fixture carries raw roster.csv text; read it the way the export
+      // does (useGetStudents' width-strict read, then toStudent), so the oracle
+      // also pins that this reader and the CLI's lenient reader admit the same
+      // students.
+      const roster = parseCsvRowsStrictWidth<Student>(c.roster_csv).map(
+        toStudent,
+      )
       const rows = buildGroupMembershipCsvRows(
         c.groups.map((g) => ({
           group: g.group,

@@ -47,13 +47,37 @@ export function trimCsvHeader(header: string): string {
 // mode, trimmed header names and cells, empty lines dropped. Papa maps a short
 // row positionally and leaves its missing trailing cells undefined for the
 // caller's normalizer, so a roster row missing its last cell still reads as a
-// student; the CLI's lenient reader admits the same rows. The group export
-// fixture test feeds its rosters through this exact function.
+// student.
 export function parseCsvRows<T>(raw: string): T[] {
+  return parseCsv<T>(raw).data
+}
+
+// The width-strict read behind the group export, the one place the web and the
+// CLI must answer in_roster identically. A row short by exactly one trailing
+// cell still reads (both tools pad it); a row short by two or more cells, or
+// one with surplus cells, is dropped, the shapes the CLI's ParseRosterLenient
+// keeps raw. Papa only assigns the keys a row actually had and parks surplus
+// cells under __parsed_extra, so width is read off the row, not off error
+// indices, which skipEmptyLines can shift. The shared fixture
+// (cli/shared/testdata/group_membership_cases.json) feeds its rosters through
+// this exact function.
+export function parseCsvRowsStrictWidth<T>(raw: string): T[] {
+  const parsed = parseCsv<T>(raw)
+  const width = parsed.meta.fields?.length ?? 0
+  return parsed.data.filter((row) => {
+    const cells = row as Record<string, unknown>
+    if (PAPA_EXTRA_KEY in cells) return false
+    return Object.keys(cells).length >= width - 1
+  })
+}
+
+const PAPA_EXTRA_KEY = "__parsed_extra"
+
+function parseCsv<T>(raw: string) {
   return Papa.parse<T>(raw, {
     header: true,
     skipEmptyLines: true,
     transformHeader: trimCsvHeader,
     transform: (value: string) => value.trim(),
-  }).data
+  })
 }

@@ -274,9 +274,9 @@ func render(out, errOut io.Writer, s cliutil.AssignmentScope, groups []groupSour
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "GROUP\tNAME\tUSERNAME\tSTUDENT\tEMAIL\tSECTION\tIN_ROSTER")
 	// Student-influenced cells (team name, login, roster text) go through
-	// output.Printable; note and in_roster are our own values. CSV and JSON
-	// stay byte-exact.
-	cell := func(s string) string { return output.Printable(output.DashIfEmpty(s)) }
+	// output.Cell; note and in_roster are our own values. CSV and JSON stay
+	// byte-exact.
+	cell := output.Cell
 	for _, r := range rows {
 		student := strings.TrimSpace(r.FirstName + " " + r.LastName)
 		if r.Note != "" {

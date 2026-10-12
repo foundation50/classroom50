@@ -301,11 +301,13 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 // preserved verbatim as a raw RosterRow instead of aborting, so a write command
 // can round-trip pre-existing bad data, and a row whose github_id does not
 // parse is kept with the id unresolved and the cell preserved. It also accepts
-// what the web's reader (parseRosterCsv) accepts on a stored file so the two
-// tools see the same students: a stray quote inside a cell, a row short by
-// exactly one trailing cell, and a cell over maxFieldBytes. Header and
-// empty-input errors still hard-fail — a broken header can't be safely
-// round-tripped.
+// what the web's join reader (parseCsvRowsStrictWidth in web/src/util/csv.ts,
+// behind the group export) accepts on a stored file so the two tools see the
+// same students: a stray quote inside a cell, a row short by exactly one
+// trailing cell, and a cell over maxFieldBytes. Header and empty-input errors
+// still hard-fail — a broken header can't be safely round-tripped — and so does
+// a cell that spans lines, because the rewrite would otherwise store every
+// student after an unmatched quote inside that one cell.
 func ParseRosterLenient(data []byte) ([]RosterRow, error) {
 	return parseRoster(data, true)
 }
@@ -352,10 +354,21 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 			// no record left to preserve: fail rather than silently skip a row.
 			return nil, fmt.Errorf("line %d: %w", line, err)
 		}
+		if lenient {
+			// LazyQuotes turns an unmatched opening quote into one cell that runs
+			// to the end of the file, hiding every later student inside it; a
+			// rewrite would then store that as valid CSV no reader flags. Roster
+			// cells never legitimately span lines, so refuse the file instead.
+			for _, cell := range record {
+				if strings.ContainsAny(cell, "\r\n") {
+					return nil, fmt.Errorf("line %d: a cell contains a line break, usually from an unmatched quote; fix that row in roster.csv first", line)
+				}
+			}
+		}
 		if lenient && len(record) == layout.width-1 {
 			// A row short by exactly one cell is a dropped trailing field (the
-			// web's parseRosterCsv tolerates the same case); pad it so the
-			// student joins and the row rewrites at full width.
+			// web's join reader tolerates the same case); pad it so the student
+			// joins and the row rewrites at full width.
 			record = append(record, "")
 		}
 		row, err := recordToRow(record, layout, line, lenient)
@@ -461,10 +474,11 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 			// order and the write path re-reads leniently so the mismatch
 			// round-trips. That only holds while the widths keep differing: a
 			// header that omitted reserved columns is rewritten wider, and a row
-			// with exactly that many surplus cells would read back as a valid row
+			// with exactly that many surplus cells, or one fewer (the lenient
+			// reader pads a row short by one), would read back as a valid row
 			// with every cell under the wrong column. Refuse rather than realign.
-			if row.rawUnaligned && len(row.raw) == len(header) {
-				return nil, fmt.Errorf("line %d: malformed row has %d fields, the same as the rewritten %d-column header, so it would be read back as a valid row with cells under the wrong columns; fix or delete that row in roster.csv first", row.Line, len(row.raw), len(header))
+			if row.rawUnaligned && (len(row.raw) == len(header) || len(row.raw) == len(header)-1) {
+				return nil, fmt.Errorf("line %d: malformed row has %d fields, the same as or one short of the rewritten %d-column header, so it would be read back as a valid row with cells under the wrong columns; fix or delete that row in roster.csv first", row.Line, len(row.raw), len(header))
 			}
 			record := make([]string, len(row.raw))
 			for i, cell := range row.raw {

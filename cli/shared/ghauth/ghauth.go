@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -116,13 +117,9 @@ func newDefaultClient() (*api.RESTClient, error) {
 	return client, nil
 }
 
-// RequestTimeout bounds a REST request that carries no deadline of its own.
-// go-gh sets no HTTP timeout, so without this a stalled connection hangs the
-// command until Ctrl-C. Generous because it also covers the largest single
-// plain request, a base64 blob upload. A caller that needs a different bound
-// supplies a context deadline, which replaces this default (up to
-// RequestCeiling) rather than racing it: gh-student's git-blobs read sizes its
-// deadline to the file and must be allowed past 60 s.
+// RequestTimeout bounds a REST request that carries no deadline of its own (see
+// deadlineTransport). Generous because it also covers the largest single plain
+// request, a base64 blob upload.
 const RequestTimeout = 60 * time.Second
 
 // RequestCeiling is the longest any single request may run however long a
@@ -130,25 +127,60 @@ const RequestTimeout = 60 * time.Second
 // the two never disagree on what a stalled network costs.
 const RequestCeiling = 10 * time.Minute
 
-// NewRESTClient is the single constructor for go-gh REST clients in both CLIs:
-// every request gets RequestTimeout unless its context already carries a
-// deadline, and no deadline runs past RequestCeiling. Both bounds live in the
-// transport rather than http.Client.Timeout, because that field injects its
-// own context deadline and would make a caller's deadline indistinguishable
-// from the ceiling.
+// NewRESTClient is the single constructor for go-gh REST clients in both CLIs;
+// every request runs through deadlineTransport. A non-zero opts.Timeout becomes
+// that client's fallback rather than reaching http.Client.Timeout.
 func NewRESTClient(opts api.ClientOptions) (*api.RESTClient, error) {
-	return api.NewRESTClient(withRequestTimeout(opts))
+	return api.NewRESTClient(withDeadlineTransport(opts))
 }
 
-func withRequestTimeout(opts api.ClientOptions) api.ClientOptions {
-	opts.Transport = &deadlineTransport{next: opts.Transport, fallback: RequestTimeout, ceiling: RequestCeiling}
+func withDeadlineTransport(opts api.ClientOptions) api.ClientOptions {
+	fallback := RequestTimeout
+	if opts.Timeout != 0 {
+		fallback = opts.Timeout
+		opts.Timeout = 0
+	}
+	opts.Transport = &deadlineTransport{next: baseTransport(opts), fallback: fallback, ceiling: RequestCeiling}
 	return opts
 }
 
-// deadlineTransport bounds every request: one that brought no deadline gets
-// `fallback`, so a plain client.Get cannot hang; one that brought its own
-// keeps it up to `ceiling`. The deadline must outlive RoundTrip because the
-// body is read afterwards, so the cancel is tied to the body's Close.
+// baseTransport picks what deadlineTransport wraps. go-gh routes through the
+// configured `http_unix_socket` only when opts.Transport is nil, and installing
+// deadlineTransport makes it non-nil, so the socket has to be resolved and
+// dialed here the way go-gh would have. A nil result means http.DefaultTransport.
+func baseTransport(opts api.ClientOptions) http.RoundTripper {
+	if opts.Transport != nil {
+		return opts.Transport
+	}
+	socket := opts.UnixDomainSocket
+	if socket == "" {
+		if cfg, err := config.Read(nil); err == nil {
+			socket, _ = cfg.Get([]string{"http_unix_socket"})
+		}
+	}
+	if socket == "" {
+		return nil
+	}
+	return unixSocketTransport(socket)
+}
+
+func unixSocketTransport(socket string) http.RoundTripper {
+	dial := func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", socket)
+	}
+	return &http.Transport{DialContext: dial, DialTLSContext: dial, DisableKeepAlives: true}
+}
+
+// deadlineTransport bounds every request. go-gh sets no HTTP timeout, so a
+// request that brought no deadline gets `fallback` and a stalled connection
+// cannot hang the command until Ctrl-C; one that brought its own keeps it, up
+// to `ceiling`, so gh-student's git-blobs read can size its deadline to the
+// file and run past the default. The bounds live here rather than in
+// http.Client.Timeout because that field injects its own context deadline and
+// would make a caller's deadline indistinguishable from the ceiling. The
+// deadline must outlive RoundTrip because the body is read afterwards, so the
+// cancel is tied to the body's Close.
 type deadlineTransport struct {
 	next     http.RoundTripper
 	fallback time.Duration
