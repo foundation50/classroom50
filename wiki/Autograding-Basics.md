@@ -208,7 +208,7 @@ value overrides the default.
 
 | Value | Students see |
 |---|---|
-| `full` (default) | For an `io` test, the input the program read, then a unified diff for `exact` comparisons, otherwise the expected and actual output, plus stderr. For a `run` or `python` test, the command's combined output. For a test that timed out, the input (`io` only) and whatever the program printed before it was stopped. |
+| `full` (default) | For an `io` test, the input the program read, then a unified diff for `exact` comparisons, otherwise the expected and actual output, plus stderr. For a `run` or `python` test, the command's combined output. For a test that timed out, the input (`io` only) and whatever output had reached the grader before the program was stopped. |
 | `actual-only` | The student's own output only. Never the expected output or a diff, since either would reveal the answer, and never the input, which would reveal the hidden test case. |
 | `none` | Only the failure kind: wrong output, wrong exit code, timeout, or setup failed. |
 
@@ -217,7 +217,10 @@ stderr as one stream in the order they reached the grader, the way a terminal
 or a CI log shows them. A diff that a Makefile prints to stdout lands next to
 the compiler error on stderr. A program that buffers stdout when it is not
 writing to a terminal (Python and C programs do by default) can show its
-errors before its earlier output, exactly as `cmd 2>&1 | cat` does locally. An
+errors before its earlier output, exactly as `cmd 2>&1 | cat` does locally. A
+program stopped on timeout also loses whatever is still in that buffer, so a
+C program that prints a prompt and then waits on `scanf` shows no prompt in
+its timeout report unless it flushes first. An
 `io` test keeps the two apart because the comparison reads stdout on its own.
 
 The Release body and Summary keep the first 2,000 characters of the combined

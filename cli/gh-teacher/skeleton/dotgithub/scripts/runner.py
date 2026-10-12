@@ -113,8 +113,8 @@ MAX_LOG_CAPTURED_CHARS = 100_000
 # Per-test failure-detail levels -- mirror tests.go / tests-v1.schema.json.
 # full: io tests show the input, then a diff (exact) or expected+actual
 # blocks, plus stderr; run/python tests show the command's combined output;
-# a timeout shows the input (io) and whatever the program printed before it
-# was stopped (the default).
+# a timeout shows the input (io) and whatever output had reached the grader
+# before the program was stopped (the default).
 # actual-only: the student's own output; no input, expected output, or diff.
 # none: just the failure-kind summary line.
 FAILURE_DETAILS_FULL = "full"
