@@ -17,7 +17,7 @@ import { useUserPreference } from "@/context/userPreferences/UserPreferencesProv
 import {
   studentRepoName,
   studentRepoUrl,
-  GROUP_REPO_SEGMENT,
+  groupOwnerSegment,
 } from "@/util/studentRepo"
 import { repoCommitUrl } from "@/util/orgUrl"
 import { defaultRepoPagesUrl } from "@/util/repoPages"
@@ -1213,7 +1213,7 @@ const SubmissionsTable = ({
               }
               if (item.kind === "teamNoRepo") {
                 const team = item.team
-                const teamOwner = `${GROUP_REPO_SEGMENT}${team.n}`
+                const teamOwner = groupOwnerSegment(team.n)
                 const label =
                   groupDisplayNames?.get(teamOwner) ?? groupDisplayName(team, t)
                 return (

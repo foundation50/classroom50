@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
@@ -153,7 +154,7 @@ func TestRunTeamCreate_HappyPath(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out, errOut bytes.Buffer
-	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
 	err := runTeamCreate(client, &out, &errOut, scope, "The Sharks", []string{"alice", "bob", "mallory"})
 	if err != nil {
 		t.Fatalf("runTeamCreate: %v", err)
@@ -212,7 +213,7 @@ func TestRunTeamCreate_EnforcesMaxGroupSize(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out, errOut bytes.Buffer
-	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
 	err := runTeamCreate(client, &out, &errOut, scope, "", []string{"alice", "bob", "carol", "dave"})
 	if err == nil || !strings.Contains(err.Error(), "max_group_size is 3") {
 		t.Fatalf("err = %v, want the max_group_size refusal", err)
@@ -243,7 +244,7 @@ func TestRunTeamAdd_SizeCap(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out bytes.Buffer
-	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
 	err := runTeamAdd(client, &out, scope, "1", "alice")
 	if err == nil || !strings.Contains(err.Error(), "is full") {
 		t.Fatalf("err = %v, want the team-full refusal", err)
@@ -267,7 +268,7 @@ func TestRunTeamCreate_RefusesAlreadyGrouped(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out, errOut bytes.Buffer
-	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
 	err := runTeamCreate(client, &out, &errOut, scope, "", []string{"alice", "bob"})
 	if err == nil || !strings.Contains(err.Error(), "alice is already on group 1") {
 		t.Fatalf("err = %v, want the already-grouped refusal", err)
@@ -295,7 +296,7 @@ func TestRunTeamAdd_RefusesCrossGroup(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out bytes.Buffer
-	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
 	err := runTeamAdd(client, &out, scope, "2", "alice")
 	if err == nil || !strings.Contains(err.Error(), "alice is already on group 1") {
 		t.Fatalf("err = %v, want the cross-group refusal", err)
@@ -340,7 +341,7 @@ func TestRunTeamCopy_SkipsAlreadyGrouped(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out, errOut bytes.Buffer
-	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: target}
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: target}
 	if err := runTeamCopy(client, &out, &errOut, scope, cmdTestAssignment); err != nil {
 		t.Fatalf("runTeamCopy: %v", err)
 	}
@@ -380,9 +381,27 @@ func TestRunTeamList_RejectsNonTeamAssignment(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out bytes.Buffer
-	err := runTeamList(client, &out, teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: "hello"})
+	err := runTeamList(client, &out, cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: "hello"})
 	if err == nil || err.Error() != `assignment "hello" is not a team assignment (mode individual)` {
 		t.Fatalf("err = %v, want the not-a-team-assignment message", err)
+	}
+}
+
+// The shared prelude composes this command's own remediation hint onto the
+// not-registered error, so the full text is pinned here rather than in
+// configrepo.
+func TestRunTeamList_RejectsUnregisteredAssignment(t *testing.T) {
+	state := &teamCmdServer{}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out bytes.Buffer
+	err := runTeamList(client, &out, cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: "nope"})
+	want := `assignment "nope" is not registered in acme/` + configrepo.ConfigRepoName + `/cs101/assignments.json: ` +
+		"run `gh teacher assignment add acme cs101 nope --mode team ...` first"
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v\nwant %s", err, want)
 	}
 }
 
@@ -402,7 +421,7 @@ func TestRunTeamList_HappyPath(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var out bytes.Buffer
-	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
 	if err := runTeamList(client, &out, scope); err != nil {
 		t.Fatalf("runTeamList: %v", err)
 	}

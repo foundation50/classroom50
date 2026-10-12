@@ -78,6 +78,9 @@ func TestDescribeDrift(t *testing.T) {
 		{"live extra", []string{"alice", "eve"}, []string{"alice"}, true, "+eve"},
 		{"recorded missing", []string{"alice"}, []string{"alice", "bob"}, true, "-bob"},
 		{"both", []string{"eve"}, []string{"bob"}, true, "+eve -bob"},
+		// A hand-edited snapshot entry with stray whitespace is real drift
+		// (the writers normalize, so a tool-written file never has it).
+		{"whitespace in recorded member is drift", []string{"alice"}, []string{" alice"}, true, "+alice - alice"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

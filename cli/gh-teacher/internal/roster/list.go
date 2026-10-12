@@ -157,20 +157,11 @@ func writeRosterTable(out io.Writer, rows []configrepo.RosterRow) {
 			githubID = strconv.FormatInt(r.GitHubID, 10)
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			dashIfEmpty(r.Username), dashIfEmpty(name),
-			dashIfEmpty(r.Email), dashIfEmpty(r.Section), dashIfEmpty(githubID),
-			dashIfEmpty(r.Role))
+			output.DashIfEmpty(r.Username), output.DashIfEmpty(name),
+			output.DashIfEmpty(r.Email), output.DashIfEmpty(r.Section), output.DashIfEmpty(githubID),
+			output.DashIfEmpty(r.Role))
 	}
 	_ = tw.Flush()
-}
-
-// dashIfEmpty renders an empty cell as "-" so a blank column reads as
-// "intentionally empty" rather than a layout glitch in the table.
-func dashIfEmpty(s string) string {
-	if s == "" {
-		return "-"
-	}
-	return s
 }
 
 // summarizeRosterList: one-line stderr summary

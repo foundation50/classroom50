@@ -492,7 +492,7 @@ func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, 
 	}
 	byLogin := make(map[string]RosterMeta, len(rows))
 	for _, r := range rows {
-		login := strings.ToLower(strings.TrimSpace(r.Username))
+		login := configrepo.LoginKey(r.Username)
 		if login == "" {
 			continue
 		}

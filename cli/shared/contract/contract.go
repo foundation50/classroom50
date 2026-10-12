@@ -903,6 +903,14 @@ func ParseGroupTeamCounter(slug, classroom, assignment string) (n int, ok bool) 
 	return n, true
 }
 
+// GroupOwnerSegment is the owner-position value of a team-mode assignment,
+// `group-<n>`: the username slot of the repo-name formula, the scores.json
+// owner key, and the group column of the membership export. One spelling so
+// the three never drift. Byte-mirror of the web's groupOwnerSegment.
+func GroupOwnerSegment(n int) string {
+	return GroupRepoSegment + strconv.Itoa(n)
+}
+
 // GroupRepoName is the canonical team-mode assignment repo name
 // `<classroom>-<assignment>-group-<n>` — the individual formula with the
 // team counter in the username position. Readable and searchable where the
@@ -913,7 +921,7 @@ func ParseGroupTeamCounter(slug, classroom, assignment string) (n int, ok bool) 
 // stays under GitHubLoginMaxLen for any plausible counter), so the existing
 // repo-name budget covers it.
 func GroupRepoName(classroom, assignment string, n int) string {
-	return AssignmentRepoPrefix(classroom, assignment) + GroupRepoSegment + strconv.Itoa(n)
+	return AssignmentRepoPrefix(classroom, assignment) + GroupOwnerSegment(n)
 }
 
 // ParseGroupRepoCounter recovers n from a team-mode repo name for a KNOWN

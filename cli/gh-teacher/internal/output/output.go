@@ -1,6 +1,7 @@
-// Package output holds CLI-wide presentation helpers that aren't domain logic —
-// currently the shared JSON encoder for every `--json` view and every
-// config-repo file gh-teacher writes, and the terminal cell guard. Stdlib-only.
+// Package output holds CLI-wide presentation helpers that aren't domain logic:
+// the shared JSON encoder for every `--json` view and every config-repo file
+// gh-teacher writes, the terminal cell guard, and the blank-cell table
+// placeholder. Stdlib-only.
 package output
 
 import (
@@ -24,6 +25,15 @@ func Printable(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// DashIfEmpty is the table placeholder for a blank cell, so an aligned column
+// never shows a hole the eye reads as "cell missing".
+func DashIfEmpty(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 // JSONPretty marshals v with 2-space indent, trailing newline, and EscapeHTML

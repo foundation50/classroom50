@@ -16,10 +16,10 @@ import (
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/assignment"
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
-	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
 func NewCmd() *cobra.Command {
@@ -52,46 +52,18 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-// teamScope is the validated <org> <classroom> <assignment> triple every
-// subcommand takes.
-type teamScope struct {
-	Org        string
-	Classroom  string
-	Assignment string
-}
-
-// parseScope validates the three positional args shared by every subcommand.
-func parseScope(args []string) (teamScope, error) {
-	scope := teamScope{
-		Org:        strings.TrimSpace(args[0]),
-		Classroom:  strings.TrimSpace(args[1]),
-		Assignment: strings.TrimSpace(args[2]),
-	}
-	if scope.Org == "" || scope.Classroom == "" || scope.Assignment == "" {
-		return teamScope{}, errors.New("org, classroom, and assignment must all be non-empty")
-	}
-	if err := validate.ShortName(scope.Classroom, "classroom"); err != nil {
-		return teamScope{}, err
-	}
-	if err := validate.ShortName(scope.Assignment, "assignment"); err != nil {
-		return teamScope{}, err
-	}
-	return scope, nil
-}
-
 // authedScope is the RunE prelude every subcommand shares: silence usage (the
 // args parsed, so failures from here are real errors, not usage mistakes),
-// validate the scope triple, and authenticate. Subcommands with extra
-// positional args pass the full slice; only the first three are the scope.
-func authedScope(cmd *cobra.Command, args []string) (githubapi.Client, teamScope, error) {
+// validate the scope triple, and authenticate.
+func authedScope(cmd *cobra.Command, args []string) (githubapi.Client, cliutil.AssignmentScope, error) {
 	cmd.SilenceUsage = true
-	scope, err := parseScope(args[:3])
+	scope, err := cliutil.ParseAssignmentScope(args)
 	if err != nil {
-		return nil, teamScope{}, err
+		return nil, cliutil.AssignmentScope{}, err
 	}
 	client, err := githubapi.RequireAuthClient(cmd)
 	if err != nil {
-		return nil, teamScope{}, err
+		return nil, cliutil.AssignmentScope{}, err
 	}
 	return client, scope, nil
 }
@@ -109,33 +81,23 @@ func requireUsername(arg string) (string, error) {
 // teamContext is the resolved per-command state: the config-repo branch and
 // the (team-mode) assignment entry.
 type teamContext struct {
-	teamScope
+	cliutil.AssignmentScope
 	Branch string
 	Entry  assignment.AssignmentEntry
 }
 
 // loadTeamContext resolves the config-repo branch, loads the assignment
 // entry, and requires it to be a team assignment.
-func loadTeamContext(client githubapi.Client, scope teamScope) (teamContext, error) {
-	branch, err := configrepo.ResolveConfigRepoBranch(client, scope.Org)
+func loadTeamContext(client githubapi.Client, scope cliutil.AssignmentScope) (teamContext, error) {
+	resolved, err := configrepo.ResolveAssignment(client, scope,
+		fmt.Sprintf("run `gh teacher assignment add %s %s %s --mode team ...` first", scope.Org, scope.Classroom, scope.Assignment))
 	if err != nil {
 		return teamContext{}, err
 	}
-	file, err := configrepo.LoadAssignments(client, scope.Org, scope.Classroom, branch)
-	if err != nil {
+	if err := requireTeamMode(resolved.Entry); err != nil {
 		return teamContext{}, err
 	}
-	idx, ok := assignment.FindAssignment(file.Assignments, scope.Assignment)
-	if !ok {
-		return teamContext{}, fmt.Errorf("assignment %q is not registered in %s/%s/%s: run `gh teacher assignment add %s %s %s --mode team ...` first",
-			scope.Assignment, scope.Org, configrepo.ConfigRepoName, assignment.AssignmentsFilePath(scope.Classroom),
-			scope.Org, scope.Classroom, scope.Assignment)
-	}
-	entry := file.Assignments[idx]
-	if err := requireTeamMode(entry); err != nil {
-		return teamContext{}, err
-	}
-	return teamContext{teamScope: scope, Branch: branch, Entry: entry}, nil
+	return teamContext{AssignmentScope: scope, Branch: resolved.Branch, Entry: resolved.Entry}, nil
 }
 
 // requireTeamMode gates every subcommand on mode: team — group and individual
@@ -174,7 +136,7 @@ func splitRostered(usernames []string, rosterLogins map[string]bool) (rostered, 
 	seen := map[string]bool{}
 	for _, u := range usernames {
 		u = strings.TrimSpace(u)
-		key := strings.ToLower(u)
+		key := configrepo.LoginKey(u)
 		if key == "" || seen[key] {
 			continue
 		}
@@ -199,8 +161,8 @@ func loadAssignedLogins(client githubapi.Client, ctx teamContext) (map[string]st
 	}
 	assigned := map[string]string{}
 	for _, team := range teams {
-		for _, m := range team.Members {
-			assigned[strings.ToLower(m)] = team.Slug
+		for _, m := range team.MemberRefs {
+			assigned[configrepo.LoginKey(m.Login)] = team.Slug
 		}
 	}
 	return assigned, nil
@@ -225,7 +187,7 @@ func loadRosterLogins(client githubapi.Client, ctx teamContext) (map[string]bool
 	}
 	logins := map[string]bool{}
 	for _, row := range rows {
-		if login := strings.ToLower(strings.TrimSpace(row.Username)); login != "" {
+		if login := configrepo.LoginKey(row.Username); login != "" {
 			logins[login] = true
 		}
 	}

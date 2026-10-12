@@ -1,11 +1,15 @@
 // Package membership is the org-membership service for gh-teacher: GitHub
-// org-level invite / user-lookup / membership-state primitives and the
-// 403-classification family shared by the invite, roster, and member commands.
-// Talks to GitHub only through internal/githubapi.
+// org-level invite / user-lookup / membership-state primitives, the
+// account-listing shape and paginator (Account, ListAccounts) behind every
+// members and collaborators read, and the 403-classification family shared by
+// the invite, roster, member, and group commands. Talks to GitHub only through
+// internal/githubapi.
 //
 // Boundary vs internal/configrepo: config-repo-keyed membership (team grants
 // via the slug in classroom.json) lives in configrepo; pure org membership
-// independent of stored config (invite/lookup/state) lives here.
+// independent of stored config (invite/lookup/state) lives here. configrepo
+// decodes team members into this package's Account; membership never imports
+// configrepo.
 //
 // A primitives surface, not a fused service object: each consuming command
 // needs a different subset, so the primitives are exported individually.
@@ -354,6 +358,43 @@ func ClassifyMembershipReadError(path, subject string, err error) error {
 		}
 	}
 	return fmt.Errorf("GET %s: %w", path, err)
+}
+
+// Account is one element of a GitHub account listing (org members, team
+// members, repo collaborators): the login paired with the numeric id the
+// roster's github_id column records. RoleName is the collaborators endpoint's
+// permission level (read/triage/write/maintain/admin); the members endpoints
+// leave it empty.
+type Account struct {
+	Login    string `json:"login"`
+	ID       int64  `json:"id"`
+	RoleName string `json:"role_name"`
+}
+
+// ListAccounts walks an account-listing endpoint under the shared page cap,
+// classifying read failures for `subject` (a human label). `base` may already
+// carry a query such as a role or affiliation filter.
+func ListAccounts(client githubapi.Client, base, subject string) ([]Account, error) {
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	return githubapi.PaginateAll[Account](client, githubapi.ListPerPage, githubapi.ListMaxPages,
+		func(page int) string {
+			return fmt.Sprintf("%s%sper_page=%d&page=%d", base, sep, githubapi.ListPerPage, page)
+		},
+		func(path string, err error) error {
+			return ClassifyMembershipReadError(path, subject, err)
+		})
+}
+
+// Logins projects accounts to their logins for readers that key on username.
+func Logins(accounts []Account) []string {
+	out := make([]string, 0, len(accounts))
+	for _, a := range accounts {
+		out = append(out, a.Login)
+	}
+	return out
 }
 
 // HasOrgAdminScope: X-OAuth-Scopes contains admin:org.

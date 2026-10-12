@@ -14,6 +14,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/membership"
 )
 
 // classroomTeamName derives the GitHub team name for a classroom:
@@ -965,14 +966,6 @@ func ResolveClassroomTeamSlug(client githubapi.Client, org, shortName, ref strin
 	return classroomTeamSlug(shortName), nil
 }
 
-// TeamMemberRef is a team member's login paired with the numeric GitHub id the
-// roster's github_id column records. Doubles as the decode target for
-// GET .../teams/{slug}/members.
-type TeamMemberRef struct {
-	Login string `json:"login"`
-	ID    int64  `json:"id"`
-}
-
 // ListTeamMembers returns the logins of every member of the classroom team
 // addressed by `slug`, walking pagination. The classroom GitHub team is
 // authoritative for enrollment (roster.csv is optional display metadata). A
@@ -982,9 +975,5 @@ func ListTeamMembers(client githubapi.Client, org, slug string) ([]string, error
 	if err != nil {
 		return nil, err
 	}
-	logins := make([]string, 0, len(members))
-	for _, m := range members {
-		logins = append(logins, m.Login)
-	}
-	return logins, nil
+	return membership.Logins(members), nil
 }

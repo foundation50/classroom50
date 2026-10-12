@@ -24,6 +24,13 @@ export const studentRepoUrl = (
 // contract.GroupRepoSegment.
 export const GROUP_REPO_SEGMENT = "group-"
 
+// The owner-position value of a team-mode assignment, `group-<n>`: the
+// username slot of the repo-name formula, the scores.json owner key, and the
+// group column of the membership export. One spelling so the three never
+// drift. Byte-mirror of contract.GroupOwnerSegment.
+export const groupOwnerSegment = (n: number): string =>
+  `${GROUP_REPO_SEGMENT}${n}`
+
 // The canonical team-mode assignment repo name
 // `<classroom>-<assignment>-group-<n>` — the individual formula with the team
 // counter in the owner position. The counter maps it back to the group team
@@ -34,7 +41,7 @@ export const groupRepoName = (
   classroom: string,
   assignment: string,
   n: number,
-): string => studentRepoName(classroom, assignment, `${GROUP_REPO_SEGMENT}${n}`)
+): string => studentRepoName(classroom, assignment, groupOwnerSegment(n))
 
 // Recover the counter from a team-mode repo name for a KNOWN
 // classroom+assignment, or null when the name isn't that assignment's

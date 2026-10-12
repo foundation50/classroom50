@@ -444,7 +444,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 			return err
 		}
 		teamSlug = membership.Slug
-		ownerSegment = groupteam.OwnerSegment(membership.Counter)
+		ownerSegment = contract.GroupOwnerSegment(membership.Counter)
 	} else if newTeam || teamName != "" {
 		return fmt.Errorf("assignment %q is not a team assignment (mode %q), so --new-team and --team-name do not apply; run accept without them", assignment, entry.Mode)
 	}

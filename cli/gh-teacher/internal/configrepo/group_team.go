@@ -13,6 +13,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/membership"
 )
 
 // GroupDescription is the classroom50/group/v1 record stored in a group
@@ -93,15 +94,20 @@ func VerifyGroupDescription(slug string, rec GroupDescription) bool {
 
 // GroupTeamInfo is one live group team as the teacher tooling sees it: the
 // addressing slug/id, the counter recovered from the slug, the parsed AND
-// verified description record, and the current members as logins (Members)
-// and as login+id refs (MemberRefs) for a join that must survive a rename.
+// verified description record, and the current members as login+id refs so
+// a join can survive a rename. MemberRefs is nil when the member read failed
+// (lenient listing) and empty for a team with no members.
 type GroupTeamInfo struct {
 	ID         int64
 	Slug       string
 	Counter    int
 	Record     GroupDescription
-	Members    []string
-	MemberRefs []TeamMemberRef
+	MemberRefs []membership.Account
+}
+
+// Logins projects MemberRefs to logins for readers that key on username only.
+func (t GroupTeamInfo) Logins() []string {
+	return membership.Logins(t.MemberRefs)
 }
 
 // groupTeamPayload is the org-teams / team-GET shape the group paths decode.
@@ -300,7 +306,7 @@ func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 // ListAssignmentGroupTeamsLenient is ListAssignmentGroupTeams for a read-only
 // report, matching what the web shows: a team whose description record is
 // missing or fails verification is kept with a zero Record (unnamed), and a
-// team whose member read fails is kept with nil Members/MemberRefs and its
+// team whose member read fails is kept with nil MemberRefs and its
 // error returned in `unreadable` (keyed by slug), so one bad team cannot hide
 // the rest. A rate limit still aborts, since every later read would fail the
 // same way.
@@ -332,10 +338,6 @@ func listAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 		refs, err := ListTeamMembersWithIDs(client, org, t.Slug)
 		switch {
 		case err == nil:
-			info.Members = make([]string, 0, len(refs))
-			for _, m := range refs {
-				info.Members = append(info.Members, m.Login)
-			}
 			info.MemberRefs = refs
 		case lenient && !cliutil.IsRateLimited(err):
 			unreadable[t.Slug] = err

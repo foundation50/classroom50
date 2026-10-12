@@ -181,8 +181,8 @@ func TestListAssignmentGroupTeams(t *testing.T) {
 	if team.Counter != 1 || team.ID != 11 || team.Record.Name != "Alpha" {
 		t.Errorf("team = %+v, want counter 1 / id 11 / name Alpha", team)
 	}
-	if len(team.Members) != 2 || team.Members[0] != "alice" {
-		t.Errorf("members = %v, want [alice bob]", team.Members)
+	if logins := team.Logins(); len(logins) != 2 || logins[0] != "alice" {
+		t.Errorf("members = %v, want [alice bob]", logins)
 	}
 
 	// The lenient listing keeps the two teams whose record is hand-edited or

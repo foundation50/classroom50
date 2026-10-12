@@ -37,7 +37,7 @@ import {
 import {
   studentRepoName,
   parseGroupRepoCounter,
-  GROUP_REPO_SEGMENT,
+  groupOwnerSegment,
 } from "@/util/studentRepo"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 
@@ -842,7 +842,7 @@ export function existingTeamRepos(
     const n = parseGroupRepoCounter(repo.name, classroom, assignment)
     if (n === null) continue
     out.push({
-      owner: `${GROUP_REPO_SEGMENT}${n}`,
+      owner: groupOwnerSegment(n),
       repoName: repo.name.toLowerCase(),
     })
   }
@@ -864,7 +864,7 @@ export function teamsWithoutRepos(
 ): GroupTeamRef[] {
   return teams
     .filter((team) => {
-      const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+      const owner = groupOwnerSegment(team.n)
       return !existingRepoOwners.has(owner) && !scoreOwners.has(owner)
     })
     .toSorted((a, b) => a.n - b.n)
@@ -1547,7 +1547,7 @@ export function displayItemOwner(item: DisplayItem): string {
     case "groupRepo":
       return item.repo.owner
     case "teamNoRepo":
-      return `${GROUP_REPO_SEGMENT}${item.team.n}`
+      return groupOwnerSegment(item.team.n)
   }
 }
 
@@ -1724,7 +1724,7 @@ export function filterDisplayList({
       : groupRepos,
     teamsWithoutRepos: filterGroups
       ? teamsWithoutRepos.filter((team) => {
-          const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+          const owner = groupOwnerSegment(team.n)
           if (!groupInSection(owner)) return false
           if (!q) return true
           if (owner.includes(q)) return true

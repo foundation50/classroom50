@@ -16,7 +16,7 @@ import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
-import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { studentRepoName, groupOwnerSegment } from "@/util/studentRepo"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import { SidebarItemBody, SidebarNavItem, SidebarTooltip } from "./primitives"
 import { sidebarIconButton } from "./sidebarClasses"
@@ -113,7 +113,7 @@ export const AssignmentSidebarMenu = ({
   )
   const repoOwnerSegment = isTeamAssignment
     ? myGroupTeam
-      ? `${GROUP_REPO_SEGMENT}${myGroupTeam.n}`
+      ? groupOwnerSegment(myGroupTeam.n)
       : undefined
     : user?.login
   const { assignment: studentRepo, isLoading: repoLoading } =

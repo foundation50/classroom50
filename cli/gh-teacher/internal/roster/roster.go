@@ -493,7 +493,7 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 // or any read error yields ("", false) so the caller silently skips the
 // advisory note rather than failing an add that already succeeded.
 func staffRoleForLogin(client githubapi.Client, org, classroom, branch, login string) (configrepo.StaffRole, bool) {
-	key := loginKey(login)
+	key := configrepo.LoginKey(login)
 	if key == "" {
 		return "", false
 	}
@@ -511,7 +511,7 @@ func staffRoleForLogin(client githubapi.Client, org, classroom, branch, login st
 			continue
 		}
 		for _, m := range members {
-			if loginKey(m) == key {
+			if configrepo.LoginKey(m) == key {
 				return role, true
 			}
 		}

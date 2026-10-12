@@ -16,7 +16,11 @@ import {
   parseGroupDescription,
   verifyGroupDescription,
 } from "./groupTeam"
-import { groupRepoName, parseGroupRepoCounter } from "./studentRepo"
+import {
+  groupOwnerSegment,
+  groupRepoName,
+  parseGroupRepoCounter,
+} from "./studentRepo"
 
 // The shared vectors are the cross-language oracle (the Go suite asserts the
 // same file), so a one-sided formula edit fails on the other language's copy.
@@ -75,6 +79,9 @@ describe("isGroupTeamSlug", () => {
 
 describe("group repo naming", () => {
   it("composes and parses the counter, mode-gated by the caller", () => {
+    // Mirrors TestGroupRepoName in cli/shared/contract: the owner segment is
+    // the scores.json / export key, so its spelling is pinned on its own.
+    expect(groupOwnerSegment(3)).toBe("group-3")
     expect(groupRepoName("CS101", "HW1", 3)).toBe("cs101-hw1-group-3")
     expect(parseGroupRepoCounter("cs101-hw1-group-3", "cs101", "hw1")).toBe(3)
     expect(parseGroupRepoCounter("CS101-HW1-GROUP-3", "cs101", "hw1")).toBe(3)

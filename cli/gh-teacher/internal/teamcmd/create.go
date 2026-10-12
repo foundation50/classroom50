@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -47,7 +48,7 @@ func teamCreateCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope teamScope, name string, members []string) error {
+func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope cliutil.AssignmentScope, name string, members []string) error {
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
 		return err
@@ -66,7 +67,7 @@ func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope teamSco
 		return err
 	}
 	for _, u := range rostered {
-		if other, taken := assigned[strings.ToLower(u)]; taken {
+		if other, taken := assigned[configrepo.LoginKey(u)]; taken {
 			return fmt.Errorf("%s is already on %s and a student can be on only one of the assignment's groups. Remove them with `gh teacher team remove`, or leave them off this team, then re-run",
 				u, describeGroupSlug(ctx.Classroom, ctx.Assignment, other))
 		}
@@ -147,7 +148,7 @@ func teamDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamDelete(client githubapi.Client, out io.Writer, scope teamScope, teamArg string) error {
+func runTeamDelete(client githubapi.Client, out io.Writer, scope cliutil.AssignmentScope, teamArg string) error {
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
 		return err
@@ -216,7 +217,7 @@ func teamCopyCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
-			scope, err := parseScope(args)
+			scope, err := cliutil.ParseAssignmentScope(args)
 			if err != nil {
 				return err
 			}
@@ -238,14 +239,14 @@ func teamCopyCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope, source string) error {
+func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope cliutil.AssignmentScope, source string) error {
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
 		return err
 	}
 	// The source must be a team assignment too; reuse the same gate so the
 	// error wording matches.
-	if _, err := loadTeamContext(client, teamScope{Org: scope.Org, Classroom: scope.Classroom, Assignment: source}); err != nil {
+	if _, err := loadTeamContext(client, cliutil.AssignmentScope{Org: scope.Org, Classroom: scope.Classroom, Assignment: source}); err != nil {
 		return fmt.Errorf("--from %s: %w", source, err)
 	}
 	sourceTeams, err := configrepo.ListAssignmentGroupTeams(client, ctx.Org, ctx.Classroom, source)
@@ -269,20 +270,21 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope
 
 	var records []configrepo.TeamRecord
 	for _, sourceTeam := range sourceTeams {
-		rostered, unknown := splitRostered(sourceTeam.Members, rosterLogins)
+		sourceLogins := sourceTeam.Logins()
+		rostered, unknown := splitRostered(sourceLogins, rosterLogins)
 		for _, u := range unknown {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s member %q is not on the roster; skipping them in the copy.\n", sourceTeam.Slug, u)
 		}
 		var free []string
 		for _, u := range rostered {
-			if other, taken := assigned[strings.ToLower(u)]; taken {
+			if other, taken := assigned[configrepo.LoginKey(u)]; taken {
 				_, _ = fmt.Fprintf(errOut, "Warning: %s member %q is already on %s in %s; skipping them in the copy.\n",
 					sourceTeam.Slug, u, describeGroupSlug(ctx.Classroom, ctx.Assignment, other), ctx.Assignment)
 				continue
 			}
 			free = append(free, u)
 		}
-		if len(free) == 0 && len(sourceTeam.Members) > 0 {
+		if len(free) == 0 && len(sourceLogins) > 0 {
 			_, _ = fmt.Fprintf(out, "%s: skipped %s, every member was skipped\n", ctx.Org, sourceTeam.Slug)
 			continue
 		}
@@ -295,7 +297,7 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope
 			return err
 		}
 		for _, u := range free {
-			assigned[strings.ToLower(u)] = slug
+			assigned[configrepo.LoginKey(u)] = slug
 		}
 		_, _ = fmt.Fprintf(out, "%s: created team %s (group %d, %d member(s), copied from %s)\n",
 			ctx.Org, slug, counter, len(free), sourceTeam.Slug)

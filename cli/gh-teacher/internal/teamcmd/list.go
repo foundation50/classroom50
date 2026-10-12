@@ -9,8 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/output"
 )
 
 func teamListCmd() *cobra.Command {
@@ -35,7 +37,7 @@ func teamListCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamList(client githubapi.Client, out io.Writer, scope teamScope) error {
+func runTeamList(client githubapi.Client, out io.Writer, scope cliutil.AssignmentScope) error {
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
 		return err
@@ -64,17 +66,11 @@ func runTeamList(client githubapi.Client, out io.Writer, scope teamScope) error 
 	for _, team := range teams {
 		record, hasRecord := recorded[team.Slug]
 		delete(recorded, team.Slug)
-		drift := describeDrift(team.Members, record.Members, hasRecord)
-		name := team.Record.Name
-		if name == "" {
-			name = "-"
-		}
-		members := strings.Join(team.Members, ", ")
-		if members == "" {
-			members = "-"
-		}
+		logins := team.Logins()
+		drift := describeDrift(logins, record.Members, hasRecord)
 		_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%d/%d\t%s\n",
-			team.Counter, name, members, len(team.Members), ctx.Entry.MaxGroupSize, drift)
+			team.Counter, output.DashIfEmpty(team.Record.Name), output.DashIfEmpty(strings.Join(logins, ", ")),
+			len(logins), ctx.Entry.MaxGroupSize, drift)
 	}
 	// Snapshot rows with no live team are the other drift direction.
 	stale := make([]string, 0, len(recorded))
@@ -98,6 +94,10 @@ func describeDrift(live, recorded []string, hasRecord bool) string {
 	if !hasRecord {
 		return "not in teams.json"
 	}
+	// Not LoginKey: this compares two login lists byte-for-byte after case
+	// folding, so a whitespace-padded hand edit in teams.json is reported as
+	// drift rather than hidden. The roster and assigned-login maps elsewhere
+	// in this package are indexes and do use LoginKey.
 	liveSet := map[string]bool{}
 	for _, m := range live {
 		liveSet[strings.ToLower(m)] = true

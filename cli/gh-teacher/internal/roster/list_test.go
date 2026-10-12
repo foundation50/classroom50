@@ -77,7 +77,7 @@ func TestRunRosterList(t *testing.T) {
 				t.Errorf("stdout missing %q\n%s", want, s)
 			}
 		}
-		// bob has empty email + section -> dashIfEmpty renders both as "-".
+		// bob has empty email + section -> DashIfEmpty renders both as "-".
 		// Find bob's row and assert it carries at least two dash cells.
 		var bobRow string
 		for _, line := range strings.Split(s, "\n") {

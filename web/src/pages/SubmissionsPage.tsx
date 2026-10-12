@@ -109,7 +109,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { sortStudentsByName } from "@/util/students"
-import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { studentRepoName, groupOwnerSegment } from "@/util/studentRepo"
 import { groupDisplayName } from "@/util/groupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
@@ -360,7 +360,7 @@ const SubmissionsPageContent = () => {
   const teamByOwner = useMemo(() => {
     const map = new Map<string, GroupTeamRef>()
     for (const team of groupTeams ?? []) {
-      map.set(`${GROUP_REPO_SEGMENT}${team.n}`, team)
+      map.set(groupOwnerSegment(team.n), team)
     }
     return map
   }, [groupTeams])

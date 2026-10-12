@@ -13,6 +13,7 @@ import (
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/assignment"
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
@@ -140,7 +141,7 @@ func TestSiblingPrefixes(t *testing.T) {
 	entries := []assignment.AssignmentEntry{
 		{Slug: "hw1"}, {Slug: "hw1-bonus"}, {Slug: "hw2"}, {Slug: "h"},
 	}
-	got := siblingPrefixes(entries, scope{Classroom: "cs", Assignment: "hw1"})
+	got := siblingPrefixes(entries, cliutil.AssignmentScope{Classroom: "cs", Assignment: "hw1"})
 	// Only a sibling whose prefix EXTENDS ours can over-match; hw2 and h can't.
 	if len(got) != 1 || got[0] != "cs-hw1-bonus-" {
 		t.Fatalf("siblingPrefixes = %v, want [cs-hw1-bonus-]", got)
@@ -281,6 +282,11 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 			_ = json.NewEncoder(w).Encode(members)
 		case strings.HasPrefix(path, "/repos/"+testOrg+"/") && strings.HasSuffix(path, "/collaborators"):
 			repo := strings.TrimSuffix(strings.TrimPrefix(path, "/repos/"+testOrg+"/"), "/collaborators")
+			// Org-inherited access must stay excluded, or an org owner would
+			// show up as a member of every legacy group.
+			if got := r.URL.Query().Get("affiliation"); got != "direct" {
+				t.Errorf("%s: affiliation = %q, want direct", path, got)
+			}
 			if s.collabThrottled[repo] {
 				w.Header().Set("X-RateLimit-Remaining", "0")
 				w.WriteHeader(http.StatusForbidden)
@@ -315,7 +321,7 @@ func run(t *testing.T, state *groupServer, format outputFormat) (string, string,
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 	var out, errOut bytes.Buffer
-	err := runGroupList(client, &out, &errOut, scope{Org: testOrg, Classroom: testClassroom, Assignment: testAssignment}, format)
+	err := runGroupList(client, &out, &errOut, cliutil.AssignmentScope{Org: testOrg, Classroom: testClassroom, Assignment: testAssignment}, format)
 	return out.String(), errOut.String(), err
 }
 
@@ -596,5 +602,22 @@ func TestRunGroupList_IndividualModeRefuses(t *testing.T) {
 	_, _, err := run(t, &groupServer{mode: "individual"}, formatTable)
 	if err == nil || !strings.Contains(err.Error(), "individual assignment") {
 		t.Fatalf("err = %v, want an individual-mode refusal", err)
+	}
+}
+
+// The shared prelude composes this command's own remediation hint onto the
+// not-registered error, so the full text is pinned here rather than in
+// configrepo.
+func TestRunGroupList_UnregisteredAssignmentRefuses(t *testing.T) {
+	state := &groupServer{mode: "team"}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+	var out, errOut bytes.Buffer
+	err := runGroupList(client, &out, &errOut, cliutil.AssignmentScope{Org: testOrg, Classroom: testClassroom, Assignment: "nope"}, formatTable)
+	want := `assignment "nope" is not registered in acme/` + configrepo.ConfigRepoName + `/cs101/assignments.json: ` +
+		"run `gh teacher assignment list acme cs101` to see the registered slugs"
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v\nwant %s", err, want)
 	}
 }
