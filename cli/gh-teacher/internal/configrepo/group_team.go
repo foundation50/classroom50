@@ -93,15 +93,24 @@ func VerifyGroupDescription(slug string, rec GroupDescription) bool {
 
 // GroupTeamInfo is one live group team as the teacher tooling sees it: the
 // addressing slug/id, the counter recovered from the slug, the parsed AND
-// verified description record, and the current members as logins (Members)
-// and as login+id refs (MemberRefs) for a join that must survive a rename.
+// verified description record, and the current members as login+id refs so
+// a join can survive a rename. MemberRefs is nil when the member read failed
+// (lenient listing) and empty for a team with no members.
 type GroupTeamInfo struct {
 	ID         int64
 	Slug       string
 	Counter    int
 	Record     GroupDescription
-	Members    []string
 	MemberRefs []TeamMemberRef
+}
+
+// Logins projects MemberRefs to logins for readers that key on username only.
+func (t GroupTeamInfo) Logins() []string {
+	out := make([]string, 0, len(t.MemberRefs))
+	for _, m := range t.MemberRefs {
+		out = append(out, m.Login)
+	}
+	return out
 }
 
 // groupTeamPayload is the org-teams / team-GET shape the group paths decode.
@@ -332,10 +341,6 @@ func listAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 		refs, err := ListTeamMembersWithIDs(client, org, t.Slug)
 		switch {
 		case err == nil:
-			info.Members = make([]string, 0, len(refs))
-			for _, m := range refs {
-				info.Members = append(info.Members, m.Login)
-			}
 			info.MemberRefs = refs
 		case lenient && !cliutil.IsRateLimited(err):
 			unreadable[t.Slug] = err

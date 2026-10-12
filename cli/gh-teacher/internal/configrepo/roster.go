@@ -128,3 +128,37 @@ func DedupeByUsername(rows []RosterRow) []RosterRow {
 	}
 	return append(out, rawRows...)
 }
+
+// LoginKey is the case-insensitive join key for a GitHub login. Every roster
+// index is both built and read with it; deriving the key any other way makes
+// a lookup silently miss.
+func LoginKey(login string) string {
+	return strings.ToLower(strings.TrimSpace(login))
+}
+
+// RosterIndex is the first-wins identity index over a roster. It records WHICH
+// row each identity is on because every helper keyed on a username or an id
+// touches the FIRST match: planning against a later duplicate plans an edit
+// that then applies to nothing. Resolution order (id-first or login-first) is
+// the caller's, so the two surfaces that join differently share one index.
+type RosterIndex struct {
+	FirstByID    map[int64]int
+	FirstByLogin map[string]int
+}
+
+func IndexRosterRows(rows []RosterRow) RosterIndex {
+	out := RosterIndex{FirstByID: map[int64]int{}, FirstByLogin: map[string]int{}}
+	for i, row := range rows {
+		if row.GitHubID != 0 {
+			if _, seen := out.FirstByID[row.GitHubID]; !seen {
+				out.FirstByID[row.GitHubID] = i
+			}
+		}
+		if key := LoginKey(row.Username); key != "" {
+			if _, seen := out.FirstByLogin[key]; !seen {
+				out.FirstByLogin[key] = i
+			}
+		}
+	}
+	return out
+}

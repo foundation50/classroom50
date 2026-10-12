@@ -338,10 +338,3 @@ func ListMembers(client githubapi.Client, org, slug string) ([]string, error) {
 	}
 	return logins, nil
 }
-
-// OwnerSegment is the username-position segment of a team repo's name for
-// counter n (`group-<n>`), so callers can reuse the individual repo-name
-// formula with the segment in the username slot.
-func OwnerSegment(counter int) string {
-	return fmt.Sprintf("%s%d", contract.GroupRepoSegment, counter)
-}

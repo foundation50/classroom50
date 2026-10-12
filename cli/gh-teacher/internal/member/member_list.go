@@ -137,14 +137,14 @@ func runMemberListOrg(client githubapi.Client, out, errOut io.Writer, org string
 // admin set drives the role; everyone else is a plain member.
 func collectOrgMembers(client githubapi.Client, org string) ([]memberListEntry, error) {
 	adminIDs := map[int64]bool{}
-	admins, err := paginateMembers(client, fmt.Sprintf("orgs/%s/members?role=admin", url.PathEscape(org)), org+" members")
+	admins, err := membership.ListAccounts(client, fmt.Sprintf("orgs/%s/members?role=admin", url.PathEscape(org)), org+" members")
 	if err != nil {
 		return nil, err
 	}
 	for _, a := range admins {
 		adminIDs[a.ID] = true
 	}
-	all, err := paginateMembers(client, fmt.Sprintf("orgs/%s/members", url.PathEscape(org)), org+" members")
+	all, err := membership.ListAccounts(client, fmt.Sprintf("orgs/%s/members", url.PathEscape(org)), org+" members")
 	if err != nil {
 		return nil, err
 	}
@@ -199,15 +199,8 @@ func normalizeInviteRole(role string) string {
 // runMemberListRepo lists collaborators on a repo with their
 // permission level (role_name). Read-only.
 func runMemberListRepo(client githubapi.Client, out, errOut io.Writer, owner, repo string, asJSON, quiet bool) error {
-	base := fmt.Sprintf("repos/%s/%s/collaborators", url.PathEscape(owner), url.PathEscape(repo))
 	subject := owner + "/" + repo
-	collabs, err := githubapi.PaginateAll[repoCollaborator](client, githubapi.ListPerPage, githubapi.ListMaxPages,
-		func(page int) string {
-			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
-		},
-		func(path string, err error) error {
-			return membership.ClassifyMembershipReadError(path, subject, err)
-		})
+	collabs, err := membership.ListAccounts(client, fmt.Sprintf("repos/%s/%s/collaborators", url.PathEscape(owner), url.PathEscape(repo)), subject)
 	if err != nil {
 		return err
 	}
@@ -224,35 +217,6 @@ func runMemberListRepo(client githubapi.Client, out, errOut io.Writer, owner, re
 		return strings.ToLower(entries[i].Login) < strings.ToLower(entries[j].Login)
 	})
 	return renderMemberList(out, errOut, subject, entries, asJSON, quiet)
-}
-
-// memberAccount is the shared shape of a GET .../members element.
-type memberAccount struct {
-	Login string `json:"login"`
-	ID    int64  `json:"id"`
-}
-
-// repoCollaborator is one GET /repos/{o}/{r}/collaborators element.
-type repoCollaborator struct {
-	Login    string `json:"login"`
-	ID       int64  `json:"id"`
-	RoleName string `json:"role_name"`
-}
-
-// paginateMembers walks a members listing endpoint with the shared cap. `base`
-// already carries any role filter; `subject` is a human label for errors.
-func paginateMembers(client githubapi.Client, base, subject string) ([]memberAccount, error) {
-	sep := "?"
-	if strings.Contains(base, "?") {
-		sep = "&"
-	}
-	return githubapi.PaginateAll[memberAccount](client, githubapi.ListPerPage, githubapi.ListMaxPages,
-		func(page int) string {
-			return fmt.Sprintf("%s%sper_page=%d&page=%d", base, sep, githubapi.ListPerPage, page)
-		},
-		func(path string, err error) error {
-			return membership.ClassifyMembershipReadError(path, subject, err)
-		})
 }
 
 func renderMemberList(out, errOut io.Writer, target string, entries []memberListEntry, asJSON, quiet bool) error {
@@ -278,15 +242,11 @@ func renderMemberList(out, errOut io.Writer, target string, entries []memberList
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "LOGIN\tKIND\tROLE\tGITHUB_ID")
 	for _, e := range entries {
-		githubID := "-"
+		githubID := ""
 		if e.GitHubID != 0 {
 			githubID = strconv.FormatInt(e.GitHubID, 10)
 		}
-		role := e.Role
-		if role == "" {
-			role = "-"
-		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", e.Login, e.Kind, role, githubID)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", e.Login, e.Kind, output.DashIfEmpty(e.Role), output.DashIfEmpty(githubID))
 	}
 	_ = tw.Flush()
 	_, _ = fmt.Fprintln(errOut, summarizeMemberList(target, entries))

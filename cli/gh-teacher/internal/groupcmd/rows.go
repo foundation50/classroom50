@@ -74,30 +74,20 @@ type resolved struct {
 // GitHub id first, then by login (see member for the fallback rule). A group
 // with no members, or whose members could not be read, still yields one row.
 func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow {
-	byID := make(map[int64]configrepo.RosterRow, len(roster))
-	byLogin := make(map[string]configrepo.RosterRow, len(roster))
-	for _, r := range roster {
-		if r.GitHubID != 0 {
-			if _, dup := byID[r.GitHubID]; !dup {
-				byID[r.GitHubID] = r
-			}
-		}
-		login := loginKey(r.Username)
-		if login == "" {
-			continue
-		}
-		if _, dup := byLogin[login]; !dup {
-			byLogin[login] = r
-		}
-	}
+	// Shared first-wins index; the id-first order below is this export's own
+	// (roster sync resolves login-first) and is pinned by the shared fixture.
+	idx := configrepo.IndexRosterRows(roster)
 	resolve := func(m member) (configrepo.RosterRow, bool) {
 		if m.ID != 0 {
-			if r, ok := byID[m.ID]; ok {
-				return r, true
+			if i, ok := idx.FirstByID[m.ID]; ok {
+				return roster[i], true
 			}
 		}
-		r, ok := byLogin[loginKey(m.Login)]
-		return r, ok
+		i, ok := idx.FirstByLogin[configrepo.LoginKey(m.Login)]
+		if !ok {
+			return configrepo.RosterRow{}, false
+		}
+		return roster[i], true
 	}
 
 	ordered := slices.Clone(groups)
@@ -130,7 +120,7 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			if !known {
 				r = configrepo.RosterRow{Username: strings.ToLower(login)}
 			}
-			key := loginKey(r.Username)
+			key := configrepo.LoginKey(r.Username)
 			if seen[key] {
 				continue
 			}
@@ -172,11 +162,6 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 		}
 	}
 	return rows
-}
-
-// loginKey is the case-insensitive join key for a GitHub login.
-func loginKey(login string) string {
-	return strings.ToLower(strings.TrimSpace(login))
 }
 
 // sortKey is the member sort key, "Last First", else the login, else the

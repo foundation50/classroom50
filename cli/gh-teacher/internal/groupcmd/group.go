@@ -2,7 +2,6 @@ package groupcmd
 
 import (
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -19,7 +18,6 @@ import (
 	"github.com/foundation50/gh-teacher/internal/membership"
 	"github.com/foundation50/gh-teacher/internal/orgrepos"
 	"github.com/foundation50/gh-teacher/internal/output"
-	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
 func NewCmd() *cobra.Command {
@@ -68,7 +66,7 @@ func groupListCmd() *cobra.Command {
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
-			scope, err := parseScope(args)
+			scope, err := cliutil.ParseAssignmentScope(args)
 			if err != nil {
 				return err
 			}
@@ -104,43 +102,13 @@ func resolveFormat(asJSON, asCSV bool) outputFormat {
 	}
 }
 
-type scope struct {
-	Org, Classroom, Assignment string
-}
-
-func parseScope(args []string) (scope, error) {
-	s := scope{
-		Org:        strings.TrimSpace(args[0]),
-		Classroom:  strings.TrimSpace(args[1]),
-		Assignment: strings.TrimSpace(args[2]),
-	}
-	if s.Org == "" || s.Classroom == "" || s.Assignment == "" {
-		return scope{}, errors.New("org, classroom, and assignment must all be non-empty")
-	}
-	if err := validate.ShortName(s.Classroom, "classroom"); err != nil {
-		return scope{}, err
-	}
-	if err := validate.ShortName(s.Assignment, "assignment"); err != nil {
-		return scope{}, err
-	}
-	return s, nil
-}
-
-func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, format outputFormat) error {
-	branch, err := configrepo.ResolveConfigRepoBranch(client, s.Org)
+func runGroupList(client githubapi.Client, out, errOut io.Writer, s cliutil.AssignmentScope, format outputFormat) error {
+	resolved, err := configrepo.ResolveAssignment(client, s,
+		fmt.Sprintf("run `gh teacher assignment list %s %s` to see the registered slugs", s.Org, s.Classroom))
 	if err != nil {
 		return err
 	}
-	file, err := configrepo.LoadAssignments(client, s.Org, s.Classroom, branch)
-	if err != nil {
-		return err
-	}
-	idx, ok := assignment.FindAssignment(file.Assignments, s.Assignment)
-	if !ok {
-		return fmt.Errorf("assignment %q is not registered in %s/%s/%s: run `gh teacher assignment list %s %s` to see the registered slugs",
-			s.Assignment, s.Org, configrepo.ConfigRepoName, assignment.AssignmentsFilePath(s.Classroom), s.Org, s.Classroom)
-	}
-	entry := file.Assignments[idx]
+	entry := resolved.Entry
 	if entry.Mode != assignment.ModeTeam && entry.Mode != assignment.ModeGroup {
 		return fmt.Errorf("assignment %q is an individual assignment (mode %s); it has no groups to list", entry.Slug, entry.Mode)
 	}
@@ -148,7 +116,7 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, forma
 	// The roster is the join target, so unlike a display-only read it is not
 	// best-effort: without it every member would export as unrostered. Read it
 	// first so a missing roster fails before the membership fan-out.
-	roster, err := configrepo.LoadRosterLenient(client, s.Org, s.Classroom, branch)
+	roster, err := configrepo.LoadRosterLenient(client, s.Org, s.Classroom, resolved.Branch)
 	if err != nil {
 		return err
 	}
@@ -157,7 +125,7 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, forma
 	if entry.Mode == assignment.ModeTeam {
 		groups, err = teamGroups(client, errOut, s)
 	} else {
-		groups, err = legacyGroups(client, errOut, s, siblingPrefixes(file.Assignments, s))
+		groups, err = legacyGroups(client, errOut, s, siblingPrefixes(resolved.File.Assignments, s))
 	}
 	if err != nil {
 		return err
@@ -171,7 +139,7 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, forma
 // attaching each team's repo when it has been created. A team whose member
 // read fails is kept with nil members (reported as unreadable) rather than
 // dropped, matching legacyGroups and the web.
-func teamGroups(client githubapi.Client, errOut io.Writer, s scope) ([]groupSource, error) {
+func teamGroups(client githubapi.Client, errOut io.Writer, s cliutil.AssignmentScope) ([]groupSource, error) {
 	teams, unreadable, err := configrepo.ListAssignmentGroupTeamsLenient(client, s.Org, s.Classroom, s.Assignment)
 	if err != nil {
 		return nil, err
@@ -189,7 +157,7 @@ func teamGroups(client githubapi.Client, errOut io.Writer, s scope) ([]groupSour
 	groups := make([]groupSource, 0, len(teams))
 	for _, t := range teams {
 		g := groupSource{
-			Group:    fmt.Sprintf("%s%d", contract.GroupRepoSegment, t.Counter),
+			Group:    contract.GroupOwnerSegment(t.Counter),
 			Name:     contract.GroupExportName(t.Record.Name, t.Counter),
 			TeamSlug: t.Slug,
 			Repo:     repoByCounter[t.Counter],
@@ -208,7 +176,7 @@ func teamGroups(client githubapi.Client, errOut io.Writer, s scope) ([]groupSour
 // `<classroom>-<assignment>-<founder>` repos: the founder plus direct
 // collaborators. A failed collaborator read keeps the group with nil members;
 // a rate limit aborts, as in ListAssignmentGroupTeamsLenient.
-func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings []string) ([]groupSource, error) {
+func legacyGroups(client githubapi.Client, errOut io.Writer, s cliutil.AssignmentScope, siblings []string) ([]groupSource, error) {
 	names, err := orgrepos.ListNames(client, s.Org)
 	if err != nil {
 		return nil, err
@@ -222,14 +190,21 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings [
 			continue
 		}
 		g := groupSource{Group: founder, Repo: lower}
-		collaborators, err := listDirectCollaborators(client, s.Org, name)
+		// Direct collaborators only (org-inherited access excluded), matching
+		// the web's group membership read.
+		collaborators, err := membership.ListAccounts(client,
+			fmt.Sprintf("repos/%s/%s/collaborators?affiliation=direct", url.PathEscape(s.Org), url.PathEscape(name)), s.Org+"/"+name)
 		switch {
 		case cliutil.IsRateLimited(err):
 			return nil, fmt.Errorf("%s: %w", lower, err)
 		case err != nil:
 			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", lower, err)
 		default:
-			g.Members = append(membersFromRefs(collaborators), member{Login: founder, Fallback: true})
+			g.Members = make([]member, 0, len(collaborators)+1)
+			for _, c := range collaborators {
+				g.Members = append(g.Members, member{Login: c.Login, ID: c.ID})
+			}
+			g.Members = append(g.Members, member{Login: founder, Fallback: true})
 		}
 		groups = append(groups, g)
 	}
@@ -239,7 +214,7 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings [
 // siblingPrefixes returns the repo-name prefixes of the classroom's other
 // assignments that EXTEND this assignment's own prefix, so `hw1` never claims
 // `hw1-bonus`'s repos. Mirrors the web's existingAssignmentRepos guard.
-func siblingPrefixes(entries []assignment.AssignmentEntry, s scope) []string {
+func siblingPrefixes(entries []assignment.AssignmentEntry, s cliutil.AssignmentScope) []string {
 	own := contract.AssignmentRepoPrefix(s.Classroom, s.Assignment)
 	var out []string
 	for _, e := range entries {
@@ -262,20 +237,6 @@ func hasAnyPrefix(name string, prefixes []string) bool {
 	return false
 }
 
-// listDirectCollaborators reads a repo's direct collaborators (org-inherited
-// access excluded, matching the web's group membership read).
-func listDirectCollaborators(client githubapi.Client, org, repo string) ([]configrepo.TeamMemberRef, error) {
-	base := fmt.Sprintf("repos/%s/%s/collaborators?affiliation=direct", url.PathEscape(org), url.PathEscape(repo))
-	subject := org + "/" + repo
-	return githubapi.PaginateAll[configrepo.TeamMemberRef](client, githubapi.ListPerPage, githubapi.ListMaxPages,
-		func(page int) string {
-			return fmt.Sprintf("%s&per_page=%d&page=%d", base, githubapi.ListPerPage, page)
-		},
-		func(path string, err error) error {
-			return membership.ClassifyMembershipReadError(path, subject, err)
-		})
-}
-
 func membersFromRefs(refs []configrepo.TeamMemberRef) []member {
 	members := make([]member, 0, len(refs))
 	for _, r := range refs {
@@ -284,7 +245,7 @@ func membersFromRefs(refs []configrepo.TeamMemberRef) []member {
 	return members
 }
 
-func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberRow, format outputFormat) error {
+func render(out, errOut io.Writer, s cliutil.AssignmentScope, groups []groupSource, rows []memberRow, format outputFormat) error {
 	switch format {
 	case formatJSON:
 		if rows == nil {
@@ -319,7 +280,7 @@ func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberR
 	// Student-influenced cells (team name, login, roster text) go through
 	// output.Printable; note and in_roster are our own values. CSV and JSON
 	// stay byte-exact.
-	cell := func(s string) string { return output.Printable(dash(s)) }
+	cell := func(s string) string { return output.Printable(output.DashIfEmpty(s)) }
 	for _, r := range rows {
 		student := strings.TrimSpace(r.FirstName + " " + r.LastName)
 		if r.Note != "" {
@@ -340,16 +301,9 @@ func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberR
 	return nil
 }
 
-func dash(s string) string {
-	if s == "" {
-		return "-"
-	}
-	return s
-}
-
 // summarize is the one-line stderr summary: group and member counts plus how
 // many members the roster doesn't know, the number a teacher acts on.
-func summarize(s scope, groups []groupSource, rows []memberRow) string {
+func summarize(s cliutil.AssignmentScope, groups []groupSource, rows []memberRow) string {
 	members, unknown := 0, 0
 	for _, r := range rows {
 		if r.Username == "" {

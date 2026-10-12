@@ -34,7 +34,7 @@ import {
 } from "./orgActivity/ActivityToolbar"
 import { TimelineRow } from "./orgActivity/TimelineRow"
 import { WORKFLOW_LABEL_KEY } from "@/util/actionActivity"
-import { downloadBlob } from "@/util/downloadBlob"
+import { downloadCsv } from "@/util/downloadBlob"
 
 // Unified, owner-only org Activity view. Merges three sources into one filterable,
 // newest-first timeline:
@@ -109,8 +109,7 @@ const OrgActivityPage = () => {
   // Export the currently-shown (filtered + searched) timeline as a CSV download.
   const exportCsv = () => {
     const csv = Papa.unparse(timelineToCsvRows(items), { header: true })
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    downloadBlob(blob, `${org ?? "org"}-activity.csv`)
+    downloadCsv(csv, `${org ?? "org"}-activity.csv`)
   }
 
   const loading = commits.isLoading || runs.isLoading

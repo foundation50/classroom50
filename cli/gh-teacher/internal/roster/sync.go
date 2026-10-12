@@ -231,7 +231,7 @@ func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) 
 			}
 			idx.enrolled[m.ID] = true
 			idx.loginByID[m.ID] = m.Login
-			key := loginKey(m.Login)
+			key := configrepo.LoginKey(m.Login)
 			counts[key]++
 			idx.idByLogin[key] = m.ID
 		}
@@ -503,7 +503,7 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 	// duplicates). Applying the folds to a copy costs one pass and removes the
 	// whole class of stale-index bug.
 	folded := applyPlannedFolds(rows, plan.folds)
-	rowIdx := indexRosterRows(folded)
+	rowIdx := configrepo.IndexRosterRows(folded)
 
 	for i, row := range folded {
 		// A row carrying a username but no usable id: fill it from the
@@ -512,11 +512,11 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		if row.IsPendingEmailInvite() || row.Username == "" || row.GitHubID != 0 {
 			continue
 		}
-		key := loginKey(row.Username)
+		key := configrepo.LoginKey(row.Username)
 		if _, ok := idx.idByLogin[key]; !ok {
 			continue
 		}
-		if rowIdx.firstByLogin[key] != i {
+		if rowIdx.FirstByLogin[key] != i {
 			plan.findings.dupLogins = append(plan.findings.dupLogins, row.Username)
 			continue
 		}
@@ -527,15 +527,15 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 	// correct a row's spelling of its own account. A claimed login goes to
 	// findings.loginClaimed instead of the plan.
 	for i, row := range folded {
-		if row.GitHubID == 0 || rowIdx.firstByID[row.GitHubID] != i {
+		if row.GitHubID == 0 || rowIdx.FirstByID[row.GitHubID] != i {
 			continue
 		}
 		login, ok := idx.loginByID[row.GitHubID]
-		if !ok || loginKey(row.Username) == loginKey(login) {
+		if !ok || configrepo.LoginKey(row.Username) == configrepo.LoginKey(login) {
 			continue
 		}
 		fill := loginFill{ID: row.GitHubID, Login: login}
-		if _, claimed := rowIdx.firstByLogin[loginKey(login)]; claimed {
+		if _, claimed := rowIdx.FirstByLogin[configrepo.LoginKey(login)]; claimed {
 			plan.findings.loginClaimed = append(plan.findings.loginClaimed, fill)
 			continue
 		}
@@ -549,7 +549,7 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		if claimed[rec.Email] {
 			continue
 		}
-		i, ok := rowIdx.rowFor(rec)
+		i, ok := rowFor(rowIdx, rec)
 		if !ok {
 			// No row names this account at all: it needs one, or retiring the
 			// team would lose the only record of the invited address.
@@ -580,50 +580,17 @@ func applyPlannedFolds(rows []configrepo.RosterRow, folds []inviteRecovery) []co
 	return folded
 }
 
-// rosterRowIndex is the identity join the plan is built against. firstByID /
-// firstByLogin record WHICH row each identity is on, because every helper keyed
-// on a username or an id touches the FIRST match: planning against a later
-// duplicate plans an edit that then applies to nothing.
-type rosterRowIndex struct {
-	firstByID    map[int64]int
-	firstByLogin map[string]int
-}
-
-func indexRosterRows(rows []configrepo.RosterRow) rosterRowIndex {
-	out := rosterRowIndex{firstByID: map[int64]int{}, firstByLogin: map[string]int{}}
-	for i, row := range rows {
-		if row.GitHubID != 0 {
-			if _, seen := out.firstByID[row.GitHubID]; !seen {
-				out.firstByID[row.GitHubID] = i
-			}
-		}
-		if key := loginKey(row.Username); key != "" {
-			if _, seen := out.firstByLogin[key]; !seen {
-				out.firstByLogin[key] = i
-			}
-		}
-	}
-	return out
-}
-
 // rowFor is the row RecordRosterEmail will touch for rec: the first one naming
 // its login, else the first one carrying its id. The two must agree or the plan
 // describes a row the helper never edits.
-func (idx rosterRowIndex) rowFor(rec inviteRecovery) (int, bool) {
-	if key := loginKey(rec.Login); key != "" {
-		if i, ok := idx.firstByLogin[key]; ok {
+func rowFor(idx configrepo.RosterIndex, rec inviteRecovery) (int, bool) {
+	if key := configrepo.LoginKey(rec.Login); key != "" {
+		if i, ok := idx.FirstByLogin[key]; ok {
 			return i, true
 		}
 	}
-	i, ok := idx.firstByID[rec.ID]
+	i, ok := idx.FirstByID[rec.ID]
 	return i, ok
-}
-
-// loginKey is the case-insensitive key classroomIndex.idByLogin is both built
-// and read with; the two must derive it identically or a backfill silently
-// never matches.
-func loginKey(login string) string {
-	return strings.ToLower(strings.TrimSpace(login))
 }
 
 // runRosterSync is the three-phase reconcile: classify the invite teams
@@ -715,7 +682,7 @@ func runRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroo
 // The teardown deletes only teams that pass this, so a mapping nothing recorded
 // survives for the teacher to finish by hand.
 func recordsRecovery(rows []configrepo.RosterRow, rec inviteRecovery) bool {
-	recLogin := loginKey(rec.Login)
+	recLogin := configrepo.LoginKey(rec.Login)
 	for _, row := range rows {
 		if row.IsPendingEmailInvite() {
 			continue
@@ -723,7 +690,7 @@ func recordsRecovery(rows []configrepo.RosterRow, rec inviteRecovery) bool {
 		if configrepo.NormalizeInviteEmail(row.Email) != rec.Email {
 			continue
 		}
-		if row.GitHubID == rec.ID || (recLogin != "" && loginKey(row.Username) == recLogin) {
+		if row.GitHubID == rec.ID || (recLogin != "" && configrepo.LoginKey(row.Username) == recLogin) {
 			return true
 		}
 	}
@@ -844,7 +811,7 @@ func applyRosterSync(client githubapi.Client, out io.Writer, org, classroom, bra
 			}
 		}
 		for _, username := range plan.backfills {
-			id := idx.idByLogin[loginKey(username)]
+			id := idx.idByLogin[configrepo.LoginKey(username)]
 			if next, ok := configrepo.BackfillRosterGitHubID(rows, username, id); ok {
 				rows = next
 				applied.backfills = append(applied.backfills, username)

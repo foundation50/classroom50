@@ -785,6 +785,11 @@ func TestIsGroupTeamSlug(t *testing.T) {
 // `group-3` is a syntactically valid GitHub login and only the assignment's
 // mode — never the shape — decides which parse applies.
 func TestGroupRepoName(t *testing.T) {
+	// The owner segment is the scores.json / export key as well as the repo
+	// name's username slot, so its spelling is pinned on its own.
+	if got := GroupOwnerSegment(3); got != "group-3" {
+		t.Errorf("GroupOwnerSegment = %q, want %q", got, "group-3")
+	}
 	if got := GroupRepoName("CS101", "HW1", 3); got != "cs101-hw1-group-3" {
 		t.Errorf("GroupRepoName = %q, want %q", got, "cs101-hw1-group-3")
 	}

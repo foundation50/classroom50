@@ -27,7 +27,7 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { GroupTeamMembersPanel } from "@/components/assignments/GroupTeamMembersPanel"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
-import { GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { groupOwnerSegment } from "@/util/studentRepo"
 import EditAssignmentForm from "./assignments/EditAssignmentForm"
 import RenameSlugSection from "./assignments/RenameSlugSection"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -77,7 +77,7 @@ const EditAssignmentFormStudent = ({
   )
   const repoOwnerSegment = isTeamMode
     ? myTeam
-      ? `${GROUP_REPO_SEGMENT}${myTeam.n}`
+      ? groupOwnerSegment(myTeam.n)
       : undefined
     : user?.login
   const { isLoading: loadingRepo, assignment: assignmentRepo } =

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -36,7 +37,7 @@ func teamAddCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamAdd(client githubapi.Client, out io.Writer, scope teamScope, teamArg, usernameArg string) error {
+func runTeamAdd(client githubapi.Client, out io.Writer, scope cliutil.AssignmentScope, teamArg, usernameArg string) error {
 	username, err := requireUsername(usernameArg)
 	if err != nil {
 		return err
@@ -120,7 +121,7 @@ func teamRemoveCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamRemove(client githubapi.Client, out io.Writer, scope teamScope, teamArg, usernameArg string) error {
+func runTeamRemove(client githubapi.Client, out io.Writer, scope cliutil.AssignmentScope, teamArg, usernameArg string) error {
 	username, err := requireUsername(usernameArg)
 	if err != nil {
 		return err

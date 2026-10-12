@@ -26,6 +26,15 @@ func Printable(s string) string {
 	}, s)
 }
 
+// DashIfEmpty is the table placeholder for a blank cell, so an aligned column
+// never shows a hole the eye reads as "cell missing".
+func DashIfEmpty(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
 // JSONPretty marshals v with 2-space indent, trailing newline, and EscapeHTML
 // off (keeps `<`/`>` literal in URLs). The single encoder behind both `--json`
 // output and the config-repo files, so its byte shape is a contract: changing

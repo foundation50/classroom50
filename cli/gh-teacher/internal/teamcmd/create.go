@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -47,7 +48,7 @@ func teamCreateCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope teamScope, name string, members []string) error {
+func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope cliutil.AssignmentScope, name string, members []string) error {
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
 		return err
@@ -147,7 +148,7 @@ func teamDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamDelete(client githubapi.Client, out io.Writer, scope teamScope, teamArg string) error {
+func runTeamDelete(client githubapi.Client, out io.Writer, scope cliutil.AssignmentScope, teamArg string) error {
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
 		return err
@@ -216,7 +217,7 @@ func teamCopyCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
-			scope, err := parseScope(args)
+			scope, err := cliutil.ParseAssignmentScope(args)
 			if err != nil {
 				return err
 			}
@@ -238,14 +239,14 @@ func teamCopyCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope, source string) error {
+func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope cliutil.AssignmentScope, source string) error {
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
 		return err
 	}
 	// The source must be a team assignment too; reuse the same gate so the
 	// error wording matches.
-	if _, err := loadTeamContext(client, teamScope{Org: scope.Org, Classroom: scope.Classroom, Assignment: source}); err != nil {
+	if _, err := loadTeamContext(client, cliutil.AssignmentScope{Org: scope.Org, Classroom: scope.Classroom, Assignment: source}); err != nil {
 		return fmt.Errorf("--from %s: %w", source, err)
 	}
 	sourceTeams, err := configrepo.ListAssignmentGroupTeams(client, ctx.Org, ctx.Classroom, source)
@@ -269,7 +270,8 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope
 
 	var records []configrepo.TeamRecord
 	for _, sourceTeam := range sourceTeams {
-		rostered, unknown := splitRostered(sourceTeam.Members, rosterLogins)
+		sourceLogins := sourceTeam.Logins()
+		rostered, unknown := splitRostered(sourceLogins, rosterLogins)
 		for _, u := range unknown {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s member %q is not on the roster; skipping them in the copy.\n", sourceTeam.Slug, u)
 		}
@@ -282,7 +284,7 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope
 			}
 			free = append(free, u)
 		}
-		if len(free) == 0 && len(sourceTeam.Members) > 0 {
+		if len(free) == 0 && len(sourceLogins) > 0 {
 			_, _ = fmt.Fprintf(out, "%s: skipped %s, every member was skipped\n", ctx.Org, sourceTeam.Slug)
 			continue
 		}

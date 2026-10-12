@@ -17,7 +17,7 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
-import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { studentRepoName, groupOwnerSegment } from "@/util/studentRepo"
 import { groupDisplayName } from "@/util/groupTeam"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import {
@@ -198,7 +198,7 @@ const SubmissionBody = ({
   )
   const repoOwnerSegment = isTeamMode
     ? myTeam
-      ? `${GROUP_REPO_SEGMENT}${myTeam.n}`
+      ? groupOwnerSegment(myTeam.n)
       : undefined
     : user?.login
 

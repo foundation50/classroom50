@@ -356,6 +356,32 @@ func ClassifyMembershipReadError(path, subject string, err error) error {
 	return fmt.Errorf("GET %s: %w", path, err)
 }
 
+// Account is one element of a GitHub account listing (org members, repo
+// collaborators). RoleName is the collaborators endpoint's permission level
+// (read/triage/write/maintain/admin); the members endpoints leave it empty.
+type Account struct {
+	Login    string `json:"login"`
+	ID       int64  `json:"id"`
+	RoleName string `json:"role_name"`
+}
+
+// ListAccounts walks an account-listing endpoint under the shared page cap,
+// classifying read failures for `subject` (a human label). `base` may already
+// carry a query such as a role or affiliation filter.
+func ListAccounts(client githubapi.Client, base, subject string) ([]Account, error) {
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+	return githubapi.PaginateAll[Account](client, githubapi.ListPerPage, githubapi.ListMaxPages,
+		func(page int) string {
+			return fmt.Sprintf("%s%sper_page=%d&page=%d", base, sep, githubapi.ListPerPage, page)
+		},
+		func(path string, err error) error {
+			return ClassifyMembershipReadError(path, subject, err)
+		})
+}
+
 // HasOrgAdminScope: X-OAuth-Scopes contains admin:org.
 func HasOrgAdminScope(scopes string) bool {
 	return validate.ScopeListContains(scopes, "admin:org")
