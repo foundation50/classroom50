@@ -33,17 +33,9 @@ type sharedCases struct {
 		Name     string `json:"name"`
 	} `json:"default_name"`
 	Cases []struct {
-		Name   string `json:"name"`
-		Roster []struct {
-			Username  string `json:"username"`
-			FirstName string `json:"first_name"`
-			LastName  string `json:"last_name"`
-			Email     string `json:"email"`
-			Section   string `json:"section"`
-			GitHubID  string `json:"github_id"`
-			Role      string `json:"role"`
-		} `json:"roster"`
-		Groups []struct {
+		Name      string `json:"name"`
+		RosterCSV string `json:"roster_csv"`
+		Groups    []struct {
 			Group    string `json:"group"`
 			Name     string `json:"name"`
 			TeamSlug string `json:"team_slug"`
@@ -80,17 +72,11 @@ func TestBuildRows_SharedCases(t *testing.T) {
 	}
 	for _, c := range doc.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			// The fixture carries raw roster.csv cells; run them through the
+			// The fixture carries raw roster.csv text; run it through the
 			// production reader the command uses, so the oracle also pins how a
-			// padded, zero-padded, or unparsable cell reaches the builder.
-			var rosterCSV bytes.Buffer
-			w := csv.NewWriter(&rosterCSV)
-			_ = w.Write(configrepo.RosterColumns)
-			for _, r := range c.Roster {
-				_ = w.Write([]string{r.Username, r.FirstName, r.LastName, r.Email, r.Section, r.GitHubID, r.Role})
-			}
-			w.Flush()
-			roster, err := configrepo.ParseRosterLenient(rosterCSV.Bytes())
+			// padded, zero-padded, unparsable, short, or overlong cell reaches
+			// the builder, and that the web's reader admits the same students.
+			roster, err := configrepo.ParseRosterLenient([]byte(c.RosterCSV))
 			if err != nil {
 				t.Fatalf("ParseRosterLenient: %v", err)
 			}

@@ -1,5 +1,6 @@
 import Papa from "papaparse"
 
+import type { GroupRepo } from "@/domain/submissions/dashboard"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { GitHubUser } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
@@ -128,7 +129,7 @@ export function groupMembershipSources(input: {
   isTeamAssignment: boolean
   teamByOwner: ReadonlyMap<string, GroupTeamRef>
   teamMembersBySlug: ReadonlyMap<string, readonly GitHubUser[]>
-  groupRepoList: readonly { owner: string; repoName: string }[]
+  groupRepoList: readonly GroupRepo[]
   groupCollabByRepo: ReadonlyMap<string, readonly GitHubUser[]>
 }): GroupMembershipSource[] {
   if (input.isTeamAssignment) {

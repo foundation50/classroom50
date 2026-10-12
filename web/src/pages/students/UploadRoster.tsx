@@ -21,7 +21,7 @@ import {
 import { logger } from "@/lib/logger"
 import { errorText } from "@/types/localizedMessage"
 import { decodeTextFile } from "@/util/fileBytes"
-import { downloadBlob } from "@/util/downloadBlob"
+import { downloadCsv } from "@/util/downloadBlob"
 import { isTeacherRole } from "@/authz"
 import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import {
@@ -895,12 +895,7 @@ const UploadRoster = ({
                     // The whole drop zone opens the file picker on click;
                     // downloading the template must not also do that.
                     e.stopPropagation()
-                    downloadBlob(
-                      new Blob([ROSTER_TEMPLATE_CSV], {
-                        type: "text/csv;charset=utf-8",
-                      }),
-                      "roster-template.csv",
-                    )
+                    downloadCsv(ROSTER_TEMPLATE_CSV, "roster-template.csv")
                   }}
                 >
                   <DownloadIcon aria-hidden="true" className="size-4" />

@@ -1,5 +1,5 @@
 {
-  "_comment": "Cross-language oracle for the group-membership export. cli/gh-teacher/internal/groupcmd (buildRows + defangCells) and web/src/domain/submissions/groupMembershipCsv.ts (buildGroupMembershipCsvRows) must both reproduce every case's `rows` byte for byte, in `columns` order, and both must map `default_name` inputs to its outputs. Members carry an optional GitHub `id`; `fallback: true` marks a member derived from the repository name (a legacy founder) rather than a live read; `members: null` is an unreadable group, `[]` a group with no members yet. Roster `github_id` cells are the raw roster.csv text: both readers resolve a zero-padded id and treat anything non-numeric as unresolved.",
+  "_comment": "Cross-language oracle for the group-membership export. cli/gh-teacher/internal/groupcmd (buildRows + defangCells) and web/src/domain/submissions/groupMembershipCsv.ts (buildGroupMembershipCsvRows) must both reproduce every case's `rows` byte for byte, in `columns` order, and both must map `default_name` inputs to its outputs. `roster_csv` is the raw roster.csv text: each side feeds it through the production reader its export uses (Go configrepo.ParseRosterLenient; web Papa with the csvFileQuery options plus toStudent), so the oracle also pins how a padded, zero-padded, unparsable, short, or overlong cell reaches the builder and that the two readers admit the same students. Members carry an optional GitHub `id`; `fallback: true` marks a member derived from the repository name (a legacy founder) rather than a live read; `members: null` is an unreadable group, `[]` a group with no members yet.",
   "columns": [
     "group",
     "group_name",
@@ -36,71 +36,7 @@
   "cases": [
     {
       "name": "roster join, id-first resolution, dedupe, natural group and member order",
-      "roster": [
-        {
-          "username": "alice",
-          "first_name": "Alice",
-          "last_name": "Ada",
-          "email": "alice@x.edu",
-          "section": "A",
-          "github_id": "1",
-          "role": "student"
-        },
-        {
-          "username": "bob",
-          "first_name": "Bob",
-          "last_name": "Babbage",
-          "email": "bob@x.edu",
-          "section": "B",
-          "github_id": "2",
-          "role": "student"
-        },
-        {
-          "username": "Cat",
-          "first_name": "Cat",
-          "last_name": "Curry",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "ta"
-        },
-        {
-          "username": "jdoe10",
-          "first_name": "",
-          "last_name": "",
-          "email": "",
-          "section": "",
-          "github_id": "10",
-          "role": "student"
-        },
-        {
-          "username": "jdoe9",
-          "first_name": "",
-          "last_name": "",
-          "email": "",
-          "section": "",
-          "github_id": "9",
-          "role": "student"
-        },
-        {
-          "username": "jsmith10",
-          "first_name": "Jo",
-          "last_name": "Smith",
-          "email": "",
-          "section": "",
-          "github_id": "110",
-          "role": "student"
-        },
-        {
-          "username": "jsmith2",
-          "first_name": "Jo",
-          "last_name": "Smith",
-          "email": "",
-          "section": "",
-          "github_id": "102",
-          "role": "student"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\nalice,Alice,Ada,alice@x.edu,A,1,student\nbob,Bob,Babbage,bob@x.edu,B,2,student\nCat,Cat,Curry,,,,ta\njdoe10,,,,,10,student\njdoe9,,,,,9,student\njsmith10,Jo,Smith,,,110,student\njsmith2,Jo,Smith,,,102,student\n",
       "groups": [
         {
           "group": "group-10",
@@ -358,80 +294,7 @@
     },
     {
       "name": "non-ASCII names order by code point on both surfaces, not by locale",
-      "roster": [
-        {
-          "username": "aa",
-          "first_name": "Anders",
-          "last_name": "Ångström",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "ef",
-          "first_name": "Éric",
-          "last_name": "Fabre",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "zz",
-          "first_name": "Zoe",
-          "last_name": "Zed",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "ee",
-          "first_name": "Émile",
-          "last_name": "Éclair",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "inan",
-          "first_name": "Ayşe",
-          "last_name": "İnan",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "iyigun",
-          "first_name": "Can",
-          "last_name": "Iyigun",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "ody",
-          "first_name": "",
-          "last_name": "ΟΔΥΣΣΕΥΣ",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "odz",
-          "first_name": "",
-          "last_name": "οδυσσευσ",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\naa,Anders,Ångström,,,,student\nef,Éric,Fabre,,,,student\nzz,Zoe,Zed,,,,student\nee,Émile,Éclair,,,,student\ninan,Ayşe,İnan,,,,student\niyigun,Can,Iyigun,,,,student\nody,,ΟΔΥΣΣΕΥΣ,,,,student\nodz,,οδυσσευσ,,,,student\n",
       "groups": [
         {
           "group": "group-1",
@@ -627,26 +490,7 @@
     },
     {
       "name": "keys that are natural-equal but byte-different fall through to the login on both surfaces",
-      "roster": [
-        {
-          "username": "b-login",
-          "first_name": "Team 01",
-          "last_name": "",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        },
-        {
-          "username": "a-login",
-          "first_name": "Team 1",
-          "last_name": "",
-          "email": "",
-          "section": "",
-          "github_id": "",
-          "role": "student"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\nb-login,Team 01,,,,,student\na-login,Team 1,,,,,student\n",
       "groups": [
         {
           "group": "group-1",
@@ -698,17 +542,7 @@
     },
     {
       "name": "legacy group: blank team block, founder dedupes onto id-bearing collaborator, lowercased unrostered login",
-      "roster": [
-        {
-          "username": "alice",
-          "first_name": "Alice",
-          "last_name": "Ada",
-          "email": "alice@x.edu",
-          "section": "A",
-          "github_id": "1",
-          "role": "student"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\nalice,Alice,Ada,alice@x.edu,A,1,student\n",
       "groups": [
         {
           "group": "alice",
@@ -766,17 +600,7 @@
     },
     {
       "name": "legacy founder renamed after a roster sync: the repo-name login is not a second member",
-      "roster": [
-        {
-          "username": "ada-lovelace",
-          "first_name": "Alice",
-          "last_name": "Ada",
-          "email": "alice@x.edu",
-          "section": "A",
-          "github_id": "1",
-          "role": "student"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\nada-lovelace,Alice,Ada,alice@x.edu,A,1,student\n",
       "groups": [
         {
           "group": "alice",
@@ -842,26 +666,7 @@
     },
     {
       "name": "roster cells are trimmed, a blank login is skipped, and the first duplicate roster row wins",
-      "roster": [
-        {
-          "username": " alice ",
-          "first_name": " Alice ",
-          "last_name": " Ada ",
-          "email": " alice@x.edu ",
-          "section": " A ",
-          "github_id": " 1 ",
-          "role": " student "
-        },
-        {
-          "username": "ALICE",
-          "first_name": "Dup",
-          "last_name": "Row",
-          "email": "",
-          "section": "",
-          "github_id": "1",
-          "role": "student"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\n alice , Alice , Ada , alice@x.edu , A , 1 , student \nALICE,Dup,Row,,,1,student\n",
       "groups": [
         {
           "group": "group-1",
@@ -899,26 +704,7 @@
     },
     {
       "name": "github_id is written canonically: zero-padded resolves, formula-shaped or non-numeric is blank",
-      "roster": [
-        {
-          "username": "padded",
-          "first_name": "",
-          "last_name": "",
-          "email": "",
-          "section": "",
-          "github_id": "007",
-          "role": "student"
-        },
-        {
-          "username": "evil",
-          "first_name": "",
-          "last_name": "",
-          "email": "",
-          "section": "",
-          "github_id": "=99",
-          "role": "student"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\npadded,,,,,007,student\nevil,,,,,=99,student\n",
       "groups": [
         {
           "group": "group-1",
@@ -971,17 +757,7 @@
     },
     {
       "name": "formula-shaped cells are neutralized, the enum columns are byte-exact",
-      "roster": [
-        {
-          "username": "=evil",
-          "first_name": "=first",
-          "last_name": "-last",
-          "email": "+e@x.edu",
-          "section": "@S",
-          "github_id": "42",
-          "role": "-role"
-        }
-      ],
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\n=evil,=first,-last,+e@x.edu,@S,42,-role\n",
       "groups": [
         {
           "group": "=cmd()",
@@ -1009,6 +785,79 @@
           "'@S",
           "42",
           "'-role",
+          "yes",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "rows the web reader admits join on the CLI too: a dropped trailing cell, an overlong cell, a bare quote",
+      "roster_csv": "username,first_name,last_name,email,section,github_id,role\nshort,Sho,Rt,short@x.edu,A,1\nlong,Lo,Ng,,xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,2,student\nquote,Qu,O\"Te,,,3,student\n",
+      "groups": [
+        {
+          "group": "group-1",
+          "name": "Tolerant",
+          "team_slug": "slug-1",
+          "repo": "",
+          "members": [
+            {
+              "login": "short",
+              "id": 1
+            },
+            {
+              "login": "long",
+              "id": 2
+            },
+            {
+              "login": "quote",
+              "id": 3
+            }
+          ]
+        }
+      ],
+      "rows": [
+        [
+          "group-1",
+          "Tolerant",
+          "slug-1",
+          "",
+          "long",
+          "Lo",
+          "Ng",
+          "",
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "2",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-1",
+          "Tolerant",
+          "slug-1",
+          "",
+          "quote",
+          "Qu",
+          "O\"Te",
+          "",
+          "",
+          "3",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-1",
+          "Tolerant",
+          "slug-1",
+          "",
+          "short",
+          "Sho",
+          "Rt",
+          "short@x.edu",
+          "A",
+          "1",
+          "",
           "yes",
           ""
         ]

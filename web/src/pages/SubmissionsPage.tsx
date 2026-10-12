@@ -98,6 +98,7 @@ import {
   teamsWithoutRepos,
   unsubmittedGroupRepos,
   withSnapshotDetected,
+  type GroupRepo,
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/domain/submissions/dashboard"
@@ -160,7 +161,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubLink } from "@/components/GitHubLink"
 
 // Stable empty list for the disabled legacy collaborators fan-out (team mode).
-const EMPTY_GROUP_REPOS: { owner: string; repoName: string }[] = []
+const EMPTY_GROUP_REPOS: GroupRepo[] = []
 
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()

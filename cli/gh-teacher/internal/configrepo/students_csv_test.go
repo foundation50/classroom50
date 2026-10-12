@@ -1790,6 +1790,150 @@ func TestParseRosterLenient_PreservesWrongFieldCount(t *testing.T) {
 	}
 }
 
+// A row short by exactly one cell is a dropped trailing field, which the web
+// reads as a normal student. The lenient reader pads it so the two tools join
+// the same students, and a rewrite emits it at full width.
+func TestParseRosterLenient_PadsRowShortByOne(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,A,alice@example.edu,s1,12345\n" + // role omitted
+		"bob,Bob,B,bob@example.edu,s1,2,student\n")
+
+	if _, err := ParseRoster(in); err == nil {
+		t.Fatal("strict ParseRoster must still reject the short row")
+	}
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if len(rows) != 2 || rows[0].isRaw() {
+		t.Fatalf("want alice parsed (not raw) + bob, got %#v", rows)
+	}
+	if rows[0].Username != "alice" || rows[0].GitHubID != 12345 || rows[0].Role != "" {
+		t.Errorf("alice should parse with an empty role, got %#v", rows[0])
+	}
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	want := "username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,A,alice@example.edu,s1,12345,\n" +
+		"bob,Bob,B,bob@example.edu,s1,2,student\n"
+	if string(encoded) != want {
+		t.Fatalf("rewrite should widen the row.\ngot:\n%s\nwant:\n%s", encoded, want)
+	}
+}
+
+// A cell over maxFieldBytes is refused on import but already sits in a stored
+// file; the web reads that row, so the lenient reader keeps it as a student
+// (not a raw row) and writes it back unchanged.
+func TestParseRosterLenient_KeepsOverlongCell(t *testing.T) {
+	long := strings.Repeat("x", maxFieldBytes+1)
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,A,alice@example.edu," + long + ",12345,student\n")
+
+	if _, err := ParseRoster(in); err == nil {
+		t.Fatal("strict ParseRoster must still reject an overlong cell")
+	}
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if len(rows) != 1 || rows[0].isRaw() || rows[0].Username != "alice" || rows[0].Section != long {
+		t.Fatalf("want alice parsed with the long section kept, got %#v", rows)
+	}
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	if !bytes.Equal(encoded, in) {
+		t.Fatalf("round-trip changed the file.\ngot:\n%s\nwant:\n%s", encoded, in)
+	}
+}
+
+// A github_id cell that does not parse as a number stays on the row unresolved
+// (so `roster add` sees the student rather than appending a duplicate) and is
+// defanged on rewrite like every other free-text cell: before #1076 the same
+// row was preserved raw, and the raw path has always neutralized `=99`.
+func TestParseRosterLenient_KeepsUnparsableGitHubID(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A,,s,=99,student\n" +
+		"bob,B,B,,s,nope,student\n")
+
+	if _, err := ParseRoster(in); err == nil || !strings.Contains(err.Error(), "invalid github_id") {
+		t.Fatalf("strict ParseRoster should reject the cell, got %v", err)
+	}
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows, got %#v", rows)
+	}
+	for i, want := range []struct{ user, raw string }{{"alice", "=99"}, {"bob", "nope"}} {
+		r := rows[i]
+		if r.isRaw() || r.Username != want.user || r.GitHubID != 0 || r.githubIDRaw != want.raw {
+			t.Errorf("row %d: want %s unresolved with cell %q kept, got %#v", i, want.user, want.raw, r)
+		}
+	}
+
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	want := "username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A,,s,'=99,student\n" +
+		"bob,B,B,,s,nope,student\n"
+	if string(encoded) != want {
+		t.Fatalf("rewrite must defang the formula cell.\ngot:\n%s\nwant:\n%s", encoded, want)
+	}
+
+	// The defanged cell re-reads as the same unresolved row, so a second
+	// rewrite is a no-op rather than adding another quote.
+	rows2, err := ParseRosterLenient(encoded)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient (re-read): %v", err)
+	}
+	if rows2[0].GitHubID != 0 || rows2[0].githubIDRaw != "'=99" || rows2[0].Username != "alice" {
+		t.Fatalf("re-read shape changed: %#v", rows2[0])
+	}
+	again, err := EncodeRoster(rows2)
+	if err != nil {
+		t.Fatalf("EncodeRoster (again): %v", err)
+	}
+	if !bytes.Equal(again, encoded) {
+		t.Fatalf("second rewrite changed the file.\ngot:\n%s\nwant:\n%s", again, encoded)
+	}
+}
+
+// A bare quote inside a cell (`O"Neil`) used to make encoding/csv return no
+// record, and the lenient reader skipped it, so the next rewrite deleted that
+// student. The lenient reader now accepts it as the web does and both rows
+// survive a rewrite.
+func TestParseRosterLenient_KeepsRowWithBareQuote(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,O\"Neil,alice@example.edu,s1,1,student\n" +
+		"bob,Bob,B,bob@example.edu,s1,2,student\n")
+
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if len(rows) != 2 || rows[0].isRaw() || rows[0].LastName != `O"Neil` || rows[1].Username != "bob" {
+		t.Fatalf("want alice (with the quote) + bob, got %#v", rows)
+	}
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	round, err := ParseRosterLenient(encoded)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient (re-read): %v", err)
+	}
+	if len(round) != 2 || round[0].LastName != `O"Neil` || round[1].Username != "bob" {
+		t.Fatalf("rewrite lost a student or the quote: %#v", round)
+	}
+}
+
 // TestClaimPendingEmailRow: the acceptance fold is borrow-only — it contributes
 // identity and touches nothing a teacher owns.
 func TestClaimPendingEmailRow(t *testing.T) {

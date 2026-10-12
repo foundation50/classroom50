@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { GitHubUser } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
+import { parseCsvRows } from "@/util/csv"
 import { groupExportName } from "@/util/groupTeam"
+import { toStudent } from "@/util/roster"
 import {
   GROUP_MEMBERSHIP_CSV_COLUMNS,
   GROUP_MEMBERSHIP_NOTE_UNREADABLE,
@@ -31,7 +33,7 @@ const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
   default_name: { recorded: string; counter: number; name: string }[]
   cases: {
     name: string
-    roster: Student[]
+    roster_csv: string
     groups: {
       group: string
       name: string
@@ -59,6 +61,10 @@ describe("buildGroupMembershipCsvRows (shared cases)", () => {
 
   for (const c of doc.cases) {
     it(c.name, () => {
+      // The fixture carries raw roster.csv text; read it the way the page does
+      // (csvFileQuery's Papa options, then toStudent), so the oracle also pins
+      // that this reader and the CLI's lenient reader admit the same students.
+      const roster = parseCsvRows<Student>(c.roster_csv).map(toStudent)
       const rows = buildGroupMembershipCsvRows(
         c.groups.map((g) => ({
           group: g.group,
@@ -67,7 +73,7 @@ describe("buildGroupMembershipCsvRows (shared cases)", () => {
           repoName: g.repo || undefined,
           members: g.members ?? undefined,
         })),
-        c.roster,
+        roster,
       )
       // Every row carries every column, in contract order.
       for (const row of rows) {

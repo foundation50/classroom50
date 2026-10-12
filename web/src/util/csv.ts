@@ -1,3 +1,5 @@
+import Papa from "papaparse"
+
 // Neutralize spreadsheet formula injection (OWASP CSV injection) in a free-text
 // cell that an untrusted party can influence. A value leading with = + - @ (or a
 // tab/CR a spreadsheet treats as a formula lead) is prefixed with a single quote
@@ -39,4 +41,19 @@ const HEADER_EDGE = /^[\s\u0085]+|[\s\u0085]+$/g
 
 export function trimCsvHeader(header: string): string {
   return header.replace(HEADER_EDGE, "")
+}
+
+// The tolerant read behind every CSV file query (roster.csv included): header
+// mode, trimmed header names and cells, empty lines dropped. Papa maps a short
+// row positionally and leaves its missing trailing cells undefined for the
+// caller's normalizer, so a roster row missing its last cell still reads as a
+// student; the CLI's lenient reader admits the same rows. The group export
+// fixture test feeds its rosters through this exact function.
+export function parseCsvRows<T>(raw: string): T[] {
+  return Papa.parse<T>(raw, {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: trimCsvHeader,
+    transform: (value: string) => value.trim(),
+  }).data
 }

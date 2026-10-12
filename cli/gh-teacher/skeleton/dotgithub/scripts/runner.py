@@ -1823,13 +1823,15 @@ def _run_command(command: str, cwd: pathlib.Path, timeout: int,
 
 def _partial_stream(data: bytes | str | None) -> str:
     """The output a TimeoutExpired carries from before the kill. CPython hands
-    it back as bytes even under text=True, so decode it the way _run_command
-    would have."""
+    it back as raw bytes even under text=True, skipping both the decode and the
+    universal-newline translation communicate() applies, so do both here: a
+    program's `\\r` progress line must render the same whether it finished or
+    timed out."""
     if data is None:
         return ""
     if isinstance(data, bytes):
-        return data.decode("utf-8", errors="replace")
-    return data
+        data = data.decode("utf-8", errors="replace")
+    return data.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _timeout_outcome(name: str, points: int, timeout: int,

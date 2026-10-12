@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import type { GroupRepo } from "@/domain/submissions/dashboard"
 import {
   githubKeys,
   REPO_READ_CONCURRENCY,
@@ -10,8 +11,6 @@ import {
 } from "@/github-core/queries"
 import type { GitHubUser } from "@/github-core/types"
 import { mapWithConcurrency } from "@/util/concurrency"
-
-type GroupRepoRef = { owner: string; repoName: string }
 
 type GroupRepoMembers = {
   logins: Set<string>
@@ -34,7 +33,7 @@ type GroupRepoMembers = {
 // load, cached 1 min like the modal's own fetch.
 export function useGroupRepoMemberLogins(
   org: string,
-  repos: GroupRepoRef[],
+  repos: GroupRepo[],
 ): GroupRepoMembers & { isPending: boolean } {
   const client = useGitHubClient()
   const queryClient = useQueryClient()

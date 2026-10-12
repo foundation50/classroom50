@@ -482,19 +482,24 @@ var (
 	teacherFileTimeout = 15 * time.Second
 	// Slowest link a blob read is sized for. Scales the blob deadline so a
 	// multi-MB template file on campus Wi-Fi does not trip a timeout meant
-	// for small inline reads, while a stalled connection still fails fast.
+	// for small inline reads. The deadline bounds the whole GET, not progress
+	// between bytes, so a connection that stalls mid-transfer fails at the
+	// scaled deadline rather than the 15 s base.
 	blobTransferFloorBytesPerSec int64 = 256 * 1024
 	// Post-push ls-remote probe + tag push.
 	submitTagTimeout = 30 * time.Second
 	// Ceiling on clone + push. gitexec's stall detector is HTTPS-only, so this
-	// is the SSH backstop; generous so a slow transfer never trips it.
+	// is the SSH backstop; generous so a slow transfer never trips it. Equal to
+	// ghauth.RequestCeiling (pinned by a test) so the blob deadline below is
+	// never silently cut short by the REST client.
 	gitNetworkTimeout = 10 * time.Minute
 )
 
 // blobReadTimeout sizes the deadline for a git-blobs read to the file:
 // teacherFileTimeout plus the time the base64 wire payload (4/3 of size)
 // takes at blobTransferFloorBytesPerSec, capped at gitNetworkTimeout. An
-// unknown size (0) keeps the base deadline.
+// unknown size (0) keeps the base deadline. The REST client honors a request's
+// own deadline up to ghauth.RequestCeiling, so every value here is reachable.
 func blobReadTimeout(size int64) time.Duration {
 	if size <= 0 {
 		return teacherFileTimeout
@@ -637,7 +642,7 @@ func fetchRepoPath(
 		case file.SHA != "":
 			decoded, err = fetchBlob(ctx, client, owner, repo, file.SHA, file.Size)
 			if err != nil {
-				return fmt.Errorf("%s is too large for the contents API and the blob read failed: %w", path, err)
+				return fmt.Errorf("could not download the teacher's file %s (it is over 1 MB); check your connection and try again, or ask your teacher: %w", path, err)
 			}
 		default:
 			return fmt.Errorf("unsupported encoding %q for %s", file.Encoding, path)

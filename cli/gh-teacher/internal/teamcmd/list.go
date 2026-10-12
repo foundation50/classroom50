@@ -63,13 +63,17 @@ func runTeamList(client githubapi.Client, out io.Writer, scope cliutil.Assignmen
 
 	w := tabwriter.NewWriter(out, 2, 8, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "GROUP\tNAME\tMEMBERS\tSIZE\tDRIFT")
+	// The team name is student-chosen and logins are GitHub-controlled, so
+	// both go through output.Printable (as `group list` does) so a control
+	// character cannot forge a row or emit a terminal escape.
+	cell := func(s string) string { return output.Printable(output.DashIfEmpty(s)) }
 	for _, team := range teams {
 		record, hasRecord := recorded[team.Slug]
 		delete(recorded, team.Slug)
 		logins := team.Logins()
 		drift := describeDrift(logins, record.Members, hasRecord)
 		_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%d/%d\t%s\n",
-			team.Counter, output.DashIfEmpty(team.Record.Name), output.DashIfEmpty(strings.Join(logins, ", ")),
+			team.Counter, cell(team.Record.Name), cell(strings.Join(logins, ", ")),
 			len(logins), ctx.Entry.MaxGroupSize, drift)
 	}
 	// Snapshot rows with no live team are the other drift direction.
