@@ -88,7 +88,7 @@ scripts.
 <summary>What <code>init</code> configures</summary>
 
 `init` applies a least-privilege lockdown of organization member privileges (the
-only member capabilities left on are private-repo creation, so `gh student
+only member capabilities left on are private-repository creation, so `gh student
 accept` works, public Pages creation, so the `classroom50` repository can
 publish, and team creation, for student-formed groups), enables GitHub Actions,
 sets a $0 Actions budget cap when the org has none, creates the private
@@ -98,17 +98,17 @@ protects the default branch, raises workflow token permissions, allows
 reusable-workflow access, and uploads the service token secret.
 
 This lockdown is what makes it safe for `gh student accept` to give students
-broad access to their own repository: accept creates the repo with the student
+broad access to their own repository: accept creates the repository with the student
 as its creator, then grants them **push** (a legacy `group` founder keeps
 admin, which they need to manage collaborators), and the organization-level
-locks remove the dangerous repo-admin powers (delete, transfer, visibility
+locks remove the dangerous repository-admin powers (delete, transfer, visibility
 change) org-wide.
 
 </details>
 
 ### Create the service token
 
-`init` provisions a repo secret named `CLASSROOM50_SERVICE_TOKEN`, used by the
+`init` provisions a repository secret named `CLASSROOM50_SERVICE_TOKEN`, used by the
 score-collection, regrade, and token-probe workflows. Create it from **your
 own** GitHub account (there's no separate service account) and scope it tightly
 to this organization.
@@ -119,9 +119,9 @@ click **Fine-grained tokens**, then click **Generate new token**:
 
 1. **Token name**: `classroom50-<org>`, for example.
 2. **Resource owner**: select **the organization**. This is critical: the token
-   can only reach repos owned by the resource owner you pick.
+   can only reach repositories owned by the resource owner you pick.
 3. **Expiration**: up to 1 year. Set a reminder to rotate it.
-4. **Repository access**: **All repositories**. Student repos are created on
+4. **Repository access**: **All repositories**. Student repositories are created on
    demand, so "Only select repositories" silently misses them.
 5. **Repository permissions**: **Contents: Read and write**, **Actions: Read
    and write**, **Workflows: Read and write**, **Administration: Read and
@@ -249,7 +249,7 @@ teams. Run it once per classroom; you can have several side by side.
   unarchive` restores it. See
   [`classroom archive`](gh-teacher#classroom-archive--unarchive).
 - Delete: `gh teacher classroom remove <org> <short-name>` removes the config
-  directory and the classroom's teams, but **not** student repos.
+  directory and the classroom's teams, but **not** student repositories.
 
 ## 5. Invite students
 
@@ -370,7 +370,7 @@ gh teacher roster remove <org> <classroom> <email>     # drop a dead pending row
 > [!NOTE]
 > This does **not** remove organization membership; use `gh teacher remove`
 > (step 8) for that. Splitting the two is deliberate: a roster edit shouldn't be
-> able to revoke a student's access to every repo in the organization.
+> able to revoke a student's access to every repository in the organization.
 
 The email form is for the pending row a lapsed invitation leaves behind (see
 [Syncing the roster](#syncing-the-roster-with-github)). It refuses while GitHub
@@ -589,13 +589,13 @@ slug is too long.
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest and Python 3.14. See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
 | `--tests <path>` | Declarative tests as a bare JSON array or the generated `tests.json` envelope (or `-` for stdin). Sets the whole `tests` block at once when creating an assignment; to change only the tests later, use `assignment test set`. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
-| `--feedback-pr` | One long-lived feedback PR per student repo for inline review. On by default; `--feedback-pr=false` disables. |
-| `--empty-repo` | Truly bare student repos (no README, marker, or autograde workflow) for students who build everything from scratch. Disables autograding and the feedback PR. |
+| `--feedback-pr` | One long-lived feedback PR per student repository for inline review. On by default; `--feedback-pr=false` disables. |
+| `--empty-repo` | Truly bare student repositories (no README, marker, or autograde workflow) for students who build everything from scratch. Disables autograding and the feedback PR. |
 | `--allowed-files <pattern>` | Repeatable `.gitignore`-style pattern defining which files belong to the submission; the runner removes everything else before grading. See [Restricting submission files](Advanced-Autograding#restricting-submission-files-allowed_files). |
-| `--student-permission <role>` | Role each student gets on their own repo at accept (`pull`, `triage`, `push`, `maintain`, `admin`). Default `push` for individual, `admin` for group. |
+| `--student-permission <role>` | Role each student gets on their own repository at accept (`pull`, `triage`, `push`, `maintain`, `admin`). Default `push` for individual, `admin` for group. |
 | `--repo-visibility private\|public` | Visibility each student repo is created with. Default `private`; `public` warns students upfront that their work is visible to anyone. Public repos aren't autograded (GitHub blocks them from running the grading workflow in the private `classroom50` repository); keep repos private while grading. |
 | `--pages off\|workflow\|branch` | GitHub Pages site configured on each student repo at accept, so students never need admin to publish. `workflow` deploys through a GitHub Actions workflow in the student repo (from the template, or added by the student); `branch` publishes a branch directly (see `--pages-branch` and `--pages-path`). Pages on private repos needs a plan that includes it; on GitHub Free for organizations, pair it with `--repo-visibility public` (public repos aren't autograded). Not with `--empty-repo`. |
-| `--pages-branch <name>` | With `--pages branch`: the branch GitHub publishes. Omit for each repo's default branch. |
+| `--pages-branch <name>` | With `--pages branch`: the branch GitHub publishes. Omit for each repository's default branch. |
 | `--pages-path /\|/docs` | With `--pages branch`: the folder GitHub publishes. Default `/`. |
 | `--pass-threshold <0-100>` | Advisory passing bar shown on the submissions page. Off when omitted. |
 | `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag), so regular pushes cost no Actions minutes: the cost lever for large classrooms. |
@@ -684,9 +684,9 @@ gh teacher assignment submission-mode <org> <classroom> <slug> --tag          # 
 gh teacher assignment submission-mode <org> <classroom> <slug> --every-push   # back to grading every push
 ```
 
-The trigger lives in each student repo's workflow file (set at accept time),
+The trigger lives in each student repository's workflow file (set at accept time),
 so this command both flips the assignment field and rewrites the workflow
-across existing student repos, idempotently, with a `[skip ci]` commit that
+across existing student repositories, idempotently, with a `[skip ci]` commit that
 doesn't trigger grading. Hand-edited workflows are reported and left
 untouched. Tell students to `git pull` afterward. See
 [`assignment submission-mode`](gh-teacher#assignment-submission-mode) for
@@ -715,7 +715,7 @@ command to heal failures). Students run `git pull` once before their next
 gh teacher assignment remove <org> <classroom> <slug>
 ```
 
-This does **not** touch existing student repos; only new `gh student accept`
+This does **not** touch existing student repositories; only new `gh student accept`
 calls stop finding the slug.
 
 **List assignments:**
@@ -781,7 +781,7 @@ gh teacher remove <org> <username>           # remove from the organization
 gh teacher remove <org>/<repo> <username>    # remove from one repo
 ```
 
-The org form revokes access to every repo, removes the user from all teams, and
+The org form revokes access to every repository, removes the user from all teams, and
 cancels any pending invitation. Both forms are idempotent.
 
 **Check who's actually a member** (the roster is the *intended* list; this is
@@ -796,13 +796,13 @@ gh teacher member list <org>/<repo>  # repo collaborators
 
 Every submission publishes a GitHub Release carrying a `result.json`. The
 `collect-scores` workflow walks each `(member, assignment)` pair in scope,
-collects each repo's submissions, and aggregates them into
+collects each repository's submissions, and aggregates them into
 `<classroom>/scores.json`, the classroom's authoritative score record. By
 default the scope is every classroom and every assignment; you can narrow it to
 one classroom, or to a single assignment (see below). Members are the union of
 the student team and the staff teams (teacher/hta/ta), so a staff member who
 accepted an assignment to test the autograde flow is collected like a student;
-staff who never accepted have no repo and produce no entry.
+staff who never accepted have no repository and produce no entry.
 
 Run it from the **Actions** tab on `<org>/classroom50`, with the web app's
 per-assignment **Collect now** button, or from your shell. Scores refresh only
@@ -814,7 +814,7 @@ gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=cs-pri
 gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=cs-principles -f assignment=hello   # one assignment
 ```
 
-An `assignment=` run walks only that assignment's repos, which is much faster
+An `assignment=` run walks only that assignment's repositories, which is much faster
 and lighter on API rate limits for a large classroom, and is exactly what the
 web app's per-assignment **Collect now** button dispatches. Each collected
 assignment's bucket in `scores.json` gets a `collected_at` UTC timestamp, so
@@ -831,14 +831,14 @@ skipped.
 1. Iterates each classroom (or only the one you passed).
 2. For each `(member, assignment)` pair (every student team member plus every
    staff team member, narrowed to one assignment when you passed
-   `assignment=`), computes the repo name
+   `assignment=`), computes the repository name
    `<classroom>-<assignment>-<username>` and walks its `submit/*` releases. No
    releases means the member hasn't accepted or submitted yet (a staff member
    who never accepted drops out here).
 3. Downloads and schema-validates each `result.json`, checking its identity
-   against the source repo (a hostile payload can't land in another student's
+   against the source repository (a hostile payload can't land in another student's
    scores). For a group assignment, it credits the group team's live rostered
-   members; for a legacy group assignment, it reads the repo's collaborators
+   members; for a legacy group assignment, it reads the repository's collaborators
    and records the credited members.
 4. Upserts the results into `scores.json`, newest first. If the assignment has a
    `due`, each submission is marked `late` or not. Entries flagged
@@ -860,8 +860,8 @@ commit. Later collection runs leave it alone.
 Collection credits the group team's live members who are on the classroom
 roster (recording the team slug with the entry); a group team it can't read is
 skipped, so the entry's previous credit is preserved rather than degraded. A
-**legacy group** assignment is graded once in the founder's repo: collection
-reads that repo's collaborators, keeps those on the classroom team, and
+**legacy group** assignment is graded once in the founder's repository: collection
+reads that repository's collaborators, keeps those on the classroom team, and
 credits each with the same score. See
 [Group attribution model](Autograding-Basics#group-attribution-model) for the
 full attribution model, and [Reading results](Autograding-Basics#reading-results)
@@ -876,9 +876,9 @@ gh teacher download <org> <classroom> <assignment>
 ```
 
 By default this is **team-driven**: it lists the classroom team's members, and
-for each one probes for the expected repo, clones it (or reports `Missing:
+for each one probes for the expected repository, clones it (or reports `Missing:
 <username>`), and refreshes `result.json` (latest submission) and `results.json`
-(all submissions) from the repo's releases.
+(all submissions) from the repository's releases.
 
 It then writes a `scores.csv` at the destination root, **one line per
 submission** (a student with several pushes contributes several lines), plus a
@@ -908,8 +908,8 @@ with git, or delete that folder and run again to clone it fresh.
 
 > [!NOTE]
 > **Unconfigured classrooms.** If the `classroom50` repository isn't bootstrapped, or you
-> want every matching repo regardless of the roster, pass `--by-pattern`. It
-> clones every repo whose name starts with `<classroom>-<assignment>-` and skips
+> want every matching repository regardless of the roster, pass `--by-pattern`. It
+> clones every repository whose name starts with `<classroom>-<assignment>-` and skips
 > the `result.json` refresh and `scores.csv` summary.
 
 ## Resetting a development organization

@@ -22,7 +22,7 @@ sections cover the upgrade.
 Organizations have their own plans, separate from any plan or benefit on
 your personal account. A teacher benefit on your account does not upgrade
 your organization by itself: you apply for the benefit first, then use it to
-upgrade the specific organization your classroom will live in.
+upgrade the specific organization that hosts your classroom.
 
 ## Getting the Team plan free through GitHub Education
 

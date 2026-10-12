@@ -334,7 +334,7 @@ To enroll students who are already org members:
 3. Select each student's row.
 4. Open the **Actions** menu, then click **Add to classroom**.
 5. Pick the destination classroom in the dialog, then click **Add**. The
-   dialog previews how many members will be added before you commit.
+   dialog previews how many members it adds before you commit.
 
 Uploading a **roster CSV** or a plain list of usernames on the **Roster** page
 also enrolls existing members: the invite is skipped, but they're still added to
@@ -584,6 +584,26 @@ Nothing destructive happened, so re-run once GitHub is healthy (check
 [GitHub status](https://www.githubstatus.com/)); if it was a rate limit, wait for
 the window to reset. In a script, treat `1` as "try again later" and `2` as "a dry
 run found changes pending". See [`roster sync`](gh-teacher#roster-sync).
+
+### `a cell contains a line break` or `would be read back as a valid row` on a roster command
+
+A `gh teacher` command that rewrites `roster.csv` (`roster add`, `roster sync
+--write`, `roster invite`) reads the stored file leniently, so one odd row never
+blocks the rest. It refuses two shapes, because rewriting them would turn a
+visible mistake into silent damage. Nothing is committed: fix the named line in
+`roster.csv`, then re-run.
+
+- `line N: a cell contains a line break, usually from an unmatched quote`: a
+  cell on that line opens a `"` and never closes it, usually from a hand edit.
+  Read that way, the cell swallows every later line of the file, so the students
+  below it would vanish from the roster and the rewrite would store the file in
+  that shape. Close or remove the quote.
+- `line N: malformed row has X fields, the same as or one short of the
+  rewritten N-column header`: the row has the wrong number of cells for the
+  file's own header, and under the rewritten header those cells would land under
+  the wrong columns (a name under `email`, an email under `section`) and read
+  back as a valid student. Add or remove cells until the row matches its header,
+  or delete the row.
 
 ### `invite-…` teams you didn't create
 
