@@ -139,8 +139,8 @@ organization is rejected (students can't be granted access, so accept would
 - **The template must have at least one commit.** A freshly created, commitless
   repository is rejected when you register the assignment: GitHub can't
   generate a copy of nothing. (A brand-new template with real commits can
-  briefly be misreported by GitHub right after a push; if a just-pushed
-  template is rejected, wait a minute and retry.)
+  briefly be misreported by GitHub right after a push; if a template you
+  pushed moments ago is rejected, wait a minute and retry.)
 - **Forked templates can trip other organizations' OAuth restrictions.** With a
   template that is a **fork of a repository in a different organization**,
   GitHub evaluates OAuth-app access restrictions against the fork's *parent*

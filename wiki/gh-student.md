@@ -14,7 +14,7 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 | `login` | Log in to GitHub with the scopes gh-student needs (`admin:org`, `read:org`, `repo`, `workflow`). `gh teacher login` requests the same set, so one sign-in covers both. |
 | `logout` | Log out of GitHub with `gh auth logout`. |
 | `accept <org> <classroom> <assignment>` | Accept an assignment from an organization's classroom: accept the organization invitation, create your assignment repository, and set up autograding. `--key` for an unlisted classroom; `--new-team` / `--team-name` create your group on a team assignment with student-formed groups. |
-| `invite <org>/<repo> <username>` | Invite a classmate or TA to push to your assignment repo. Not for team assignments; use `team add` there. |
+| `invite <org>/<repo> <username>` | Invite a classmate or TA to push to your assignment repository. Not for team assignments; use `team add` there. |
 | `team list <org> <classroom> <assignment>` | Show your group for a team assignment and who is on it. |
 | `team add <org> <classroom> <assignment> <username>` | Add a classmate to your group (founders only). |
 | `submit` | Submit your work on the current assignment. `--key` for an unlisted classroom when the repository has no `.classroom50.yaml`. |

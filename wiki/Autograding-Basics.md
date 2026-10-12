@@ -71,7 +71,7 @@ Two related, optional settings:
   actual score, and leaving it off turns the passing concept off.
 - **Do not use the built-in autograder** (`no_autograder`). Accept adds no
   Classroom 50 files at all (no autograding workflow, no `.classroom50.yaml`);
-  a template's own CI runs instead, a README repository simply has no
+  a template's own CI runs instead, a README repository has no
   autograder, and score collection records who submitted but no scores. Update
   the org's setup first if it was set up before 1.56 (the web app shows an
   update banner; the CLI is `gh teacher init <org>`), or the older collection
@@ -127,7 +127,7 @@ them when the block is absent); with a bare array it leaves them alone.
 
 #### Where tests live
 
-Two different files are easy to confuse:
+Don't confuse these two files:
 
 | File | Where | Shape | Who writes it |
 |---|---|---|---|

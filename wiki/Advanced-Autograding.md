@@ -553,11 +553,11 @@ score-collection, regrade, and token-probe workflows (`collect-scores.yaml`,
   the collected score for that submission, keeps the pre-regrade result. The
   runner leaves such a Release in place: deleting it would burn the tag name
   for good (GitHub never lets a deleted immutable release's tag be reused).
-- **Regrading a never-graded repo after a submission-mode change needs
+- **Regrading a never-graded repository after a submission-mode change needs
   `Workflows: Read and write` on the service token.** Changing the mode rewrites
-  each repo's autograde workflow, and GitHub refuses to let a token without
+  each repository's autograde workflow, and GitHub refuses to let a token without
   that permission tag a commit whose workflow file differs from the default
-  branch's. Regrade names the affected repos and the fix; alternatively the
+  branch's. Regrade names the affected repositories and the fix; alternatively the
   student pushes once.
 - **Pages CDN lag.** Updated content can take about 10 minutes to serve, so a
   submission in that window may fetch the previous `runner.py` or bundle.

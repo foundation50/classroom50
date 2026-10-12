@@ -386,7 +386,7 @@ graded.
   autograder** (preselected when you switch to Autograded) or **Do not use the
   built-in autograder**. Opting out means accept installs no autograding
   workflow at all: on a templated assignment your template's own CI workflows
-  run instead, and a README repository simply has no autograder. The
+  run instead, and a README repository has no autograder. The
   submissions page still shows who submitted (collection
   records submitters, but no scores), and the repository actions stay
   available. Your choice sticks: leaving Autograded and coming back won't
@@ -606,7 +606,7 @@ The upload checks every row before it changes anything:
 - Only a row with nothing usable at all is skipped; everyone else is imported.
 
 Re-uploading a roster is also how you recover invitations in bulk. The preview
-marks each email row with what will happen to it:
+marks each email row with what happens to it:
 
 - **Resend invitation (expired)** or **Resend invitation (not delivered)**:
   the previous invitation expired or couldn't be delivered, so a fresh one is
@@ -965,7 +965,7 @@ act on and applies only to those:
   organization. Each member is first unenrolled from every classroom they
   belong to, so no roster is left pointing at a non-member.
 
-Each dialog previews what will happen (how many members are affected, and why
+Each dialog previews the change (how many members are affected, and why
 any are skipped) before you confirm. Removals also require typing `confirm`,
 and the dialog warns when the selection includes organization owners or
 members enrolled in other classrooms.
@@ -1232,7 +1232,9 @@ columns. Each row carries:
   their GitHub account keeps their roster row.
 - `in_roster`: `no` for a collaborator or team member the roster doesn't
   know, so an extra account on a repository stands out. Such a member's
-  `username` is their lowercased GitHub login.
+  `username` is their lowercased GitHub login. A roster row with the wrong
+  number of cells (short by two or more, or with surplus cells) counts as
+  unknown too, in this export and in the CLI's, so the two files agree.
 - `note`: set when a group's membership could not be read, so it is never
   mistaken for an empty group.
 
@@ -1241,7 +1243,7 @@ members), not the last collected snapshot, so a group that hasn't submitted
 yet is included. The menu item stays disabled until the roster and every
 group's membership have loaded, and when the roster or the group list itself
 failed to load, so a reload is the fix rather than a file that marks everyone
-unrostered. If just one group's members could not be read, the download still
+unrostered. If only one group's members could not be read, the download still
 works: that group gets a single row with `membership could not be read` in the
 `note` column.
 `gh teacher group list --csv` writes the same file from the command line; see
@@ -1394,8 +1396,8 @@ repositories students already accepted:
    repositories whose workflow was hand-edited (those are left untouched), and
    skips students who haven't accepted. A single repository can also be updated
    from its row's manage dialog.
-3. Tell students to run `git pull`. Clones made before the update will
-   conflict on their next push.
+3. Tell students to run `git pull`. Clones made before the update conflict
+   on their next push.
 
 The bulk action is available to organization owners on individual assignments
 that use the built-in autograder (a custom autograder's workflow is yours to
