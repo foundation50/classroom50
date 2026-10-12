@@ -299,8 +299,9 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 // ParseRosterLenient is ParseRoster for the read-modify-write path: a malformed
 // data row (empty username, wrong field count) is preserved verbatim as a raw
 // RosterRow instead of aborting, so a write command can round-trip pre-existing
-// bad data. Header and empty-input errors still hard-fail — a broken header
-// can't be safely round-tripped.
+// bad data, and a row whose github_id does not parse is kept with the id
+// unresolved and the cell preserved. Header and empty-input errors still
+// hard-fail — a broken header can't be safely round-tripped.
 func ParseRosterLenient(data []byte) ([]RosterRow, error) {
 	return parseRoster(data, true)
 }
@@ -345,7 +346,7 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 			}
 			return nil, fmt.Errorf("line %d: %w", line, err)
 		}
-		row, err := recordToRow(record, layout, line)
+		row, err := recordToRow(record, layout, line, lenient)
 		if err != nil {
 			if lenient {
 				rows = append(rows, RosterRow{
@@ -364,8 +365,9 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 
 // recordToRow maps a data record onto a RosterRow through the header layout:
 // canonical cells by name (role "" when the header lacks it), extra cells into
-// Extra in header order.
-func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, error) {
+// Extra in header order. lenient keeps a row whose github_id does not parse
+// (see ParseRosterLenient); strict errors so an import cannot accept it.
+func recordToRow(record []string, layout rosterLayout, line int, lenient bool) (RosterRow, error) {
 	// Guard the width before indexing: lenient parsing leaves FieldsPerRecord
 	// unenforced, so a mis-widthed row reaches here — error (the caller
 	// preserves it raw) rather than panicking on an out-of-range index.
@@ -400,7 +402,7 @@ func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, err
 	}
 	if trimmed := strings.TrimSpace(githubIDCell); trimmed != "" {
 		id, err := parseGitHubID(trimmed)
-		if err != nil {
+		if err != nil && !lenient {
 			return RosterRow{}, fmt.Errorf("line %d: invalid github_id %q: %w", line, githubIDCell, err)
 		}
 		// id == 0 means readable but unusable: leave GitHubID unresolved and keep
@@ -448,7 +450,7 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 			}
 			record := make([]string, len(row.raw))
 			for i, cell := range row.raw {
-				record[i] = defangCSVCell(cell)
+				record[i] = DefangCSVCell(cell)
 			}
 			if err := w.Write(record); err != nil {
 				return nil, fmt.Errorf("write preserved row: %w", err)
@@ -462,16 +464,16 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 		// Defang formula-trigger cells; a resolved github_id is numeric so never
 		// matches, and a preserved raw one must round-trip byte-exact.
 		record := []string{
-			defangCSVCell(row.Username),
-			defangCSVCell(row.FirstName),
-			defangCSVCell(row.LastName),
-			defangCSVCell(row.Email),
-			defangCSVCell(row.Section),
+			DefangCSVCell(row.Username),
+			DefangCSVCell(row.FirstName),
+			DefangCSVCell(row.LastName),
+			DefangCSVCell(row.Email),
+			DefangCSVCell(row.Section),
 			githubID,
-			defangCSVCell(row.Role),
+			DefangCSVCell(row.Role),
 		}
 		for _, name := range extraColumns {
-			record = append(record, defangCSVCell(row.Extra[name]))
+			record = append(record, DefangCSVCell(row.Extra[name]))
 		}
 		if err := w.Write(record); err != nil {
 			return nil, fmt.Errorf("write row %q: %w", row.Username, err)
@@ -942,16 +944,16 @@ func isFormulaTrigger(b byte) bool {
 	return false
 }
 
-// defangCSVCell prepends `'` when the first byte is a formula trigger so a
+// DefangCSVCell prepends `'` when the first byte is a formula trigger so a
 // roster row can't smuggle a payload to a co-teacher opening it in Excel.
-func defangCSVCell(s string) string {
+func DefangCSVCell(s string) string {
 	if s == "" || !isFormulaTrigger(s[0]) {
 		return s
 	}
 	return "'" + s
 }
 
-// undefangCSVCell inverts defangCSVCell. Cells without the exact `'<trigger>`
+// undefangCSVCell inverts DefangCSVCell. Cells without the exact `'<trigger>`
 // pattern pass through (preserving user-typed apostrophes).
 func undefangCSVCell(s string) string {
 	if len(s) >= 2 && s[0] == '\'' && isFormulaTrigger(s[1]) {

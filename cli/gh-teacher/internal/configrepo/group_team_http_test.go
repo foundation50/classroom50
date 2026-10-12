@@ -184,6 +184,27 @@ func TestListAssignmentGroupTeams(t *testing.T) {
 	if len(team.Members) != 2 || team.Members[0] != "alice" {
 		t.Errorf("members = %v, want [alice bob]", team.Members)
 	}
+
+	// The lenient listing keeps the two teams whose record is hand-edited or
+	// forged for another assignment (unnamed, like the web shows them) while
+	// still dropping the other assignment's team and the shape-mismatched slug.
+	lenient, unreadable, err := ListAssignmentGroupTeamsLenient(githubtest.NewTestClient(t, server), testGroupOrg, testGroupClassroom, testGroupAssignment)
+	if err != nil {
+		t.Fatalf("ListAssignmentGroupTeamsLenient: %v", err)
+	}
+	if len(unreadable) != 0 {
+		t.Errorf("unreadable = %v, want none", unreadable)
+	}
+	var counters []int
+	for _, lt := range lenient {
+		counters = append(counters, lt.Counter)
+		if lt.Counter != 1 && lt.Record.Name != "" {
+			t.Errorf("counter %d should be unnamed, got %q", lt.Counter, lt.Record.Name)
+		}
+	}
+	if fmt.Sprint(counters) != "[1 2 3]" {
+		t.Errorf("lenient counters = %v, want [1 2 3]", counters)
+	}
 }
 
 // DeleteGroupTeam is fail-closed on every guard, and 404 = already gone.

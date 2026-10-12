@@ -93,13 +93,15 @@ func VerifyGroupDescription(slug string, rec GroupDescription) bool {
 
 // GroupTeamInfo is one live group team as the teacher tooling sees it: the
 // addressing slug/id, the counter recovered from the slug, the parsed AND
-// verified description record, and the current member logins.
+// verified description record, and the current members as logins (Members)
+// and as login+id refs (MemberRefs) for a join that must survive a rename.
 type GroupTeamInfo struct {
-	ID      int64
-	Slug    string
-	Counter int
-	Record  GroupDescription
-	Members []string
+	ID         int64
+	Slug       string
+	Counter    int
+	Record     GroupDescription
+	Members    []string
+	MemberRefs []TeamMemberRef
 }
 
 // groupTeamPayload is the org-teams / team-GET shape the group paths decode.
@@ -287,14 +289,33 @@ func AttachRepoToGroupTeam(client githubapi.Client, org, slug, repo string) erro
 // each carrying its parsed AND verified description record plus the current
 // member logins. A team whose record is missing or fails verification is
 // skipped — it is not attributable to this assignment, so acting on it would
-// trust a hand-edited description. Sorted by counter.
+// trust a hand-edited description. Sorted by counter. A failed member read
+// fails the whole listing; a caller that would rather keep the team and report
+// it wants ListAssignmentGroupTeamsLenient.
 func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignment string) ([]GroupTeamInfo, error) {
+	teams, _, err := listAssignmentGroupTeams(client, org, classroom, assignment, false)
+	return teams, err
+}
+
+// ListAssignmentGroupTeamsLenient is ListAssignmentGroupTeams for a read-only
+// report, matching what the web shows: a team whose description record is
+// missing or fails verification is kept with a zero Record (unnamed), and a
+// team whose member read fails is kept with nil Members/MemberRefs and its
+// error returned in `unreadable` (keyed by slug), so one bad team cannot hide
+// the rest. A rate limit still aborts, since every later read would fail the
+// same way.
+func ListAssignmentGroupTeamsLenient(client githubapi.Client, org, classroom, assignment string) (teams []GroupTeamInfo, unreadable map[string]error, err error) {
+	return listAssignmentGroupTeams(client, org, classroom, assignment, true)
+}
+
+func listAssignmentGroupTeams(client githubapi.Client, org, classroom, assignment string, lenient bool) ([]GroupTeamInfo, map[string]error, error) {
 	prefix := contract.GroupTeamAssignmentPrefix(classroom, assignment)
 	teams, err := listOrgGroupTeams(client, org, prefix)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []GroupTeamInfo
+	unreadable := map[string]error{}
 	for _, t := range teams {
 		counter, ok := contract.ParseGroupTeamCounter(t.Slug, classroom, assignment)
 		if !ok {
@@ -302,22 +323,29 @@ func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 		}
 		record, ok := ParseGroupDescription(t.Description)
 		if !ok || !VerifyGroupDescription(t.Slug, record) {
-			continue
+			if !lenient {
+				continue
+			}
+			record = GroupDescription{}
 		}
-		members, err := ListTeamMembers(client, org, t.Slug)
-		if err != nil {
-			return nil, err
+		info := GroupTeamInfo{ID: t.ID, Slug: t.Slug, Counter: counter, Record: record}
+		refs, err := ListTeamMembersWithIDs(client, org, t.Slug)
+		switch {
+		case err == nil:
+			info.Members = make([]string, 0, len(refs))
+			for _, m := range refs {
+				info.Members = append(info.Members, m.Login)
+			}
+			info.MemberRefs = refs
+		case lenient && !cliutil.IsRateLimited(err):
+			unreadable[t.Slug] = err
+		default:
+			return nil, nil, err
 		}
-		out = append(out, GroupTeamInfo{
-			ID:      t.ID,
-			Slug:    t.Slug,
-			Counter: counter,
-			Record:  record,
-			Members: members,
-		})
+		out = append(out, info)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Counter < out[j].Counter })
-	return out, nil
+	return out, unreadable, nil
 }
 
 // DeleteGroupTeam removes one group team, fail-closed on every axis a

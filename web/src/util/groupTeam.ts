@@ -106,3 +106,11 @@ export function groupDisplayName(
 ): string {
   return team.name || groupDefaultName(team.n, t)
 }
+
+// The `group_name` cell of the groups export: the recorded name, or the
+// untranslated "Group <n>" for an unnamed team. The export is data, not UI, so
+// the fallback is English in every locale and matches the CLI byte for byte.
+// Mirrors contract.GroupExportName.
+export function groupExportName(team: { name?: string; n: number }): string {
+  return team.name || `Group ${team.n}`
+}

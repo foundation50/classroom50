@@ -10,6 +10,7 @@ import {
   LinkExternalIcon,
   LockIcon,
   PauseIcon,
+  PeopleIcon,
   PlayIcon,
   ShieldCheckIcon,
   SlidersIcon,
@@ -21,6 +22,16 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { Dropdown, DropdownMenu } from "@/components/ui"
+import type { DownloadGroupsDisabledReason } from "@/domain/submissions/groupMembershipCsv"
+
+const DOWNLOAD_GROUPS_DISABLED_TITLE: Record<
+  DownloadGroupsDisabledReason,
+  string
+> = {
+  loading: "submissions.downloadGroups.titleLoading",
+  unavailable: "submissions.downloadGroups.titleUnavailable",
+  empty: "submissions.downloadGroups.titleEmpty",
+}
 
 // Consolidates the workflow actions (Collect now / Regrade all / View workflow)
 // plus the CSV export and Metrics into one dropdown so the toolbar stays
@@ -41,6 +52,8 @@ export function SubmissionsActionsMenu({
   viewLabel,
   onDownloadCsv,
   downloadDisabled,
+  onDownloadGroups,
+  downloadGroupsDisabledReason,
   onDownloadAll,
   downloadAllDisabled,
   onBulkAccess,
@@ -83,6 +96,12 @@ export function SubmissionsActionsMenu({
   viewLabel: string
   onDownloadCsv: () => void
   downloadDisabled: boolean
+  // Group-membership export (one row per member, roster-joined). Omitted (item
+  // hidden) for an individual assignment, which has no groups to list.
+  onDownloadGroups?: () => void
+  // Why the item is disabled; undefined when it may run (see
+  // downloadGroupsDisabledReason).
+  downloadGroupsDisabledReason?: DownloadGroupsDisabledReason
   // Read-only (any viewer), so not owner-gated like Open-all-PRs; hidden only
   // when there's nothing to fetch (via downloadAllDisabled).
   onDownloadAll: () => void
@@ -407,6 +426,19 @@ export function SubmissionsActionsMenu({
           disabled={downloadDisabled}
           onSelect={onDownloadCsv}
         />
+        {onDownloadGroups && (
+          <DropdownMenu.Item
+            icon={PeopleIcon}
+            label={t("submissions.downloadGroups.menuLabel")}
+            disabled={downloadGroupsDisabledReason !== undefined}
+            title={t(
+              downloadGroupsDisabledReason
+                ? DOWNLOAD_GROUPS_DISABLED_TITLE[downloadGroupsDisabledReason]
+                : "submissions.downloadGroups.title",
+            )}
+            onSelect={onDownloadGroups}
+          />
+        )}
         <DropdownMenu.Item
           icon={FileZipIcon}
           label={t("submissions.downloadAll.menuLabel")}

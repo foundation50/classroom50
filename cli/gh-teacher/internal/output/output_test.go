@@ -38,3 +38,17 @@ func TestJSONPretty_LeavesAngleBracketsLiteral(t *testing.T) {
 		t.Errorf("expected literal %q in output, got %q", want, string(got))
 	}
 }
+
+func TestPrintable(t *testing.T) {
+	cases := map[string]string{
+		"The Sharks":             "The Sharks",
+		"Sharks\x1b[31m\nx\tyes": "Sharks [31m x yes",   // the ESC goes, so "[31m" is inert text
+		"caf\u00e9 \u0130nan":    "caf\u00e9 \u0130nan", // non-ASCII letters are not controls
+		"":                       "",
+	}
+	for in, want := range cases {
+		if got := Printable(in); got != want {
+			t.Errorf("Printable(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

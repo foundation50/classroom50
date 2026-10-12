@@ -1122,6 +1122,58 @@ are all skipped is not recreated. A source team over the target's
 `<classroom>/teams.json`. The web app's **Copy groups** dialog is the same
 operation with an editable preview.
 
+## `group`
+
+Read-only views of who belongs to which group of a group or team assignment,
+joined against the roster. Use it to reconcile groups with your LMS or to
+check that every collaborator on a group repository is a rostered student.
+To create or edit the groups of a team assignment, use [`team`](#team).
+
+### `group list`
+
+```sh
+gh teacher group list <org> <classroom> <assignment> [--json | --csv]
+gh teacher group list cs50-fall-2026 cs-principles project --csv > groups.csv
+```
+
+Prints one row per member of every group. For a team assignment the groups are
+its live GitHub Teams (a team with no members or no repository yet still gets a
+row); for a legacy group assignment they are the existing group repositories,
+each with its founder and direct collaborators. Each member is joined against
+`<classroom>/roster.csv` by GitHub id, falling back to username, so a student
+who renamed their GitHub account still matches their roster row; `in_roster` is
+`no` for a member the roster doesn't know, so an extra account on a repository
+stands out.
+
+The default output is a table with a one-line summary on stderr. `--csv`
+writes the same rows the web app's **Download groups (CSV)** action produces,
+with the header
+
+```csv
+group,group_name,team_slug,repo,username,first_name,last_name,email,section,github_id,role,in_roster,note
+```
+
+- `group`: the group's key, `group-<n>` for a team assignment or the founder's
+  login for a legacy group. It matches the `group` column of the scores exports
+  (`gh teacher download`'s `scores.csv`, the web **Download scores (CSV)**), so
+  the two files join.
+- `group_name`, `team_slug`, `repo`: blank for a legacy group's name and team,
+  and for a team whose repository hasn't been created yet. An unnamed team
+  exports as `Group <n>` in English regardless of the viewer's language.
+- `username` through `role`: exactly `roster.csv`'s columns, so the file joins
+  against the roster or an LMS export without renaming. A member the roster
+  doesn't know exports their lowercased GitHub login with `in_roster` set to
+  `no`.
+- `note`: set when a group's membership could not be read (a failed
+  collaborator or team-member listing), so it is never mistaken for an empty
+  group; the command also warns on stderr.
+
+Members order the same way in both tools: by last name, then first name, then
+login, comparing characters by code point with numbers compared numerically.
+
+`--json` emits an array of objects with the same keys and takes precedence over
+`--csv`.
+
 ## `autograder`
 
 Manage the **classroom default autograder** at `<classroom>/autograder.py` and

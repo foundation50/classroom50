@@ -7,7 +7,7 @@ import type {
   NormalizedScores,
   SubmissionRow,
 } from "./scores"
-import type { GitHubRepo } from "@/github-core/types"
+import type { GitHubRepo, GitHubUser } from "@/github-core/types"
 import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import { existingAssignmentRepos } from "@/domain/assignments/assignmentRepoPresence"
 import { assignmentSkipsGrading } from "@/domain/assignments/autogradingState"
@@ -1191,6 +1191,10 @@ export type ScoresCsvRow = {
   // The collector's recorded reason when the latest release wasn't the
   // workflow's own; blank otherwise. Snapshot rows only, so never a live kind.
   provenance_warning: string
+  // The scores.json owner key of a group or team row (`group-<n>`, or the
+  // founder's login), the same value the groups export writes in its `group`
+  // column so the two files join. Blank on an individual assignment.
+  group: string
 }
 
 export function buildScoresCsvRows(
@@ -1205,6 +1209,9 @@ export function buildScoresCsvRows(
   // The user's name order for the `name` column. The `first_name`/`last_name`
   // columns stay split for sheets that sort themselves.
   nameOrder: NameOrder = DEFAULT_NAME_ORDER,
+  // Group or team assignment: `group` carries the owner key. Blank otherwise,
+  // where the owner is just the student.
+  groupFlavor = false,
 ): ScoresCsvRow[] {
   // Carry the resolved student alongside each row so the final ordering can use
   // the shared name comparator (last name, then first, then username) — the
@@ -1269,6 +1276,11 @@ export function buildScoresCsvRows(
           provenance_warning: escapeCsvFormulaInjection(
             rest.provenance?.kind === "recorded" ? rest.provenance.reason : "",
           ),
+          // Lowercased like the groups export's `group` so a case-sensitive
+          // join between the two files matches.
+          group: groupFlavor
+            ? escapeCsvFormulaInjection(rest.owner.trim().toLowerCase())
+            : "",
         },
         student,
         time: Number.isFinite(ms) ? ms : null,
@@ -1292,6 +1304,7 @@ export function buildScoresCsvRows(
       review: "",
       release: "",
       provenance_warning: "",
+      group: "",
     },
     student,
     time: null,
@@ -1576,7 +1589,7 @@ function ownerSortKey(owner: string, names: Map<string, string>): string {
 // alone.
 export function legacyGroupCreditedMembers(
   groupRepos: readonly GroupRepo[],
-  membersByRepo: ReadonlyMap<string, string[]>,
+  membersByRepo: ReadonlyMap<string, readonly Pick<GitHubUser, "login">[]>,
   students: readonly Student[],
 ): Map<string, string[]> {
   const roster = new Set(students.map((s) => s.username.trim().toLowerCase()))
@@ -1586,7 +1599,7 @@ export function legacyGroupCreditedMembers(
     if (!collaborators) continue
     const owner = repo.owner.trim().toLowerCase()
     const members = [owner]
-    for (const login of collaborators) {
+    for (const { login } of collaborators) {
       const key = login.trim().toLowerCase()
       if (key !== owner && roster.has(key) && !members.includes(key)) {
         members.push(key)

@@ -398,11 +398,11 @@ func TestWriteScoresCSV(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
-		"alice,Ada,Lovelace,ada@uni.edu,A,20,30,2026-06-02T09:00:00Z,submit/2026-06-02T08-59-00Z,alice,https://github.com/cs50/cs-principles-hello-alice/commit/ghi,false,,\"published by 'alice', not by the autograde workflow\"",
-		"alice,Ada,Lovelace,ada@uni.edu,A,18,30,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,,https://github.com/cs50/cs-principles-hello-alice/commit/abc,false,,",
-		"Bob,Bob,Jones,bob@uni.edu,B,25,30,2026-06-01T15:00:00Z,submit/2026-06-01T14-59-00Z,,https://github.com/cs50/cs-principles-hello-bob/commit/def,true,true,",
-		"carol,,,,,,,,,,,,,",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning,group",
+		"alice,Ada,Lovelace,ada@uni.edu,A,20,30,2026-06-02T09:00:00Z,submit/2026-06-02T08-59-00Z,alice,https://github.com/cs50/cs-principles-hello-alice/commit/ghi,false,,\"published by 'alice', not by the autograde workflow\",",
+		"alice,Ada,Lovelace,ada@uni.edu,A,18,30,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,,https://github.com/cs50/cs-principles-hello-alice/commit/abc,false,,,",
+		"Bob,Bob,Jones,bob@uni.edu,B,25,30,2026-06-01T15:00:00Z,submit/2026-06-01T14-59-00Z,,https://github.com/cs50/cs-principles-hello-bob/commit/def,true,true,,",
+		"carol,,,,,,,,,,,,,,",
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -449,8 +449,8 @@ func TestWriteScoresCSV_ManualOverride(t *testing.T) {
 		t.Fatalf("read file: %v", err)
 	}
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
-		"alice,,,,,42,50,2026-06-02T09:00:00Z,submit/manual-2026-06-02T09-00-00Z,,submit/manual-2026-06-02T09-00-00Z,,true,",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning,group",
+		"alice,,,,,42,50,2026-06-02T09:00:00Z,submit/manual-2026-06-02T09-00-00Z,,submit/manual-2026-06-02T09-00-00Z,,true,,",
 		"",
 	}, "\n")
 	if string(got) != want {
@@ -505,18 +505,69 @@ func TestWriteScoresCSV_GroupFanOut(t *testing.T) {
 	}
 
 	// No CSV metadata here (blank name/section/email): 4 empty cells after
-	// the username, then the shared submission columns.
-	row := ",,,,,90,100,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,bob,https://github.com/cs50/cs-principles-project-alice/commit/abc,false,,"
+	// the username, then the shared submission columns. Every member row ends
+	// with the group key (the founder's login), which the groups export shares.
+	row := ",,,,,90,100,2026-06-01T14:33:11Z,submit/2026-06-01T14-32-05Z,bob,https://github.com/cs50/cs-principles-project-alice/commit/abc,false,,,alice"
 	want := strings.Join([]string{
-		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning",
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning,group",
 		"alice" + row,
 		"bob" + row,
 		"carol" + row,
-		"dan,,,,,,,,,,,,,", // not a group member → blank
+		"dan,,,,,,,,,,,,,,", // not a group member → blank
 		"",
 	}, "\n")
 	if string(got) != want {
 		t.Fatalf("group scores.csv mismatch:\n got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// The `group` key comes from the bucket's mode and is lowercased like the
+// groups export's key, so the two files join case-sensitively even when the
+// collector recorded a mixed-case founder login.
+func TestWriteScoresCSV_TeamAndMixedCaseOwner(t *testing.T) {
+	scores := scoresschema.File{
+		Schema: scoresschema.SchemaV1,
+		Assignments: map[string]scoresschema.AssignmentBucket{
+			"project": {
+				Type: "team",
+				Entries: []map[string]any{
+					{
+						"owner":            "group-2",
+						"member_usernames": []any{"alice"},
+						"team_slug":        "classroom50-group-abcdef0123456789-2",
+						"submissions": []any{
+							map[string]any{
+								"score": float64(7), "max-score": float64(10),
+								"datetime": "2026-06-01T14:33:11Z", "submission": "submit/x",
+								"review": "https://example.test/r", "late": false,
+							},
+						},
+					},
+					// A legacy-shaped founder key with the collector's casing, and
+					// an override-only entry with no submissions.
+					{"owner": "Bob", "member_usernames": []any{"Bob"}, "override": true, "submissions": []any{}},
+				},
+			},
+		},
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "scores.csv")
+	if err := writeScoresCSV(path, scores, "project", []string{"alice", "bob", "carol"}, nil); err != nil {
+		t.Fatalf("writeScoresCSV: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Join([]string{
+		"username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning,group",
+		"alice,,,,,7,10,2026-06-01T14:33:11Z,submit/x,,https://example.test/r,false,,,group-2",
+		"bob,,,,,,,,,,,,true,,bob",
+		"carol,,,,,,,,,,,,,,",
+		"",
+	}, "\n")
+	if string(got) != want {
+		t.Fatalf("scores.csv mismatch:\n got:\n%s\nwant:\n%s", got, want)
 	}
 }
 
@@ -533,7 +584,7 @@ func TestWriteScoresCSV_EmptyRoster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	want := "username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning\n"
+	want := "username,first_name,last_name,email,section,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override,provenance_warning,group\n"
 	if string(got) != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

@@ -1,12 +1,30 @@
 // Package output holds CLI-wide presentation helpers that aren't domain logic —
 // currently the shared JSON encoder for every `--json` view and every
-// config-repo file gh-teacher writes. Stdlib-only.
+// config-repo file gh-teacher writes, and the terminal cell guard. Stdlib-only.
 package output
 
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
+	"unicode"
 )
+
+// Printable replaces control characters (newline, tab, escape, C1 controls)
+// with a space so a user-controlled string (a student-chosen team name, a
+// login) cannot forge a table row or emit a terminal escape sequence when
+// printed. For terminal tables only; CSV and JSON stay byte-exact.
+func Printable(s string) string {
+	if !strings.ContainsFunc(s, unicode.IsControl) {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
+}
 
 // JSONPretty marshals v with 2-space indent, trailing newline, and EscapeHTML
 // off (keeps `<`/`>` literal in URLs). The single encoder behind both `--json`

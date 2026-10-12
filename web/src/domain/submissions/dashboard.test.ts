@@ -67,6 +67,7 @@ import {
 } from "./dashboard"
 import type { DetectedSubmitter } from "./scores"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import { DEFAULT_NAME_ORDER } from "@/types/preferences"
 
 // Minimal row factory — only the fields the dashboard logic reads.
 const row = (over: Partial<SubmissionRow> = {}): SubmissionRow => ({
@@ -982,6 +983,7 @@ describe("buildScoresCsvRows", () => {
       review: "r1",
       release: "rel1",
       provenance_warning: "published by 'alice', not by the autograde workflow",
+      group: "",
     })
     // The group row keeps all credited logins but takes the owner's name.
     expect(out[1].usernames).toBe("bob, carol")
@@ -1004,7 +1006,44 @@ describe("buildScoresCsvRows", () => {
       review: "",
       release: "",
       provenance_warning: "",
+      group: "",
     })
+  })
+
+  it("fills `group` with the owner key for a group or team assignment so the file joins the groups export", () => {
+    const team = row({
+      usernames: ["bob", "carol"],
+      owner: "group-2",
+      datetime: "2026-06-21T10:00:00Z",
+      score: 9,
+      "max-score": 10,
+      submissionCount: 1,
+    })
+    const legacy = row({
+      usernames: ["=Alice", "dave"],
+      owner: "=Alice",
+      datetime: "2026-06-20T10:00:00Z",
+      score: 5,
+      "max-score": 10,
+      submissionCount: 1,
+    })
+    const out = buildScoresCsvRows(
+      [team, legacy],
+      [],
+      [],
+      "name-last",
+      DEFAULT_NAME_ORDER,
+      true,
+    )
+    // The key is lowercased like the groups export's `group`, so the files
+    // join case-sensitively; `usernames` keeps the collector's spelling.
+    expect(out.map((r) => [r.usernames, r.group])).toEqual([
+      ["'=Alice, dave", "'=alice"],
+      ["bob, carol", "group-2"],
+    ])
+    // Individual assignments (the default) leave the column blank even though
+    // every row has an owner.
+    expect(buildScoresCsvRows([team], [], []).map((r) => r.group)).toEqual([""])
   })
 
   it("leaves name columns blank (falling back to login order) for an off-roster login", () => {
@@ -2318,11 +2357,12 @@ describe("legacyGroupCreditedMembers", () => {
     student({ username: "Bob" }),
     student({ username: "cara" }),
   ]
+  const users = (...logins: string[]) => logins.map((login) => ({ login }))
 
   it("credits the founder plus on-roster collaborators, lowercased and deduped", () => {
     const map = legacyGroupCreditedMembers(
       repos,
-      new Map([["cs101-hw1-alice", ["alice", "bob", "BOB", "intruder"]]]),
+      new Map([["cs101-hw1-alice", users("alice", "bob", "BOB", "intruder")]]),
       roster,
     )
     // Mirrors the collector: a collaborator off the classroom team (an account
@@ -2333,7 +2373,7 @@ describe("legacyGroupCreditedMembers", () => {
   it("keeps the founder even when they are off the roster", () => {
     const map = legacyGroupCreditedMembers(
       repos,
-      new Map([["cs101-hw1-dan", ["cara"]]]),
+      new Map([["cs101-hw1-dan", users("cara")]]),
       roster,
     )
     expect(map.get("dan")).toEqual(["dan", "cara"])
@@ -2344,7 +2384,7 @@ describe("legacyGroupCreditedMembers", () => {
     // instead of writing a grade credited to the founder alone.
     const map = legacyGroupCreditedMembers(
       repos,
-      new Map([["cs101-hw1-alice", []]]),
+      new Map([["cs101-hw1-alice", users()]]),
       roster,
     )
     expect(map.get("alice")).toEqual(["alice"])

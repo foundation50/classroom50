@@ -114,7 +114,13 @@ import { groupDisplayName } from "@/util/groupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
-import { downloadBlob } from "@/util/downloadBlob"
+import { downloadCsv } from "@/util/downloadBlob"
+import {
+  buildGroupMembershipCsvRows,
+  downloadGroupsDisabledReason,
+  groupMembershipSources,
+  serializeGroupMembershipCsv,
+} from "@/domain/submissions/groupMembershipCsv"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { isClassroomArchived } from "@/types/classroom"
@@ -193,7 +199,11 @@ const SubmissionsPageContent = () => {
   // member (teacher/TA/HTA, not on the student team) is a gradee only once
   // they've ACCEPTED, matching the collector, which polls the staff teams too
   // but only records a repo that exists.
-  const { students: csvStudents } = useGetStudents(org, classroom)
+  const {
+    students: csvStudents,
+    isLoading: csvStudentsLoading,
+    isError: csvStudentsError,
+  } = useGetStudents(org, classroom)
   // Surface the team fetch's error/loading: a transient or permission failure
   // of the enrolled source of truth must render as error+retry, not an
   // authoritative empty roster. A non-owner off the secret student team reads
@@ -378,7 +388,7 @@ const SubmissionsPageContent = () => {
       const members = groupCollabByRepo.get(repo.repoName)
       if (members) {
         const owner = repo.owner.toLowerCase()
-        map.set(owner, [owner, ...members])
+        map.set(owner, [owner, ...members.map((m) => m.login.toLowerCase())])
       }
     }
     return map
@@ -1241,17 +1251,61 @@ const SubmissionsPageContent = () => {
       students,
       sort,
       nameOrder,
+      isGroupFlavor,
     )
 
     const csv = Papa.unparse(rows, {
       header: true,
     })
+    downloadCsv(csv, `${classroom}-${assignment}-scores.csv`)
+  }
 
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    })
+  const groupMembershipSourceList = useMemo(
+    () =>
+      isGroupFlavor
+        ? groupMembershipSources({
+            isTeamAssignment,
+            teamByOwner,
+            teamMembersBySlug,
+            groupRepoList,
+            groupCollabByRepo,
+          })
+        : [],
+    [
+      isGroupFlavor,
+      isTeamAssignment,
+      teamByOwner,
+      teamMembersBySlug,
+      groupRepoList,
+      groupCollabByRepo,
+    ],
+  )
 
-    downloadBlob(blob, `${classroom}-${assignment}-scores.csv`)
+  // A failed read must not pass as an empty roster or assignment: the roster
+  // read, the org repo walk (`orgRepos == null` once settled, the check
+  // missingRepoTeams also uses), and the teams listing each settle with no
+  // data when they fail.
+  const groupsDisabledReason = downloadGroupsDisabledReason({
+    loading:
+      groupMembersPending ||
+      csvStudentsLoading ||
+      (isGroupFlavor && orgReposPending),
+    unavailable:
+      csvStudentsError ||
+      (isGroupFlavor && orgRepos == null) ||
+      (isTeamAssignment && groupTeamsQuery.isError),
+    sourceCount: groupMembershipSourceList.length,
+  })
+
+  const downloadGroupsCsv = () => {
+    const rows = buildGroupMembershipCsvRows(
+      groupMembershipSourceList,
+      csvStudents,
+    )
+    downloadCsv(
+      serializeGroupMembershipCsv(rows),
+      `${classroom}-${assignment}-groups.csv`,
+    )
   }
 
   if (!org || !classroom || !assignment) {
@@ -1599,6 +1653,8 @@ const SubmissionsPageContent = () => {
                 viewLabel={viewLabel}
                 onDownloadCsv={downloadScoresCsv}
                 downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+                onDownloadGroups={isGroupFlavor ? downloadGroupsCsv : undefined}
+                downloadGroupsDisabledReason={groupsDisabledReason}
                 onDownloadAll={() => setDownloadAllOpen(true)}
                 downloadAllDisabled={downloadableOwners.length === 0}
                 // Bulk set student repo access: owner-only (needs admin on every
