@@ -179,7 +179,9 @@ func loginKey(login string) string {
 	return strings.ToLower(strings.TrimSpace(login))
 }
 
-// sortKey mirrors the web's studentSortKeyByLastName.
+// sortKey is the member sort key, "Last First", else the login, else the
+// email; naturalLess does the case folding. Mirrors exportSortKey in
+// web/src/domain/submissions/groupMembershipCsv.ts.
 func sortKey(r configrepo.RosterRow) string {
 	name := strings.TrimSpace(strings.TrimSpace(r.LastName) + " " + strings.TrimSpace(r.FirstName))
 	if name == "" {
@@ -188,11 +190,12 @@ func sortKey(r configrepo.RosterRow) string {
 	if name == "" {
 		name = strings.TrimSpace(r.Email)
 	}
-	return strings.ToLower(name)
+	return name
 }
 
-// naturalLess is a locale-independent natural order (simple-case-folded code
-// points, digit runs as numbers), mirroring naturalCompare in
+// naturalLess is a locale-independent natural order: simple-case-folded code
+// points (compared as bytes, since UTF-8 byte order is code-point order) with
+// digit runs compared as numbers. Mirrors naturalCompare in
 // web/src/domain/submissions/groupMembershipCsv.ts; the shared fixture pins both.
 func naturalLess(a, b string) bool {
 	a, b = strings.ToLower(a), strings.ToLower(b)

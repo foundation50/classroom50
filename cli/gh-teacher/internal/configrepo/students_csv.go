@@ -299,8 +299,9 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 // ParseRosterLenient is ParseRoster for the read-modify-write path: a malformed
 // data row (empty username, wrong field count) is preserved verbatim as a raw
 // RosterRow instead of aborting, so a write command can round-trip pre-existing
-// bad data. Header and empty-input errors still hard-fail — a broken header
-// can't be safely round-tripped.
+// bad data, and a row whose github_id does not parse is kept with the id
+// unresolved and the cell preserved. Header and empty-input errors still
+// hard-fail — a broken header can't be safely round-tripped.
 func ParseRosterLenient(data []byte) ([]RosterRow, error) {
 	return parseRoster(data, true)
 }
@@ -364,10 +365,8 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 
 // recordToRow maps a data record onto a RosterRow through the header layout:
 // canonical cells by name (role "" when the header lacks it), extra cells into
-// Extra in header order. A lenient read keeps a row whose github_id does not
-// parse (unresolved, cell preserved) rather than erroring, so a read-only join
-// such as the group export still sees the student; the strict read errors,
-// since a write would otherwise canonicalize garbage.
+// Extra in header order. lenient keeps a row whose github_id does not parse
+// (see ParseRosterLenient); strict errors so an import cannot accept it.
 func recordToRow(record []string, layout rosterLayout, line int, lenient bool) (RosterRow, error) {
 	// Guard the width before indexing: lenient parsing leaves FieldsPerRecord
 	// unenforced, so a mis-widthed row reaches here — error (the caller

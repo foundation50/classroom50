@@ -1281,10 +1281,10 @@ const SubmissionsPageContent = () => {
     ],
   )
 
-  // A FAILED read is not a pending one: the roster read, the org repo walk
-  // (which `orgRepos == null` reports once settled, the same check
-  // missingRepoTeams uses), and the teams listing each leave their query idle
-  // with no data, which would otherwise pass as an empty roster or assignment.
+  // A failed read must not pass as an empty roster or assignment: the roster
+  // read, the org repo walk (`orgRepos == null` once settled, the check
+  // missingRepoTeams also uses), and the teams listing each settle with no
+  // data when they fail.
   const groupsDisabledReason = downloadGroupsDisabledReason({
     loading:
       groupMembersPending ||

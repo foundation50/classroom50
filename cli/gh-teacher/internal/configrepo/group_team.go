@@ -93,8 +93,8 @@ func VerifyGroupDescription(slug string, rec GroupDescription) bool {
 
 // GroupTeamInfo is one live group team as the teacher tooling sees it: the
 // addressing slug/id, the counter recovered from the slug, the parsed AND
-// verified description record, and the current members (logins, plus the
-// same members with their GitHub ids for a join that must survive a rename).
+// verified description record, and the current members as logins (Members)
+// and as login+id refs (MemberRefs) for a join that must survive a rename.
 type GroupTeamInfo struct {
 	ID         int64
 	Slug       string

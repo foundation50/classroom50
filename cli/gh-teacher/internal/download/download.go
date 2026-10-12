@@ -808,8 +808,8 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any, share
 	override := csvSafeCell(stringifyOverride(entry["override"]))
 	group := ""
 	if shared {
-		// Lowercased like the groups export's `group` (sliced from the repo
-		// name) so a case-sensitive join between the two files matches.
+		// Lowercased like the groups export's `group` so a case-sensitive join
+		// between the two files matches.
 		owner, _ := entry["owner"].(string)
 		group = csvSafeCell(strings.ToLower(strings.TrimSpace(owner)))
 	}
@@ -871,15 +871,14 @@ func submissionRecords(entry map[string]any) []map[string]any {
 	return out
 }
 
-// entriesForAssignment returns the entries for an assignment's bucket. The
-// lookup is case-insensitive since a hand-edited scores.json key might not
-// match the lowercased slug exactly.
+// entriesForAssignment returns the entries of bucketForAssignment.
 func entriesForAssignment(scores scoresschema.File, assignment string) []map[string]any {
 	return bucketForAssignment(scores, assignment).Entries
 }
 
-// bucketForAssignment is the assignment's gradebook bucket (slug matched
-// case-insensitively), or the zero bucket when the assignment has none.
+// bucketForAssignment is the assignment's gradebook bucket, or the zero bucket
+// when it has none. The lookup is case-insensitive since a hand-edited
+// scores.json key might not match the lowercased slug exactly.
 func bucketForAssignment(scores scoresschema.File, assignment string) scoresschema.AssignmentBucket {
 	if bucket, ok := scores.Assignments[assignment]; ok {
 		return bucket

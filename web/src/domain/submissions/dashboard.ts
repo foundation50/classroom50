@@ -1209,8 +1209,8 @@ export function buildScoresCsvRows(
   // The user's name order for the `name` column. The `first_name`/`last_name`
   // columns stay split for sheets that sort themselves.
   nameOrder: NameOrder = DEFAULT_NAME_ORDER,
-  // Whether rows are group or team repos, so `group` carries the owner key;
-  // an individual assignment's owner is just the student and the column is blank.
+  // Group or team assignment: `group` carries the owner key. Blank otherwise,
+  // where the owner is just the student.
   groupFlavor = false,
 ): ScoresCsvRow[] {
   // Carry the resolved student alongside each row so the final ordering can use
@@ -1276,8 +1276,8 @@ export function buildScoresCsvRows(
           provenance_warning: escapeCsvFormulaInjection(
             rest.provenance?.kind === "recorded" ? rest.provenance.reason : "",
           ),
-          // Lowercased like the groups export's `group` (sliced from the repo
-          // name) so a case-sensitive join between the two files matches.
+          // Lowercased like the groups export's `group` so a case-sensitive
+          // join between the two files matches.
           group: groupFlavor
             ? escapeCsvFormulaInjection(rest.owner.trim().toLowerCase())
             : "",

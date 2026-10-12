@@ -83,21 +83,19 @@ export function naturalCompare(a: string, b: string): number {
 
 const isDigit = (cp: number) => cp >= 0x30 && cp <= 0x39
 
-// The member sort key, mirroring sortKey in rows.go: "Last First", else the
-// login, else the email, with no case folding here (naturalCompare folds). The
-// UI's studentSortKeyByLastName lowercases with the full mapping, which would
-// diverge from Go before the comparator runs.
+// The member sort key: "Last First", else the login, else the email;
+// naturalCompare does the case folding. Mirrors sortKey in
+// cli/gh-teacher/internal/groupcmd/rows.go. Not studentSortKeyByLastName, whose
+// full-mapping lowercase would diverge from Go before the comparator runs.
 function exportSortKey(student: Student): string {
   const name = `${student.last_name.trim()} ${student.first_name.trim()}`.trim()
   return name || student.username.trim() || student.email.trim()
 }
 
-// Unicode's simple (one-to-one) lowercase mapping, which is what Go's
-// strings.ToLower applies. String.prototype.toLowerCase uses the full mapping
-// instead, which differs in two places: U+0130 becomes "i" plus a combining
-// dot, and a word-final capital sigma becomes U+03C2. Folding one code point
-// at a time removes the sigma context, and the dotted I is the only remaining
-// one-to-many mapping, so it is pinned explicitly.
+// Unicode's simple (one-to-one) lowercase mapping, as Go's strings.ToLower
+// applies it. toLowerCase uses the full mapping, which differs for a word-final
+// capital sigma (context-dependent, so folding one code point at a time removes
+// it) and for U+0130, the only one-to-many lowercase mapping, pinned to "i".
 function foldSimple(s: string): string {
   let out = ""
   for (const ch of s) {
