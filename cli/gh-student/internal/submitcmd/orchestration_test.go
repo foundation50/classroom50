@@ -68,6 +68,40 @@ func TestFetchRepoPath(t *testing.T) {
 	}
 }
 
+func TestFetchRepoPath_OversizedFileFallsBackToBlob(t *testing.T) {
+	// GitHub's shape for a file over the 1 MB inline ceiling (#1105): empty
+	// content, encoding "none", sha still present. The blob API serves it.
+	const body = "big fixture\n"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/r/contents/.github/fixture.bin", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"type": "file", "path": ".github/fixture.bin", "sha": "big-sha",
+			"size": 1148728, "encoding": "none", "content": "",
+		})
+	})
+	mux.HandleFunc("/repos/o/r/git/blobs/big-sha", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"sha": "big-sha", "encoding": "base64",
+			"content": base64.StdEncoding.EncodeToString([]byte(body)),
+		})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	dst := t.TempDir()
+	if err := fetchRepoPath(context.Background(), client, dst, "o", "r", "main", ".github/fixture.bin"); err != nil {
+		t.Fatalf("fetchRepoPath: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, ".github/fixture.bin"))
+	if err != nil {
+		t.Fatalf("expected file written: %v", err)
+	}
+	if string(got) != body {
+		t.Errorf("content = %q, want %q", got, body)
+	}
+}
+
 func TestFetchRepoPath_RejectsNonBase64(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/o/r/contents/file.txt", func(w http.ResponseWriter, r *http.Request) {
