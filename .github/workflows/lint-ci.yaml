@@ -104,7 +104,7 @@ jobs:
       - name: Install ruff
         # Pinned for reproducibility; bump deliberately (matches the
         # golangci-lint version-pinning discipline in the Go CI jobs).
-        run: python -m pip install --quiet ruff==0.16.0
+        run: python -m pip install --quiet ruff==0.17.0
 
       - name: ruff check (shipped Python)
         # Pin the rule set to ruff's historical default (pyflakes F +

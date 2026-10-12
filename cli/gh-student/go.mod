@@ -2,7 +2,7 @@ module github.com/foundation50/gh-student
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.26.9
 
 require (
 	github.com/cli/go-gh/v2 v2.16.0
