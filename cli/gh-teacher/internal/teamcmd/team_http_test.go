@@ -432,3 +432,30 @@ func TestRunTeamList_HappyPath(t *testing.T) {
 		}
 	}
 }
+
+// A student-chosen team name cannot forge a table row or emit a terminal
+// escape: control characters are stripped before the tabwriter sees them.
+func TestRunTeamList_SanitizesStudentChosenName(t *testing.T) {
+	slug := contract.GroupTeamName(cmdTestClassroom, cmdTestAssignment, 1)
+	record, _ := configrepo.MarshalGroupDescription(cmdTestClassroom, cmdTestAssignment, "Sharks\x1b[2J\nforged\trow")
+	state := &teamCmdServer{
+		orgTeams:  []map[string]any{{"id": 501, "slug": slug, "description": record}},
+		teamsJSON: `{"schema":"` + contract.TeamsSchemaV1 + `","assignments":{}}`,
+	}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out bytes.Buffer
+	scope := cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	if err := runTeamList(client, &out, scope); err != nil {
+		t.Fatalf("runTeamList: %v", err)
+	}
+	rendered := out.String()
+	if strings.ContainsAny(rendered, "\x1b\r") || strings.Contains(rendered, "\nforged") {
+		t.Fatalf("control characters reached the table:\n%q", rendered)
+	}
+	if !strings.Contains(rendered, "Sharks") {
+		t.Fatalf("the printable part of the name should still render:\n%s", rendered)
+	}
+}

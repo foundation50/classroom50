@@ -36,6 +36,12 @@ func DashIfEmpty(s string) string {
 	return s
 }
 
+// Cell renders a user-influenced table cell: dash when empty, control
+// characters stripped.
+func Cell(s string) string {
+	return Printable(DashIfEmpty(s))
+}
+
 // JSONPretty marshals v with 2-space indent, trailing newline, and EscapeHTML
 // off (keeps `<`/`>` literal in URLs). The single encoder behind both `--json`
 // output and the config-repo files, so its byte shape is a contract: changing

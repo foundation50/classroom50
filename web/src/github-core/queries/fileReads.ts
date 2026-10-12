@@ -1,10 +1,9 @@
 import { queryOptions } from "@tanstack/react-query"
-import Papa from "papaparse"
 
 import type { GitHubClient } from "../client"
 import type { GitHubCommit } from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
-import { trimCsvHeader } from "@/util/csv"
+import { parseCsvRows } from "@/util/csv"
 import { tolerateGitHubError } from "../errors"
 import { decodeBase64Utf8 } from "@/util/github"
 import type { GetAssignmentsFileInput } from "@/domain/queries/assignments"
@@ -151,15 +150,7 @@ export function csvFileQuery<T>(
     queryKey: githubKeys.csvFile(owner, repo, path, ref),
     queryFn: async ({ signal }) => {
       const raw = await readContents(client, owner, repo, path, ref, signal)
-
-      const csvParse = Papa.parse<T>(raw, {
-        header: true,
-        skipEmptyLines: true,
-        transformHeader: trimCsvHeader,
-        transform: (value: string) => value.trim(),
-      })
-
-      return csvParse.data
+      return parseCsvRows<T>(raw)
     },
     enabled: Boolean(owner && repo && typeof path === "string"),
     staleTime: 10 * 60 * 1000,

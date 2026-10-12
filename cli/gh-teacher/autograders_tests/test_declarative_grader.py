@@ -134,6 +134,16 @@ class TestTimeoutOutcome:
         o = ag._timeout_outcome("t", 1, 1, self._exc(None), merge_streams=True)
         assert o["capture"] == {}
 
+    def test_translates_newlines_like_the_completed_path(self):
+        # communicate() under text=True folds \r\n and a lone \r (a progress
+        # line) to \n; the raw bytes a timeout carries must render the same
+        # way, or the same program prints differently depending on whether it
+        # finished or hung.
+        o = ag._timeout_outcome("t", 1, 1, self._exc(b"10%\r50%\r\ndone", "a\r\nb\r"),
+                                merge_streams=False)
+        assert o["capture"]["stdout"] == "10%\n50%\ndone"
+        assert o["capture"]["stderr"] == "a\nb\n"
+
     def test_shape(self):
         o = ag._timeout_outcome("t", 4, 7, self._exc(None), merge_streams=True)
         assert not o["passed"] and o["score"] == 0 and o["max-score"] == 4

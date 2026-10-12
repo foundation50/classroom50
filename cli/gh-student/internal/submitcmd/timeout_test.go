@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/foundation50/classroom50-cli-shared/ghauth"
 	"github.com/foundation50/classroom50-cli-shared/gitexec"
 	"github.com/foundation50/gh-student/internal/githubtest"
 	identitypkg "github.com/foundation50/gh-student/internal/identity"
@@ -122,6 +123,12 @@ func TestBlobReadTimeout(t *testing.T) {
 				t.Fatalf("blobReadTimeout(%d) = %v, want %v", tc.size, got, tc.want)
 			}
 		})
+	}
+	// The production client (ghauth.RequireClient) honors a request's own
+	// deadline only up to ghauth.RequestCeiling; a cap above it would describe
+	// a deadline that never runs.
+	if gitNetworkTimeout > ghauth.RequestCeiling {
+		t.Fatalf("gitNetworkTimeout %v exceeds ghauth.RequestCeiling %v, so blobReadTimeout's cap is unreachable", gitNetworkTimeout, ghauth.RequestCeiling)
 	}
 }
 

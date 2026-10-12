@@ -11,9 +11,11 @@ package ghauth
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -115,23 +117,104 @@ func newDefaultClient() (*api.RESTClient, error) {
 	return client, nil
 }
 
-// RequestTimeout bounds every REST request either CLI makes. go-gh sets no
-// HTTP timeout, so without this a stalled connection hangs the command until
-// Ctrl-C. Generous because it also covers the largest single request, a
-// base64 blob upload; callers that want a tighter bound layer a context on top.
+// RequestTimeout bounds a REST request that carries no deadline of its own (see
+// deadlineTransport). Generous because it also covers the largest single plain
+// request, a base64 blob upload.
 const RequestTimeout = 60 * time.Second
 
-// NewRESTClient is the single constructor for go-gh REST clients in both CLIs,
-// applying RequestTimeout unless opts already sets one.
+// RequestCeiling is the longest any single request may run however long a
+// deadline the caller supplied. It matches gh-student's clone/push backstop so
+// the two never disagree on what a stalled network costs.
+const RequestCeiling = 10 * time.Minute
+
+// NewRESTClient is the single constructor for go-gh REST clients in both CLIs;
+// every request runs through deadlineTransport. A non-zero opts.Timeout becomes
+// that client's fallback rather than reaching http.Client.Timeout.
 func NewRESTClient(opts api.ClientOptions) (*api.RESTClient, error) {
-	return api.NewRESTClient(withRequestTimeout(opts))
+	return api.NewRESTClient(withDeadlineTransport(opts))
 }
 
-func withRequestTimeout(opts api.ClientOptions) api.ClientOptions {
-	if opts.Timeout == 0 {
-		opts.Timeout = RequestTimeout
+func withDeadlineTransport(opts api.ClientOptions) api.ClientOptions {
+	fallback := RequestTimeout
+	if opts.Timeout != 0 {
+		fallback = opts.Timeout
+		opts.Timeout = 0
 	}
+	opts.Transport = &deadlineTransport{next: baseTransport(opts), fallback: fallback, ceiling: RequestCeiling}
 	return opts
+}
+
+// baseTransport picks what deadlineTransport wraps. go-gh routes through the
+// configured `http_unix_socket` only when opts.Transport is nil, and installing
+// deadlineTransport makes it non-nil, so the socket has to be resolved and
+// dialed here the way go-gh would have. A nil result means http.DefaultTransport.
+func baseTransport(opts api.ClientOptions) http.RoundTripper {
+	if opts.Transport != nil {
+		return opts.Transport
+	}
+	socket := opts.UnixDomainSocket
+	if socket == "" {
+		if cfg, err := config.Read(nil); err == nil {
+			socket, _ = cfg.Get([]string{"http_unix_socket"})
+		}
+	}
+	if socket == "" {
+		return nil
+	}
+	return unixSocketTransport(socket)
+}
+
+func unixSocketTransport(socket string) http.RoundTripper {
+	dial := func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", socket)
+	}
+	return &http.Transport{DialContext: dial, DialTLSContext: dial, DisableKeepAlives: true}
+}
+
+// deadlineTransport bounds every request. go-gh sets no HTTP timeout, so a
+// request that brought no deadline gets `fallback` and a stalled connection
+// cannot hang the command until Ctrl-C; one that brought its own keeps it, up
+// to `ceiling`, so gh-student's git-blobs read can size its deadline to the
+// file and run past the default. The bounds live here rather than in
+// http.Client.Timeout because that field injects its own context deadline and
+// would make a caller's deadline indistinguishable from the ceiling. The
+// deadline must outlive RoundTrip because the body is read afterwards, so the
+// cancel is tied to the body's Close.
+type deadlineTransport struct {
+	next     http.RoundTripper
+	fallback time.Duration
+	ceiling  time.Duration
+}
+
+func (t *deadlineTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	next := t.next
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	timeout := t.fallback
+	if deadline, ok := req.Context().Deadline(); ok {
+		timeout = min(time.Until(deadline), t.ceiling)
+	}
+	ctx, cancel := context.WithTimeout(req.Context(), timeout)
+	resp, err := next.RoundTrip(req.WithContext(ctx))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	resp.Body = &cancelOnClose{ReadCloser: resp.Body, cancel: cancel}
+	return resp, nil
+}
+
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (c *cancelOnClose) Close() error {
+	err := c.ReadCloser.Close()
+	c.cancel()
+	return err
 }
 
 // isGhManagedToken reports whether TokenForHost's source string denotes a token
