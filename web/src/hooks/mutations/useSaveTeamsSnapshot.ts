@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys } from "@/github-core/queries"
+import { seedTeamsFile } from "@/github-core/queries"
 import { saveTeamsSnapshot, syncTeamsSnapshot } from "@/domain/teams/teamsFile"
 import type { TeamsFileTeam } from "@/domain/teams/teamsFile"
 import type { TeamFormation } from "@/types/classroom"
@@ -25,10 +25,8 @@ export function useSaveTeamsSnapshot(params: {
         assignment,
         teams: input.teams,
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.teamsFile(org, classroom),
-      })
+    onSuccess: (teamsFile) => {
+      seedTeamsFile(queryClient, org, classroom, teamsFile)
     },
   })
 }
@@ -54,10 +52,8 @@ export function useSyncTeamsSnapshot(params: {
         assignment,
         formation: input.formation,
       }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.teamsFile(org, classroom),
-      })
+    onSuccess: (teamsFile) => {
+      seedTeamsFile(queryClient, org, classroom, teamsFile)
     },
   })
 }

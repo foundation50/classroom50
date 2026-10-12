@@ -1,7 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys, invalidateGroupTeams } from "@/github-core/queries"
+import {
+  githubKeys,
+  invalidateGroupTeams,
+  seedTeamsFile,
+} from "@/github-core/queries"
 import { applyGroupsPlan } from "@/domain/teams/copyGroupsPlan"
 import type {
   ApplyGroupsPlanProgress,
@@ -38,11 +42,17 @@ export function useApplyGroupsPlan(params: {
         assignment,
         ...input,
       }),
-    onSettled: () => {
+    onSettled: (result) => {
       invalidateGroupTeams(queryClient, org, classroom, assignment)
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.teamsFile(org, classroom),
-      })
+      // The closing sync hands back the committed teams.json; without it
+      // (nothing created, sync failed, or the apply threw) refetch instead.
+      if (result?.teamsFile) {
+        seedTeamsFile(queryClient, org, classroom, result.teamsFile)
+      } else {
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.teamsFile(org, classroom),
+        })
+      }
     },
   })
 }

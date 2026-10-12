@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
-import { invalidateAssignments } from "@/github-core/queries"
+import { seedAssignments } from "@/github-core/queries"
 import {
   copyAssignmentsWithConflictRetry,
   deleteAssignmentsWithConflictRetry,
@@ -33,7 +33,8 @@ export function useBulkSetAssignmentLock(org: string, classroom: string) {
         slugs,
         locked,
       }),
-    onSuccess: () => invalidateAssignments(queryClient, org, classroom),
+    onSuccess: (result) =>
+      seedAssignments(queryClient, org, classroom, result.assignments),
   })
 }
 
@@ -45,7 +46,8 @@ export function useBulkDeleteAssignments(org: string, classroom: string) {
     // No keepTabOpen: a single git-data commit strands nothing.
     mutationFn: ({ slugs }) =>
       deleteAssignmentsWithConflictRetry(client, { org, classroom, slugs }),
-    onSuccess: () => invalidateAssignments(queryClient, org, classroom),
+    onSuccess: (result) =>
+      seedAssignments(queryClient, org, classroom, result.assignments),
   })
 }
 
@@ -68,7 +70,7 @@ export function useBulkReuseAssignments(org: string) {
         items,
         canGrantTemplateAccess,
       }),
-    onSuccess: (_result, { targetClassroom }) =>
-      invalidateAssignments(queryClient, org, targetClassroom),
+    onSuccess: (result, { targetClassroom }) =>
+      seedAssignments(queryClient, org, targetClassroom, result.assignments),
   })
 }

@@ -9,6 +9,7 @@ import {
   invalidateViewerOrgs,
   seedAssignments,
   seedJsonFile,
+  seedTeamsFile,
 } from "./keys"
 
 const invalidated = (client: QueryClient, key: readonly unknown[]) =>
@@ -146,5 +147,18 @@ describe("seedAssignments", () => {
         githubKeys.jsonFile("acme", CONFIG_REPO, "cs101/assignments.json"),
       ),
     ).toEqual(written)
+  })
+})
+
+describe("seedTeamsFile", () => {
+  it("seeds the same key useTeamsSnapshot reads", () => {
+    const client = new QueryClient()
+    const written = { schema: "classroom50/teams/v1", assignments: {} }
+
+    seedTeamsFile(client, "acme", "cs101", written)
+
+    expect(client.getQueryData(githubKeys.teamsFile("acme", "cs101"))).toEqual(
+      written,
+    )
   })
 })

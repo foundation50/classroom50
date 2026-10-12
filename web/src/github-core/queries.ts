@@ -9,6 +9,7 @@ export {
   invalidateAssignments,
   seedAssignments,
   seedJsonFile,
+  seedTeamsFile,
   invalidateInviteQueries,
   invalidateClassroomTeam,
   invalidateGroupTeams,

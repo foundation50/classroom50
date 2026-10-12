@@ -399,9 +399,9 @@ export function invalidateInviteQueries(queryClient: QueryClient, org: string) {
 }
 
 // Refresh a classroom's assignments list after an assignments.json write whose
-// committed document the caller doesn't hold (bulk actions, rename). A writer
-// that does hold it must use seedAssignments instead, so the read never races
-// GitHub's contents API.
+// committed document the caller doesn't hold (the multi-phase rename). A
+// writer that does hold it must use seedAssignments instead, so the read never
+// races GitHub's contents API.
 export function invalidateAssignments(
   queryClient: QueryClient,
   org: string,
@@ -441,4 +441,16 @@ export function seedAssignments(
     githubKeys.assignmentsFile(org, classroom),
     assignments,
   )
+}
+
+// Same for teams.json: every teacher-side snapshot write hands back the file
+// it committed, so the drift badge compares live membership against that
+// rather than a stale read.
+export function seedTeamsFile(
+  queryClient: QueryClient,
+  org: string,
+  classroom: string,
+  teamsFile: unknown,
+) {
+  seedJsonFile(queryClient, githubKeys.teamsFile(org, classroom), teamsFile)
 }
