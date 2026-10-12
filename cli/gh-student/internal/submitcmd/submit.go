@@ -477,14 +477,35 @@ var (
 	// the default-branch read.
 	defaultBranchTimeout = 10 * time.Second
 	// Per request inside fetchRepoPath, so a large .github/ tree is not
-	// penalized for its size.
+	// penalized for its size. A single file over the 1 MB inline ceiling is
+	// read through blobReadTimeout instead, which grows with the file.
 	teacherFileTimeout = 15 * time.Second
+	// Slowest link a blob read is sized for. Scales the blob deadline so a
+	// multi-MB template file on campus Wi-Fi does not trip a timeout meant
+	// for small inline reads, while a stalled connection still fails fast.
+	blobTransferFloorBytesPerSec int64 = 256 * 1024
 	// Post-push ls-remote probe + tag push.
 	submitTagTimeout = 30 * time.Second
 	// Ceiling on clone + push. gitexec's stall detector is HTTPS-only, so this
 	// is the SSH backstop; generous so a slow transfer never trips it.
 	gitNetworkTimeout = 10 * time.Minute
 )
+
+// blobReadTimeout sizes the deadline for a git-blobs read to the file:
+// teacherFileTimeout plus the time the base64 wire payload (4/3 of size)
+// takes at blobTransferFloorBytesPerSec, capped at gitNetworkTimeout. An
+// unknown size (0) keeps the base deadline.
+func blobReadTimeout(size int64) time.Duration {
+	if size <= 0 {
+		return teacherFileTimeout
+	}
+	wireBytes := size + size/3
+	d := teacherFileTimeout + time.Duration(wireBytes/blobTransferFloorBytesPerSec)*time.Second
+	if d > gitNetworkTimeout {
+		return gitNetworkTimeout
+	}
+	return d
+}
 
 // getBounded issues a GET under its own deadline and returns the raw body.
 func getBounded(ctx context.Context, client githubapi.Client, path string, timeout time.Duration) ([]byte, error) {
@@ -543,10 +564,16 @@ type contentsFile struct {
 	Type     string `json:"type"`
 	Name     string `json:"name"`
 	Path     string `json:"path"`
+	SHA      string `json:"sha"`
+	Size     int64  `json:"size"`
 	Encoding string `json:"encoding"`
 	Content  string `json:"content"`
 }
 
+// fetchRepoPath copies the file or directory tree at path into dstRoot.
+// Files over the contents API's 1 MB inline ceiling come back with
+// `encoding: "none"` and an empty body, so those are re-read through the
+// git-blobs API by sha (#1105).
 func fetchRepoPath(
 	ctx context.Context,
 	client githubapi.Client,
@@ -600,13 +627,20 @@ func fetchRepoPath(
 			return nil
 		}
 
-		if file.Encoding != "base64" {
+		var decoded []byte
+		switch {
+		case file.Encoding == "base64":
+			decoded, err = ghutil.DecodeContentsBase64(file.Content)
+			if err != nil {
+				return fmt.Errorf("decode base64 content for %s: %w", path, err)
+			}
+		case file.SHA != "":
+			decoded, err = fetchBlob(ctx, client, owner, repo, file.SHA, file.Size)
+			if err != nil {
+				return fmt.Errorf("%s is too large for the contents API and the blob read failed: %w", path, err)
+			}
+		default:
 			return fmt.Errorf("unsupported encoding %q for %s", file.Encoding, path)
-		}
-
-		decoded, err := ghutil.DecodeContentsBase64(file.Content)
-		if err != nil {
-			return fmt.Errorf("decode base64 content for %s: %w", path, err)
 		}
 		dst := filepath.Join(dstRoot, file.Path)
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -621,6 +655,33 @@ func fetchRepoPath(
 	default:
 		return fmt.Errorf("unexpected contents response for %s", path)
 	}
+}
+
+// fetchBlob reads a blob by sha through the git-data API, which base64-encodes
+// regardless of size. size is the decoded byte count from the contents
+// response and sizes the deadline; 0 when unknown.
+func fetchBlob(ctx context.Context, client githubapi.Client, owner, repo, sha string, size int64) ([]byte, error) {
+	apiPath := fmt.Sprintf("repos/%s/%s/git/blobs/%s",
+		url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(sha))
+	raw, err := getBounded(ctx, client, apiPath, blobReadTimeout(size))
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: %w", apiPath, err)
+	}
+	var blob struct {
+		Encoding string `json:"encoding"`
+		Content  string `json:"content"`
+	}
+	if err := json.Unmarshal(raw, &blob); err != nil {
+		return nil, fmt.Errorf("parse blob response %s: %w", apiPath, err)
+	}
+	if blob.Encoding != "base64" {
+		return nil, fmt.Errorf("GET %s: unsupported encoding %q", apiPath, blob.Encoding)
+	}
+	decoded, err := ghutil.DecodeContentsBase64(blob.Content)
+	if err != nil {
+		return nil, fmt.Errorf("decode blob %s: %w", apiPath, err)
+	}
+	return decoded, nil
 }
 
 // parseGitHubRemote extracts (owner, repo) from a GitHub remote URL. Accepts

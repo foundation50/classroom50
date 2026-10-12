@@ -3,18 +3,14 @@ package main
 import (
 	"bytes"
 	_ "embed"
-	"encoding/base64"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
-	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
@@ -184,40 +180,10 @@ func setClassroomDefaultAutograder(client githubapi.Client, out, errOut io.Write
 
 // fetchFileContent returns the raw bytes of `path` at `ref`. 404 → (nil, nil)
 // so the caller treats "doesn't exist yet" like "different from proposed".
-// Other errors propagate. The contents API base64-encodes files up to ~1 MB;
-// autograder.py is well under that.
 func fetchFileContent(client githubapi.Client, owner, repo, path, ref string) ([]byte, error) {
-	segs := strings.Split(path, "/")
-	for i := range segs {
-		segs[i] = url.PathEscape(segs[i])
+	data, ok, err := configrepo.ReadFileContents(client, owner, repo, path, ref)
+	if err != nil || !ok {
+		return nil, err
 	}
-	apiPath := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
-		url.PathEscape(owner), url.PathEscape(repo),
-		strings.Join(segs, "/"), url.PathEscape(ref))
-
-	var body struct {
-		Content  string `json:"content"`
-		Encoding string `json:"encoding"`
-	}
-	if err := client.Get(apiPath, &body); err != nil {
-		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("GET %s: %w", apiPath, err)
-	}
-	if body.Encoding != "base64" {
-		return nil, fmt.Errorf("GET %s: unexpected encoding %q (want base64)", apiPath, body.Encoding)
-	}
-	// GitHub wraps base64 at 60 chars; strip whitespace before decoding.
-	clean := strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
-			return -1
-		}
-		return r
-	}, body.Content)
-	out, err := base64.StdEncoding.DecodeString(clean)
-	if err != nil {
-		return nil, fmt.Errorf("decode %s contents: %w", apiPath, err)
-	}
-	return out, nil
+	return data, nil
 }
