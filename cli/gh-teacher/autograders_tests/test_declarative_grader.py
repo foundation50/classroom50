@@ -96,6 +96,49 @@ class TestExecuteRun:
         spec = {"name": "t", "type": "run", "run": "sleep 5", "timeout": 1, "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"] and "timed out" in o["detail"]
+        assert o["failure-kind"] == "timeout"
+
+    def test_timeout_keeps_output_printed_before_the_kill(self, tmp_path):
+        # A build that hangs after printing its progress still shows that
+        # progress, so the student can see how far it got.
+        spec = {"name": "t", "type": "run", "run": "echo compiling; echo warn >&2; sleep 5",
+                "timeout": 1, "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert o["capture"] == {"output": "compiling\nwarn\n"}
+        assert ag.compose_detail(o) == "timed out after 1s\n--- output ---\ncompiling\nwarn\n"
+
+    def test_silent_timeout_has_only_the_summary(self, tmp_path):
+        spec = {"name": "t", "type": "run", "run": "sleep 5", "timeout": 1, "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert o["capture"] == {}
+        assert ag.compose_detail(o) == "timed out after 1s"
+
+
+class TestTimeoutOutcome:
+    # CPython populates TimeoutExpired.stdout/.stderr with bytes even under
+    # text=True (gh-87597), and leaves them None when nothing was read. The
+    # builder must accept every shape without crashing the grade.
+    def _exc(self, stdout, stderr=None):
+        return subprocess.TimeoutExpired("cmd", 1, output=stdout, stderr=stderr)
+
+    def test_decodes_bytes_with_replacement(self):
+        o = ag._timeout_outcome("t", 1, 1, self._exc(b"caf\xc3\xa9 \xff\n", b"e\n"),
+                                merge_streams=False, stdin="in\n")
+        assert o["capture"] == {"input": "in\n", "stdout": "caf\u00e9 \ufffd\n",
+                                "stderr": "e\n"}
+
+    def test_accepts_str_and_none(self):
+        o = ag._timeout_outcome("t", 1, 1, self._exc("already text\n"),
+                                merge_streams=True)
+        assert o["capture"] == {"output": "already text\n"}
+        o = ag._timeout_outcome("t", 1, 1, self._exc(None), merge_streams=True)
+        assert o["capture"] == {}
+
+    def test_shape(self):
+        o = ag._timeout_outcome("t", 4, 7, self._exc(None), merge_streams=True)
+        assert not o["passed"] and o["score"] == 0 and o["max-score"] == 4
+        assert o["detail"] == "timed out after 7s"
+        assert o["failure-kind"] == "timeout"
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +260,53 @@ class TestExecuteIO:
                 "expected": "ping", "comparison": "included", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert o["passed"] and "input" not in o["capture"]
+
+    # A program that rejects its input, re-prompts, and then blocks on stdin
+    # that never comes (#1091). The autograder has fed everything it had.
+    _REPROMPT = ('read n; if [ "$n" -le 0 ]; then echo "Enter a positive number:"; '
+                 'echo "rejected $n" >&2; sleep 5; fi; echo "got $n"')
+
+    def test_timeout_shows_input_and_partial_output(self, tmp_path):
+        # #1091: the timed-out case was reported as just "timed out", so the
+        # student could see neither the input that was rejected nor the prompt
+        # the program printed while waiting.
+        spec = {"name": "t", "type": "io", "run": self._REPROMPT, "input": "-3\n",
+                "expected": "got 3", "comparison": "included", "points": 1,
+                "timeout": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"] and o["failure-kind"] == "timeout"
+        assert o["capture"] == {"input": "-3\n",
+                                "stdout": "Enter a positive number:\n",
+                                "stderr": "rejected -3\n"}
+        detail = ag.compose_detail(o)
+        assert detail == ("timed out after 1s\n"
+                          "--- input ---\n-3\n\n"
+                          "--- actual stdout ---\nEnter a positive number:\n\n"
+                          "--- stderr ---\nrejected -3\n")
+        # No comparison ran, so there is no expected side to show.
+        assert "expected" not in detail
+
+    def test_timeout_shows_input_file_contents(self, tmp_path):
+        (tmp_path / "in.txt").write_text("-3\n")
+        spec = {"name": "t", "type": "io", "run": self._REPROMPT, "input-file": "in.txt",
+                "expected": "got 3", "comparison": "included", "points": 1,
+                "timeout": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "--- input ---\n-3\n" in ag.compose_detail(o)
+
+    def test_timeout_keeps_whitespace_only_input(self, tmp_path):
+        # Same as the output-kind rule: a bare Enter is real test data.
+        spec = {"name": "t", "type": "io", "run": "read n; sleep 5", "input": "\n",
+                "expected": "x", "comparison": "included", "points": 1, "timeout": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert ag.compose_detail(o) == "timed out after 1s\n--- input ---\n\n"
+
+    def test_timeout_without_input_omits_the_block(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "sleep 5",
+                "expected": "x", "comparison": "included", "points": 1, "timeout": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert o["capture"] == {}
+        assert ag.compose_detail(o) == "timed out after 1s"
 
     def test_invalid_regex_fails_with_message(self, tmp_path):
         spec = {"name": "t", "type": "io", "run": "echo x",
@@ -422,6 +512,19 @@ class TestExecutePython:
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert o["passed"] and o["score"] == 3
 
+    def test_timeout_keeps_output_printed_before_the_kill(self, tmp_path):
+        # Not pytest, but the same path: a suite that prints then hangs still
+        # shows what it printed. `sh -c` swallows the --json-report flags the
+        # grader appends; _ensure_pytest is already satisfied here so the pip
+        # budget does not come into play.
+        spec = {"name": "suite", "type": "python",
+                "run": "sh -c 'echo collecting; sleep 5' --",
+                "timeout": 1, "points": 3}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"] and o["score"] == 0
+        assert o["failure-kind"] == "timeout"
+        assert ag.compose_detail(o) == "timed out after 1s\n--- output ---\ncollecting\n"
+
 
 # ---------------------------------------------------------------------------
 # load_tests
@@ -613,6 +716,37 @@ class TestComposeDetail:
     def test_none_keeps_only_the_failure_kind(self, tmp_path):
         detail = ag.compose_detail(self._io_fail(tmp_path, "none"))
         assert detail == "exit 0; comparison=exact"
+
+    def _io_timeout(self, tmp_path, level):
+        spec = {"name": "t", "type": "io", "run": "read n; echo prompt; echo warn >&2; sleep 5",
+                "input": "secret-case\n", "expected": "x", "comparison": "included",
+                "points": 1, "timeout": 1, "failure-details": level}
+        return ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+
+    def test_actual_only_hides_input_on_a_timeout(self, tmp_path):
+        # The #1091 timeout detail obeys the same policy as a wrong-output
+        # failure: the input is the teacher's hidden case, the streams are the
+        # student's own.
+        detail = ag.compose_detail(self._io_timeout(tmp_path, "actual-only"))
+        assert "--- input ---" not in detail and "secret-case" not in detail
+        assert "--- actual stdout ---\nprompt" in detail
+        assert "--- stderr ---\nwarn" in detail
+
+    def test_full_shows_input_on_a_timeout(self, tmp_path):
+        detail = ag.compose_detail(self._io_timeout(tmp_path, "full"))
+        assert "--- input ---\nsecret-case" in detail
+        assert detail.index("--- input ---") < detail.index("--- actual stdout ---")
+
+    def test_none_hides_timeout_output(self, tmp_path):
+        detail = ag.compose_detail(self._io_timeout(tmp_path, "none"))
+        assert detail == "timed out after 1s"
+
+    def test_timeout_with_show_command_lists_both_commands(self, tmp_path):
+        spec = {"name": "t", "type": "run", "setup": "echo ready", "run": "sleep 5",
+                "points": 1, "timeout": 1, "show-command": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert ag.compose_detail(o) == ("timed out after 1s\n--- setup command ---\necho ready\n"
+                                        "--- run command ---\nsleep 5")
 
     def test_none_hides_run_output(self, tmp_path):
         spec = {"name": "t", "type": "run", "run": "echo secret >&2; false",
@@ -972,6 +1106,16 @@ class TestRenderLogReport:
         assert "\n  -err\n" in report
         assert f"  {ag.ANSI_RED}-1{ag.ANSI_RESET}" in report
         assert f"  {ag.ANSI_GREEN}+-3{ag.ANSI_RESET}" in report
+
+    def test_timeout_detail_is_never_diff_colored(self, tmp_path):
+        # A timeout has no diff, so signed stdin and output must stay plain.
+        spec = {"name": "t", "type": "io", "run": "read n; echo -prompt; sleep 5",
+                "input": "-3\n", "expected": "1", "comparison": "exact",
+                "points": 1, "timeout": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        report = ag.render_log_report([o], color=True)
+        assert "\n  -3\n" in report and "\n  -prompt\n" in report
+        assert ag.ANSI_RED not in report.split("::group::", 1)[1]
 
     def test_detail_cannot_inject_workflow_commands(self):
         # Detail carries student-controlled output; GitHub only interprets

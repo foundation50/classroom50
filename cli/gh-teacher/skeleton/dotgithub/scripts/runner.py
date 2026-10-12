@@ -112,8 +112,9 @@ MAX_LOG_CAPTURED_CHARS = 100_000
 
 # Per-test failure-detail levels -- mirror tests.go / tests-v1.schema.json.
 # full: io tests show the input, then a diff (exact) or expected+actual
-# blocks, plus stderr; run/python tests show the command's combined output
-# (the default).
+# blocks, plus stderr; run/python tests show the command's combined output;
+# a timeout shows the input (io) and whatever output had reached the grader
+# before the program was stopped (the default).
 # actual-only: the student's own output; no input, expected output, or diff.
 # none: just the failure-kind summary line.
 FAILURE_DETAILS_FULL = "full"
@@ -1746,7 +1747,8 @@ def _make_outcome(name: str, points: int, passed: bool, detail: str,
     fields stripped before result.json: a `detail` summary line (the failure
     kind -- safe under every failure-details level) and a `capture` dict of raw
     streams (`output` and `setup-output` for run/python tests, `stdout` /
-    `stderr` plus `input` / `expected` on failure for io tests) that the
+    `stderr` plus `input` / `expected` on failure for io tests, and on a
+    timeout whatever was read before the kill plus the io `input`) that the
     renderers clip and policy-filter per surface."""
     if score is None:
         score = points if passed else 0
@@ -1819,6 +1821,36 @@ def _run_command(command: str, cwd: pathlib.Path, timeout: int,
     )
 
 
+def _partial_stream(data: bytes | str | None) -> str:
+    """The output a TimeoutExpired carries from before the kill. CPython hands
+    it back as bytes even under text=True, so decode it the way _run_command
+    would have."""
+    if data is None:
+        return ""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data
+
+
+def _timeout_outcome(name: str, points: int, timeout: int,
+                     exc: subprocess.TimeoutExpired, *,
+                     merge_streams: bool, stdin: str = "") -> dict[str, Any]:
+    """Failing outcome for a run that hit its timeout. It keeps what the
+    program read and printed before it was stopped: a program that re-prompts
+    on rejected input and then blocks on stdin times out, and without the
+    input and the prompt it printed a student cannot see why (#1091)."""
+    if merge_streams:
+        capture = {"output": _partial_stream(exc.stdout)}
+    else:
+        capture = {"input": stdin,
+                   "stdout": _partial_stream(exc.stdout),
+                   "stderr": _partial_stream(exc.stderr)}
+    outcome = _make_outcome(name, points, False, f"timed out after {timeout}s",
+                            capture=capture)
+    outcome["failure-kind"] = "timeout"
+    return outcome
+
+
 def _run_setup(setup: str, cwd: pathlib.Path, timeout: int,
                bundle_dir: pathlib.Path | None = None,
                ) -> tuple[str | None, subprocess.CompletedProcess[str] | None]:
@@ -1878,9 +1910,9 @@ def _grade_python(spec: dict[str, Any], cwd: pathlib.Path, timeout: int,
         cmd = f"{spec['run']} --json-report --json-report-file={shlex.quote(str(report))}"
     try:
         rp = _run_command(cmd, cwd, timeout, bundle_dir=bundle_dir, merge_streams=True)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         shutil.rmtree(report_dir, ignore_errors=True)
-        return _make_outcome(name, points, False, f"timed out after {timeout}s")
+        return _timeout_outcome(name, points, timeout, exc, merge_streams=True)
     except OSError as exc:
         shutil.rmtree(report_dir, ignore_errors=True)
         return _make_outcome(name, points, False, f"failed to start: {exc}")
@@ -1978,8 +2010,9 @@ def _execute_spec(spec: dict[str, Any], *, cwd: pathlib.Path,
     try:
         rp = _run_command(spec["run"], cwd, timeout, stdin=stdin,
                           bundle_dir=fixtures_dir, merge_streams=merge)
-    except subprocess.TimeoutExpired:
-        return _make_outcome(name, points, False, f"timed out after {timeout}s")
+    except subprocess.TimeoutExpired as exc:
+        return _timeout_outcome(name, points, timeout, exc,
+                                merge_streams=merge, stdin=stdin)
     except OSError as exc:
         return _make_outcome(name, points, False, f"failed to start: {exc}")
 
@@ -2229,8 +2262,24 @@ def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
         if block:
             detail += f"\n{block}"
         return detail
-    # timeout / failed start / bad fixture / bad regex: the summary is all
-    # there is (no process output was captured).
+    if kind == "timeout":
+        # No comparison ran, so there is no expected side; what the program
+        # read and printed before it was stopped is what lets a student rerun
+        # the hang (#1091). The input is the teacher's, so it stays full-only
+        # like the output kind above; the partial streams are the student's.
+        if level == FAILURE_DETAILS_FULL:
+            block = _capture_block(cap, "input", "input", limit, keep_blank=True)
+            if block:
+                detail += f"\n{block}"
+        for key, label in (("output", "output"),
+                           ("stdout", "actual stdout"),
+                           ("stderr", "stderr")):
+            block = _capture_block(cap, key, label, limit)
+            if block:
+                detail += f"\n{block}"
+        return detail
+    # failed start / bad fixture / bad regex: the summary is all there is (no
+    # process output was captured).
     return detail
 
 
