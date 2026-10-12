@@ -17,6 +17,21 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.58.0](https://github.com/foundation50/classroom50/compare/cli-v1.57.1...cli-v1.58.0) (2026-10-12)
+
+
+### Features
+
+* export group membership as CSV from the web and the CLI ([#1076](https://github.com/foundation50/classroom50/issues/1076)) ([c8b7197](https://github.com/foundation50/classroom50/commit/c8b7197c2c52ccab2403ae761b3cf5fa66ff264b))
+
+
+### Bug Fixes
+
+* address the 1.58.0 release review findings ([#1115](https://github.com/foundation50/classroom50/issues/1115)) ([6bec887](https://github.com/foundation50/classroom50/commit/6bec8877c329deb3b430c1c2a6d340200e623297))
+* **cli:** read files over 1 MB through the git-blobs API ([#1111](https://github.com/foundation50/classroom50/issues/1111)) ([3b066c2](https://github.com/foundation50/classroom50/commit/3b066c23d4eaa4be6e10901621da9bafc0245d81))
+* **cli:** show the input and partial output when a test times out ([#1114](https://github.com/foundation50/classroom50/issues/1114)) ([c165204](https://github.com/foundation50/classroom50/commit/c16520409b5f8ecf032d39e04d88adfe91dcc21e))
+* **deps:** update web dependencies and CI tool pins ([#1113](https://github.com/foundation50/classroom50/issues/1113)) ([9ba3230](https://github.com/foundation50/classroom50/commit/9ba32304efbe4c5629be29f7cdc761e4a993a860))
+
 ## [1.57.1](https://github.com/foundation50/classroom50/compare/cli-v1.57.0...cli-v1.57.1) (2026-10-08)
 
 
