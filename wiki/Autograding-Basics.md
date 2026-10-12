@@ -208,7 +208,7 @@ value overrides the default.
 
 | Value | Students see |
 |---|---|
-| `full` (default) | For an `io` test, the input the program read, then a unified diff for `exact` comparisons, otherwise the expected and actual output, plus stderr. For a `run` or `python` test, the command's combined output. |
+| `full` (default) | For an `io` test, the input the program read, then a unified diff for `exact` comparisons, otherwise the expected and actual output, plus stderr. For a `run` or `python` test, the command's combined output. For a test that timed out, the input (`io` only) and whatever the program printed before it was stopped. |
 | `actual-only` | The student's own output only. Never the expected output or a diff, since either would reveal the answer, and never the input, which would reveal the hidden test case. |
 | `none` | Only the failure kind: wrong output, wrong exit code, timeout, or setup failed. |
 
