@@ -376,12 +376,12 @@ func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, err
 		return RosterRow{}, err
 	}
 	row := RosterRow{
-		Username:  strings.TrimSpace(unDefangCSVCell(layout.cell(record, "username"))),
-		FirstName: unDefangCSVCell(layout.cell(record, "first_name")),
-		LastName:  unDefangCSVCell(layout.cell(record, "last_name")),
-		Email:     strings.TrimSpace(unDefangCSVCell(layout.cell(record, "email"))),
-		Section:   unDefangCSVCell(layout.cell(record, "section")),
-		Role:      strings.TrimSpace(unDefangCSVCell(layout.cell(record, "role"))),
+		Username:  strings.TrimSpace(undefangCSVCell(layout.cell(record, "username"))),
+		FirstName: undefangCSVCell(layout.cell(record, "first_name")),
+		LastName:  undefangCSVCell(layout.cell(record, "last_name")),
+		Email:     strings.TrimSpace(undefangCSVCell(layout.cell(record, "email"))),
+		Section:   undefangCSVCell(layout.cell(record, "section")),
+		Role:      strings.TrimSpace(undefangCSVCell(layout.cell(record, "role"))),
 	}
 	githubIDCell := layout.cell(record, "github_id")
 	// A row needs at least one cell that identifies or DESCRIBES a student. An
@@ -414,7 +414,7 @@ func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, err
 		row.Extra = make(map[string]string, len(layout.extraIndex))
 		row.ExtraOrder = layout.extraNames
 		for k, idx := range layout.extraIndex {
-			row.Extra[layout.extraNames[k]] = unDefangCSVCell(record[idx])
+			row.Extra[layout.extraNames[k]] = undefangCSVCell(record[idx])
 		}
 	}
 	return row, nil
@@ -943,8 +943,7 @@ func isFormulaTrigger(b byte) bool {
 }
 
 // DefangCSVCell prepends `'` when the first byte is a formula trigger so a
-// roster row can't smuggle a payload to a co-teacher opening it in Excel. The
-// one guard every CSV the CLI writes goes through (roster, scores, groups).
+// roster row can't smuggle a payload to a co-teacher opening it in Excel.
 func DefangCSVCell(s string) string {
 	if s == "" || !isFormulaTrigger(s[0]) {
 		return s
@@ -954,7 +953,7 @@ func DefangCSVCell(s string) string {
 
 // undefangCSVCell inverts DefangCSVCell. Cells without the exact `'<trigger>`
 // pattern pass through (preserving user-typed apostrophes).
-func unDefangCSVCell(s string) string {
+func undefangCSVCell(s string) string {
 	if len(s) >= 2 && s[0] == '\'' && isFormulaTrigger(s[1]) {
 		return s[1:]
 	}

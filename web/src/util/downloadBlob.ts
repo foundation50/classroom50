@@ -18,3 +18,8 @@ export function downloadBlob(blob: Blob, filename: string): void {
 }
 
 const REVOKE_DELAY_MS = 60_000
+
+// Save an already-serialized CSV document under `filename`.
+export function downloadCsv(csv: string, filename: string): void {
+  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8;" }), filename)
+}

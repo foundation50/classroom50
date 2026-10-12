@@ -104,10 +104,10 @@ export function groupMembershipSources(input: {
   groupRepoList: readonly { owner: string; repoName: string }[]
   groupCollabByRepo: ReadonlyMap<string, readonly GitHubUser[]>
 }): GroupMembershipSource[] {
-  const repoByOwner = new Map(
-    input.groupRepoList.map((repo) => [repo.owner, repo.repoName]),
-  )
   if (input.isTeamAssignment) {
+    const repoByOwner = new Map(
+      input.groupRepoList.map((repo) => [repo.owner, repo.repoName]),
+    )
     return [...input.teamByOwner].map(([owner, team]) => ({
       group: owner,
       name: groupExportName(team),
@@ -190,13 +190,12 @@ export function buildGroupMembershipCsvRows(
   }
 
   const rows: GroupMembershipCsvRow[] = []
-  const ordered = [...groups].toSorted((a, b) =>
-    naturalCompare(a.group, b.group),
-  )
+  const ordered = groups.toSorted((a, b) => naturalCompare(a.group, b.group))
   for (const g of ordered) {
+    const block = groupBlock(g)
     if (g.members === undefined) {
       rows.push({
-        ...groupBlock(g),
+        ...block,
         ...emptyMember,
         note: GROUP_MEMBERSHIP_NOTE_UNREADABLE,
       })
@@ -206,38 +205,38 @@ export function buildGroupMembershipCsvRows(
     // possibly under a renamed login). An unrostered member's username is the
     // lowercased live login so both surfaces spell it the same way.
     const seen = new Set<string>()
-    const members: { student: Student; known: boolean }[] = []
-    const live = g.members.filter((m) => !m.fallback)
+    const members: { student: Student; key: string; known: boolean }[] = []
+    const hasLive = g.members.some((m) => !m.fallback)
     for (const raw of g.members) {
       const login = raw.login.trim()
       if (!login) continue
-      const student = resolve(raw)
-      if (raw.fallback && student === undefined && live.length > 0) continue
-      const key = (student?.username ?? login).trim().toLowerCase()
+      const resolvedStudent = resolve(raw)
+      if (raw.fallback && resolvedStudent === undefined && hasLive) continue
+      const key = (resolvedStudent?.username ?? login).trim().toLowerCase()
       if (seen.has(key)) continue
       seen.add(key)
+      const student = resolvedStudent ?? placeholderStudent(login.toLowerCase())
       members.push({
-        student: student ?? placeholderStudent(login.toLowerCase()),
-        known: student !== undefined,
+        student,
+        key: studentSortKeyByLastName(student),
+        known: resolvedStudent !== undefined,
       })
     }
     if (members.length === 0) {
-      rows.push({ ...groupBlock(g), ...emptyMember, note: "" })
+      rows.push({ ...block, ...emptyMember, note: "" })
       continue
     }
-    members.sort((a, b) => {
-      const byKey = naturalCompare(
-        studentSortKeyByLastName(a.student),
-        studentSortKeyByLastName(b.student),
-      )
-      return byKey !== 0
-        ? byKey
-        : naturalCompare(a.student.username, b.student.username)
-    })
+    // Natural order on the last-name key, then the login, so both files list
+    // a group's members in the same order in every locale.
+    members.sort(
+      (a, b) =>
+        naturalCompare(a.key, b.key) ||
+        naturalCompare(a.student.username, b.student.username),
+    )
     for (const { student, known } of members) {
       const id = resolveGitHubId(student.github_id)
       rows.push({
-        ...groupBlock(g),
+        ...block,
         username: esc(student.username.trim()),
         first_name: esc(student.first_name.trim()),
         last_name: esc(student.last_name.trim()),

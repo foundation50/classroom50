@@ -4,6 +4,7 @@
 package groupcmd
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,6 +63,14 @@ func (r memberRow) cells() []string {
 	}
 }
 
+// resolved is one deduplicated member with its roster row (a placeholder for
+// an unrostered login) and the precomputed sort key.
+type resolved struct {
+	row   configrepo.RosterRow
+	key   string
+	known bool
+}
+
 // buildRows expands groups to one row per member. A member joins to the roster
 // by GitHub id first (so a renamed account keeps its row), then by lowercased
 // login. Groups order naturally (group-2 before group-10); members by the
@@ -76,7 +85,7 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 				byID[r.GitHubID] = r
 			}
 		}
-		login := strings.ToLower(strings.TrimSpace(r.Username))
+		login := loginKey(r.Username)
 		if login == "" {
 			continue
 		}
@@ -90,11 +99,11 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 				return r, true
 			}
 		}
-		r, ok := byLogin[strings.ToLower(strings.TrimSpace(m.Login))]
+		r, ok := byLogin[loginKey(m.Login)]
 		return r, ok
 	}
 
-	ordered := append([]groupSource(nil), groups...)
+	ordered := slices.Clone(groups)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		return naturalLess(ordered[i].Group, ordered[j].Group)
 	})
@@ -107,17 +116,7 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			rows = append(rows, base)
 			continue
 		}
-		type resolved struct {
-			row   configrepo.RosterRow
-			key   string
-			known bool
-		}
-		live := 0
-		for _, m := range g.Members {
-			if !m.Fallback {
-				live++
-			}
-		}
+		hasLive := slices.ContainsFunc(g.Members, func(m member) bool { return !m.Fallback })
 		// Dedupe on the resolved identity: a legacy founder is also a
 		// collaborator, possibly under a renamed login. An unrostered member's
 		// username is the lowercased live login so both surfaces spell it the
@@ -130,13 +129,13 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 				continue
 			}
 			r, known := resolve(m)
+			if !known && m.Fallback && hasLive {
+				continue
+			}
 			if !known {
-				if m.Fallback && live > 0 {
-					continue
-				}
 				r = configrepo.RosterRow{Username: strings.ToLower(login)}
 			}
-			key := strings.ToLower(strings.TrimSpace(r.Username))
+			key := loginKey(r.Username)
 			if seen[key] {
 				continue
 			}
@@ -176,6 +175,11 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 		}
 	}
 	return rows
+}
+
+// loginKey is the case-insensitive join key for a GitHub login.
+func loginKey(login string) string {
+	return strings.ToLower(strings.TrimSpace(login))
 }
 
 // sortKey is the web's last-name sort key (studentSortKeyByLastName): "Last

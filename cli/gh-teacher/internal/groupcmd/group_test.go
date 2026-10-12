@@ -290,13 +290,13 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 	})
 }
 
-func run(t *testing.T, state *groupServer, asJSON, asCSV bool) (string, string, error) {
+func run(t *testing.T, state *groupServer, format outputFormat) (string, string, error) {
 	t.Helper()
 	server := httptest.NewServer(state.handler(t))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 	var out, errOut bytes.Buffer
-	err := runGroupList(client, &out, &errOut, scope{Org: testOrg, Classroom: testClassroom, Assignment: testAssignment}, asJSON, asCSV)
+	err := runGroupList(client, &out, &errOut, scope{Org: testOrg, Classroom: testClassroom, Assignment: testAssignment}, format)
 	return out.String(), errOut.String(), err
 }
 
@@ -315,7 +315,7 @@ func TestRunGroupList_TeamMode_CSV(t *testing.T) {
 		},
 		membersBySlug: map[string][]string{slug1: {"bob", "alice", "eve"}, slug2: {}},
 	}
-	out, errOut, err := run(t, state, false, true)
+	out, errOut, err := run(t, state, formatCSV)
 	if err != nil {
 		t.Fatalf("runGroupList: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestRunGroupList_TeamMode_UnreadableTeamKeepsRow(t *testing.T) {
 		membersBySlug:  map[string][]string{slug2: {"alice"}},
 		memberFailures: map[string]int{slug1: http.StatusForbidden},
 	}
-	out, errOut, err := run(t, state, false, true)
+	out, errOut, err := run(t, state, formatCSV)
 	if err != nil {
 		t.Fatalf("runGroupList: %v", err)
 	}
@@ -403,7 +403,7 @@ func TestRunGroupList_TeamMode_RateLimitAborts(t *testing.T) {
 		membersBySlug:   map[string][]string{slug2: {"alice"}},
 		memberThrottled: map[string]bool{slug1: true},
 	}
-	out, _, err := run(t, state, false, true)
+	out, _, err := run(t, state, formatCSV)
 	if err == nil || !strings.Contains(err.Error(), slug1) {
 		t.Fatalf("err = %v, want a rate-limit failure naming the team", err)
 	}
@@ -423,7 +423,7 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 		collaborators:  map[string][]string{"cs101-project-alice": {"alice", "bob", "=Evil"}},
 		collabFailures: map[string]int{"cs101-project-zed": http.StatusForbidden},
 	}
-	out, errOut, err := run(t, state, false, false)
+	out, errOut, err := run(t, state, formatTable)
 	if err != nil {
 		t.Fatalf("runGroupList: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 		t.Errorf("stderr = %q", errOut)
 	}
 
-	jsonOut, _, err := run(t, state, true, false)
+	jsonOut, _, err := run(t, state, formatJSON)
 	if err != nil {
 		t.Fatalf("runGroupList --json: %v", err)
 	}
@@ -465,7 +465,7 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 	}
 
 	// CSV defangs the formula-shaped login the table shows verbatim.
-	csvOut, _, err := run(t, state, false, true)
+	csvOut, _, err := run(t, state, formatCSV)
 	if err != nil {
 		t.Fatalf("runGroupList --csv: %v", err)
 	}
@@ -483,7 +483,7 @@ func TestRunGroupList_LegacyMode_RateLimitAborts(t *testing.T) {
 		collaborators:   map[string][]string{"cs101-project-zed": {"zed"}},
 		collabThrottled: map[string]bool{"cs101-project-alice": true},
 	}
-	out, _, err := run(t, state, false, true)
+	out, _, err := run(t, state, formatCSV)
 	if err == nil || !strings.Contains(err.Error(), "cs101-project-alice") {
 		t.Fatalf("err = %v, want a rate-limit failure naming the repo", err)
 	}
@@ -493,7 +493,7 @@ func TestRunGroupList_LegacyMode_RateLimitAborts(t *testing.T) {
 }
 
 func TestRunGroupList_IndividualModeRefuses(t *testing.T) {
-	_, _, err := run(t, &groupServer{mode: "individual"}, false, false)
+	_, _, err := run(t, &groupServer{mode: "individual"}, formatTable)
 	if err == nil || !strings.Contains(err.Error(), "individual assignment") {
 		t.Fatalf("err = %v, want an individual-mode refusal", err)
 	}

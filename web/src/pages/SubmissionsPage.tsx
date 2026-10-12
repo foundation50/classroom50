@@ -114,7 +114,7 @@ import { groupDisplayName } from "@/util/groupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
-import { downloadBlob } from "@/util/downloadBlob"
+import { downloadCsv } from "@/util/downloadBlob"
 import {
   GROUP_MEMBERSHIP_CSV_COLUMNS,
   buildGroupMembershipCsvRows,
@@ -1257,12 +1257,7 @@ const SubmissionsPageContent = () => {
     const csv = Papa.unparse(rows, {
       header: true,
     })
-
-    const blob = new Blob([csv], {
-      type: "text/csv;charset=utf-8;",
-    })
-
-    downloadBlob(blob, `${classroom}-${assignment}-scores.csv`)
+    downloadCsv(csv, `${classroom}-${assignment}-scores.csv`)
   }
 
   const groupMembershipSourceList = useMemo(
@@ -1311,8 +1306,7 @@ const SubmissionsPageContent = () => {
       { fields: [...GROUP_MEMBERSHIP_CSV_COLUMNS], data: rows },
       { header: true },
     )
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    downloadBlob(blob, `${classroom}-${assignment}-groups.csv`)
+    downloadCsv(csv, `${classroom}-${assignment}-groups.csv`)
   }
 
   if (!org || !classroom || !assignment) {

@@ -270,33 +270,6 @@ const (
 	// membership could not be read. Mirrored verbatim in the web GUI
 	// (web/src/domain/submissions/groupMembershipCsv.ts).
 	GroupMembershipNoteUnreadable = "membership could not be read"
-)
-
-// GroupMembershipCSVColumns is the header of the group-membership export
-// (`gh teacher group list --csv`, the web "Download groups (CSV)" action).
-// `group` is the scores.json owner key and columns 4..10 are roster.csv's
-// header verbatim, so the file joins to both without renaming. Hand-mirrored
-// with NO compile-time link in the web GUI (GROUP_MEMBERSHIP_CSV_COLUMNS);
-// contract_test.go pins the Go half.
-var GroupMembershipCSVColumns = []string{
-	"group", "group_name", "team_slug", "repo",
-	"username", "first_name", "last_name", "email", "section", "github_id", "role",
-	"in_roster", "note",
-}
-
-// GroupExportName is the `group_name` cell for a team: the recorded name, or
-// the untranslated "Group <n>" for a team the students have not named. The
-// export is data, not UI, so the fallback is English on every surface and in
-// every locale. Hand-mirrored with NO compile-time link in the web GUI
-// (groupExportName in web/src/util/groupTeam.ts).
-func GroupExportName(recorded string, counter int) string {
-	if recorded != "" {
-		return recorded
-	}
-	return fmt.Sprintf("Group %d", counter)
-}
-
-const (
 
 	// ServiceTokenSecretName is the repo-level Actions secret on the classroom50 repository
 	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml
@@ -959,4 +932,28 @@ func ParseGroupRepoCounter(repo, classroom, assignment string) (n int, ok bool) 
 		return 0, false
 	}
 	return n, true
+}
+
+// GroupMembershipCSVColumns is the header of the group-membership export
+// (`gh teacher group list --csv`, the web "Download groups (CSV)" action).
+// `group` is the scores.json owner key and columns 4..10 are roster.csv's
+// header verbatim, so the file joins to both without renaming. Hand-mirrored
+// with NO compile-time link in the web GUI (GROUP_MEMBERSHIP_CSV_COLUMNS);
+// contract_test.go pins the Go half.
+var GroupMembershipCSVColumns = []string{
+	"group", "group_name", "team_slug", "repo",
+	"username", "first_name", "last_name", "email", "section", "github_id", "role",
+	"in_roster", "note",
+}
+
+// GroupExportName is the `group_name` cell for a team: the recorded name, or
+// the untranslated "Group <n>" for a team the students have not named. The
+// export is data, not UI, so the fallback is English on every surface and in
+// every locale. Hand-mirrored with NO compile-time link in the web GUI
+// (groupExportName in web/src/util/groupTeam.ts).
+func GroupExportName(recorded string, counter int) string {
+	if recorded != "" {
+		return recorded
+	}
+	return fmt.Sprintf("Group %d", counter)
 }

@@ -24,11 +24,6 @@ import { useTranslation } from "react-i18next"
 import { Dropdown, DropdownMenu } from "@/components/ui"
 import type { DownloadGroupsDisabledReason } from "@/domain/submissions/groupMembershipCsv"
 
-// Consolidates the workflow actions (Collect now / Regrade all / View workflow)
-// plus the CSV export and Metrics into one dropdown so the toolbar stays
-// compact and the roster surfaces higher. Share (accept link) is a standalone
-// button next to the search bar (its own prominent affordance), not in here.
-// Disabled/loading gating mirrors the former inline buttons.
 const DOWNLOAD_GROUPS_DISABLED_TITLE: Record<
   DownloadGroupsDisabledReason,
   string
@@ -38,6 +33,11 @@ const DOWNLOAD_GROUPS_DISABLED_TITLE: Record<
   empty: "submissions.downloadGroups.titleEmpty",
 }
 
+// Consolidates the workflow actions (Collect now / Regrade all / View workflow)
+// plus the CSV export and Metrics into one dropdown so the toolbar stays
+// compact and the roster surfaces higher. Share (accept link) is a standalone
+// button next to the search bar (its own prominent affordance), not in here.
+// Disabled/loading gating mirrors the former inline buttons.
 export function SubmissionsActionsMenu({
   collecting,
   regrading,
@@ -99,9 +99,8 @@ export function SubmissionsActionsMenu({
   // Group-membership export (one row per member, roster-joined). Omitted (item
   // hidden) for an individual assignment, which has no groups to list.
   onDownloadGroups?: () => void
-  // Why the item is disabled: the roster or membership reads are still
-  // loading (an early file would flag every member unrostered), one of them
-  // failed, or the assignment has no groups yet.
+  // Why the item is disabled; undefined when it may run (see
+  // downloadGroupsDisabledReason).
   downloadGroupsDisabledReason?: DownloadGroupsDisabledReason
   // Read-only (any viewer), so not owner-gated like Open-all-PRs; hidden only
   // when there's nothing to fetch (via downloadAllDisabled).

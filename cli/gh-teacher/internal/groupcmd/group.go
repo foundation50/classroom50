@@ -76,12 +76,32 @@ func groupListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runGroupList(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), scope, asJSON, asCSV)
+			return runGroupList(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), scope, resolveFormat(asJSON, asCSV))
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit a JSON array of member objects instead of the table")
 	cmd.Flags().BoolVar(&asCSV, "csv", false, "Emit the rows as CSV with the shared group-membership header")
 	return cmd
+}
+
+type outputFormat int
+
+const (
+	formatTable outputFormat = iota
+	formatJSON
+	formatCSV
+)
+
+// resolveFormat is where "--json takes precedence" lives.
+func resolveFormat(asJSON, asCSV bool) outputFormat {
+	switch {
+	case asJSON:
+		return formatJSON
+	case asCSV:
+		return formatCSV
+	default:
+		return formatTable
+	}
 }
 
 type scope struct {
@@ -106,7 +126,7 @@ func parseScope(args []string) (scope, error) {
 	return s, nil
 }
 
-func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, asJSON, asCSV bool) error {
+func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, format outputFormat) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, s.Org)
 	if err != nil {
 		return err
@@ -144,7 +164,7 @@ func runGroupList(client githubapi.Client, out, errOut io.Writer, s scope, asJSO
 	}
 
 	rows := buildRows(groups, roster)
-	return render(out, errOut, s, groups, rows, asJSON, asCSV)
+	return render(out, errOut, s, groups, rows, format)
 }
 
 // teamGroups resolves a team assignment's groups from its live GitHub Teams,
@@ -177,10 +197,7 @@ func teamGroups(client githubapi.Client, errOut io.Writer, s scope) ([]groupSour
 		if readErr, failed := unreadable[t.Slug]; failed {
 			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", t.Slug, readErr)
 		} else {
-			g.Members = make([]member, 0, len(t.MemberRefs))
-			for _, m := range t.MemberRefs {
-				g.Members = append(g.Members, member{Login: m.Login, ID: m.ID})
-			}
+			g.Members = membersFromRefs(t.MemberRefs)
 		}
 		groups = append(groups, g)
 	}
@@ -212,7 +229,7 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s scope, siblings [
 		case err != nil:
 			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", lower, err)
 		default:
-			g.Members = append(collaborators, member{Login: founder, Fallback: true})
+			g.Members = append(membersFromRefs(collaborators), member{Login: founder, Fallback: true})
 		}
 		groups = append(groups, g)
 	}
@@ -247,31 +264,29 @@ func hasAnyPrefix(name string, prefixes []string) bool {
 
 // listDirectCollaborators reads a repo's direct collaborators (org-inherited
 // access excluded, matching the web's group membership read).
-func listDirectCollaborators(client githubapi.Client, org, repo string) ([]member, error) {
+func listDirectCollaborators(client githubapi.Client, org, repo string) ([]configrepo.TeamMemberRef, error) {
 	base := fmt.Sprintf("repos/%s/%s/collaborators?affiliation=direct", url.PathEscape(org), url.PathEscape(repo))
 	subject := org + "/" + repo
-	collabs, err := githubapi.PaginateAll[struct {
-		Login string `json:"login"`
-		ID    int64  `json:"id"`
-	}](client, githubapi.ListPerPage, githubapi.ListMaxPages,
+	return githubapi.PaginateAll[configrepo.TeamMemberRef](client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
 			return fmt.Sprintf("%s&per_page=%d&page=%d", base, githubapi.ListPerPage, page)
 		},
 		func(path string, err error) error {
 			return membership.ClassifyMembershipReadError(path, subject, err)
 		})
-	if err != nil {
-		return nil, err
-	}
-	members := make([]member, 0, len(collabs))
-	for _, c := range collabs {
-		members = append(members, member{Login: c.Login, ID: c.ID})
-	}
-	return members, nil
 }
 
-func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberRow, asJSON, asCSV bool) error {
-	if asJSON {
+func membersFromRefs(refs []configrepo.TeamMemberRef) []member {
+	members := make([]member, 0, len(refs))
+	for _, r := range refs {
+		members = append(members, member{Login: r.Login, ID: r.ID})
+	}
+	return members
+}
+
+func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberRow, format outputFormat) error {
+	switch format {
+	case formatJSON:
 		if rows == nil {
 			rows = []memberRow{}
 		}
@@ -281,8 +296,7 @@ func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberR
 		}
 		_, _ = out.Write(data)
 		return nil
-	}
-	if asCSV {
+	case formatCSV:
 		w := csv.NewWriter(out)
 		if err := w.Write(contract.GroupMembershipCSVColumns); err != nil {
 			return err

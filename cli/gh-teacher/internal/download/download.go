@@ -757,7 +757,7 @@ func writeScoresCSV(path string, scores scoresschema.File, assignment string, te
 	entries := bucket.Entries
 	// The `group` column is keyed by the bucket's mode, like the web export,
 	// not by what an entry happens to carry.
-	shared := bucket.Type == "group" || bucket.Type == "team"
+	shared := bucket.Type == contract.ModeGroup || bucket.Type == contract.ModeTeam
 	// Map each credited student (lowercased) → gradebook entry. Group entries
 	// credit every member_usernames; individual entries credit the owner.
 	byStudent := make(map[string]map[string]any, len(entries))
@@ -841,11 +841,9 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any, share
 	return out
 }
 
-// csvSafeCell neutralizes CSV formula injection in scores.csv, whose string
-// cells are student-controlled (a student owns their repo and publishes
-// result.json). encoding/csv quotes structural chars but not a leading formula
-// trigger, so this is the roster writer's guard, shared so the trigger set
-// lives in one place.
+// csvSafeCell is the roster writer's formula-trigger guard, aliased so the
+// trigger set lives in one place. scores.csv's string cells are
+// student-controlled (a student owns their repo and publishes result.json).
 func csvSafeCell(s string) string { return configrepo.DefangCSVCell(s) }
 
 // submittedByUsername returns the pusher login from a submission's
