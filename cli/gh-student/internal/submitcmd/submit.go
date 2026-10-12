@@ -477,14 +477,35 @@ var (
 	// the default-branch read.
 	defaultBranchTimeout = 10 * time.Second
 	// Per request inside fetchRepoPath, so a large .github/ tree is not
-	// penalized for its size.
+	// penalized for its size. A single file over the 1 MB inline ceiling is
+	// read through blobReadTimeout instead, which grows with the file.
 	teacherFileTimeout = 15 * time.Second
+	// Slowest link a blob read is sized for. Scales the blob deadline so a
+	// multi-MB template file on campus Wi-Fi does not trip a timeout meant
+	// for small inline reads, while a stalled connection still fails fast.
+	blobTransferFloorBytesPerSec int64 = 256 * 1024
 	// Post-push ls-remote probe + tag push.
 	submitTagTimeout = 30 * time.Second
 	// Ceiling on clone + push. gitexec's stall detector is HTTPS-only, so this
 	// is the SSH backstop; generous so a slow transfer never trips it.
 	gitNetworkTimeout = 10 * time.Minute
 )
+
+// blobReadTimeout sizes the deadline for a git-blobs read to the file:
+// teacherFileTimeout plus the time the base64 wire payload (4/3 of size)
+// takes at blobTransferFloorBytesPerSec, capped at gitNetworkTimeout. An
+// unknown size (0) keeps the base deadline.
+func blobReadTimeout(size int64) time.Duration {
+	if size <= 0 {
+		return teacherFileTimeout
+	}
+	wireBytes := size + size/3
+	d := teacherFileTimeout + time.Duration(wireBytes/blobTransferFloorBytesPerSec)*time.Second
+	if d > gitNetworkTimeout {
+		return gitNetworkTimeout
+	}
+	return d
+}
 
 // getBounded issues a GET under its own deadline and returns the raw body.
 func getBounded(ctx context.Context, client githubapi.Client, path string, timeout time.Duration) ([]byte, error) {
@@ -544,6 +565,7 @@ type contentsFile struct {
 	Name     string `json:"name"`
 	Path     string `json:"path"`
 	SHA      string `json:"sha"`
+	Size     int64  `json:"size"`
 	Encoding string `json:"encoding"`
 	Content  string `json:"content"`
 }
@@ -613,7 +635,7 @@ func fetchRepoPath(
 				return fmt.Errorf("decode base64 content for %s: %w", path, err)
 			}
 		case file.SHA != "":
-			decoded, err = fetchBlob(ctx, client, owner, repo, file.SHA)
+			decoded, err = fetchBlob(ctx, client, owner, repo, file.SHA, file.Size)
 			if err != nil {
 				return fmt.Errorf("%s is too large for the contents API and the blob read failed: %w", path, err)
 			}
@@ -636,11 +658,12 @@ func fetchRepoPath(
 }
 
 // fetchBlob reads a blob by sha through the git-data API, which base64-encodes
-// regardless of size.
-func fetchBlob(ctx context.Context, client githubapi.Client, owner, repo, sha string) ([]byte, error) {
+// regardless of size. size is the decoded byte count from the contents
+// response and sizes the deadline; 0 when unknown.
+func fetchBlob(ctx context.Context, client githubapi.Client, owner, repo, sha string, size int64) ([]byte, error) {
 	apiPath := fmt.Sprintf("repos/%s/%s/git/blobs/%s",
 		url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(sha))
-	raw, err := getBounded(ctx, client, apiPath, teacherFileTimeout)
+	raw, err := getBounded(ctx, client, apiPath, blobReadTimeout(size))
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", apiPath, err)
 	}

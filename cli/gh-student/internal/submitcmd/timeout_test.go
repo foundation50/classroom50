@@ -87,6 +87,44 @@ func TestFetchRepoPath_FailsFastOnStall(t *testing.T) {
 	}
 }
 
+// The blob fallback has its own deadline; a stalled blob read must still
+// fail near that deadline rather than hang the submit.
+func TestFetchBlob_FailsFastOnStall(t *testing.T) {
+	setTimeout(t, &teacherFileTimeout, 50*time.Millisecond)
+	client := githubtest.NewTestClient(t, stalledServer(t))
+
+	start := time.Now()
+	_, err := fetchBlob(context.Background(), client, "o", "repo", "big-sha", 0)
+	assertStalledFailure(t, "fetchBlob", time.Since(start), err)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got: %v", err)
+	}
+}
+
+func TestBlobReadTimeout(t *testing.T) {
+	const mib = 1 << 20
+	cases := []struct {
+		name string
+		size int64
+		want time.Duration
+	}{
+		{"unknown size keeps the base deadline", 0, teacherFileTimeout},
+		// 1.5 MiB decoded is 2 MiB on the wire; at 256 KiB/s that is 8 s.
+		{"scales with the base64 payload", 3 * mib / 2, teacherFileTimeout + 8*time.Second},
+		// 100 MiB (the blob API ceiling) is 9m8s at the floor rate, inside the
+		// backstop; anything that would exceed it is clamped.
+		{"blob ceiling fits under the backstop", 100 * mib, teacherFileTimeout + 533*time.Second},
+		{"capped at the network ceiling", 200 * mib, gitNetworkTimeout},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := blobReadTimeout(tc.size); got != tc.want {
+				t.Fatalf("blobReadTimeout(%d) = %v, want %v", tc.size, got, tc.want)
+			}
+		})
+	}
+}
+
 // On a dead HTTPS remote the stall detector, not the ceiling, should fire: git
 // exits on its own and the error is git's, not a deadline.
 func TestCommitWorkTreeOnRemoteBranch_StallDetectorAbortsClone(t *testing.T) {
