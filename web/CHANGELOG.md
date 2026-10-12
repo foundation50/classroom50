@@ -17,6 +17,19 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.58.0](https://github.com/foundation50/classroom50/compare/web-v1.57.1...web-v1.58.0) (2026-10-12)
+
+
+### Features
+
+* export group membership as CSV from the web and the CLI ([#1076](https://github.com/foundation50/classroom50/issues/1076)) ([c8b7197](https://github.com/foundation50/classroom50/commit/c8b7197c2c52ccab2403ae761b3cf5fa66ff264b))
+
+
+### Bug Fixes
+
+* address the 1.58.0 release review findings ([#1115](https://github.com/foundation50/classroom50/issues/1115)) ([6bec887](https://github.com/foundation50/classroom50/commit/6bec8877c329deb3b430c1c2a6d340200e623297))
+* **deps:** update web dependencies and CI tool pins ([#1113](https://github.com/foundation50/classroom50/issues/1113)) ([9ba3230](https://github.com/foundation50/classroom50/commit/9ba32304efbe4c5629be29f7cdc761e4a993a860))
+
 ## [1.57.1](https://github.com/foundation50/classroom50/compare/web-v1.57.0...web-v1.57.1) (2026-10-08)
 
 
