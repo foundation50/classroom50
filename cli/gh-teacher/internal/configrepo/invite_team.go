@@ -15,6 +15,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/membership"
 )
 
 // InviteDescription is the classroom50/invite/v1 record stored in a per-invite
@@ -168,7 +169,7 @@ func ReadInviteTeam(client githubapi.Client, org, slug string) (InviteTeamState,
 // A 404 (team already deleted) yields no members, so the invite simply looks
 // pending; any other failure propagates. A caller reading a team that MUST
 // exist wants FindTeamMembersWithIDs instead.
-func ListTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMemberRef, error) {
+func ListTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]membership.Account, error) {
 	members, _, err := findTeamMembersWithIDs(client, org, slug)
 	return members, err
 }
@@ -179,13 +180,13 @@ func ListTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMe
 // mistyped slug) as an empty membership would make every accepted invitee look
 // unenrolled — which is what authorizes deleting the metadata team holding the
 // only record of their invited address.
-func FindTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMemberRef, bool, error) {
+func FindTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]membership.Account, bool, error) {
 	return findTeamMembersWithIDs(client, org, slug)
 }
 
-func findTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMemberRef, bool, error) {
+func findTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]membership.Account, bool, error) {
 	found := true
-	members, err := githubapi.PaginateAll[TeamMemberRef](
+	members, err := githubapi.PaginateAll[membership.Account](
 		client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
 			return fmt.Sprintf("orgs/%s/teams/%s/members?per_page=%d&page=%d",
@@ -202,7 +203,7 @@ func findTeamMembersWithIDs(client githubapi.Client, org, slug string) ([]TeamMe
 	if err != nil {
 		return nil, false, err
 	}
-	out := make([]TeamMemberRef, 0, len(members))
+	out := make([]membership.Account, 0, len(members))
 	for _, m := range members {
 		if strings.TrimSpace(m.Login) == "" {
 			continue

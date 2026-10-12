@@ -96,11 +96,11 @@ func describeDrift(live, recorded []string, hasRecord bool) string {
 	}
 	liveSet := map[string]bool{}
 	for _, m := range live {
-		liveSet[strings.ToLower(m)] = true
+		liveSet[configrepo.LoginKey(m)] = true
 	}
 	recordedSet := map[string]bool{}
 	for _, m := range recorded {
-		recordedSet[strings.ToLower(m)] = true
+		recordedSet[configrepo.LoginKey(m)] = true
 	}
 	var extra, missing []string
 	for m := range liveSet {

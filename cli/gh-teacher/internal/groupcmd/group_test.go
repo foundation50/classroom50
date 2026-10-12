@@ -604,3 +604,20 @@ func TestRunGroupList_IndividualModeRefuses(t *testing.T) {
 		t.Fatalf("err = %v, want an individual-mode refusal", err)
 	}
 }
+
+// The shared prelude composes this command's own remediation hint onto the
+// not-registered error, so the full text is pinned here rather than in
+// configrepo.
+func TestRunGroupList_UnregisteredAssignmentRefuses(t *testing.T) {
+	state := &groupServer{mode: "team"}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+	var out, errOut bytes.Buffer
+	err := runGroupList(client, &out, &errOut, cliutil.AssignmentScope{Org: testOrg, Classroom: testClassroom, Assignment: "nope"}, formatTable)
+	want := `assignment "nope" is not registered in acme/` + configrepo.ConfigRepoName + `/cs101/assignments.json: ` +
+		"run `gh teacher assignment list acme cs101` to see the registered slugs"
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v\nwant %s", err, want)
+	}
+}

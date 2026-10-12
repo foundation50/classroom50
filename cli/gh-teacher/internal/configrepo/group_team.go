@@ -13,6 +13,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/membership"
 )
 
 // GroupDescription is the classroom50/group/v1 record stored in a group
@@ -101,7 +102,7 @@ type GroupTeamInfo struct {
 	Slug       string
 	Counter    int
 	Record     GroupDescription
-	MemberRefs []TeamMemberRef
+	MemberRefs []membership.Account
 }
 
 // Logins projects MemberRefs to logins for readers that key on username only.
@@ -309,7 +310,7 @@ func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 // ListAssignmentGroupTeamsLenient is ListAssignmentGroupTeams for a read-only
 // report, matching what the web shows: a team whose description record is
 // missing or fails verification is kept with a zero Record (unnamed), and a
-// team whose member read fails is kept with nil Members/MemberRefs and its
+// team whose member read fails is kept with nil MemberRefs and its
 // error returned in `unreadable` (keyed by slug), so one bad team cannot hide
 // the rest. A rate limit still aborts, since every later read would fail the
 // same way.

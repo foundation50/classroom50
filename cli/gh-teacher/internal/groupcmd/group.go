@@ -165,7 +165,7 @@ func teamGroups(client githubapi.Client, errOut io.Writer, s cliutil.AssignmentS
 		if readErr, failed := unreadable[t.Slug]; failed {
 			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", t.Slug, readErr)
 		} else {
-			g.Members = membersFromRefs(t.MemberRefs)
+			g.Members = membersFromAccounts(t.MemberRefs)
 		}
 		groups = append(groups, g)
 	}
@@ -200,11 +200,7 @@ func legacyGroups(client githubapi.Client, errOut io.Writer, s cliutil.Assignmen
 		case err != nil:
 			_, _ = fmt.Fprintf(errOut, "warning: %s: %v\n", lower, err)
 		default:
-			g.Members = make([]member, 0, len(collaborators)+1)
-			for _, c := range collaborators {
-				g.Members = append(g.Members, member{Login: c.Login, ID: c.ID})
-			}
-			g.Members = append(g.Members, member{Login: founder, Fallback: true})
+			g.Members = append(membersFromAccounts(collaborators), member{Login: founder, Fallback: true})
 		}
 		groups = append(groups, g)
 	}
@@ -237,10 +233,10 @@ func hasAnyPrefix(name string, prefixes []string) bool {
 	return false
 }
 
-func membersFromRefs(refs []configrepo.TeamMemberRef) []member {
-	members := make([]member, 0, len(refs))
-	for _, r := range refs {
-		members = append(members, member{Login: r.Login, ID: r.ID})
+func membersFromAccounts(accounts []membership.Account) []member {
+	members := make([]member, 0, len(accounts))
+	for _, a := range accounts {
+		members = append(members, member{Login: a.Login, ID: a.ID})
 	}
 	return members
 }

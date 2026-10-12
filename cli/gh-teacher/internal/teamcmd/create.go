@@ -67,7 +67,7 @@ func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope cliutil
 		return err
 	}
 	for _, u := range rostered {
-		if other, taken := assigned[strings.ToLower(u)]; taken {
+		if other, taken := assigned[configrepo.LoginKey(u)]; taken {
 			return fmt.Errorf("%s is already on %s and a student can be on only one of the assignment's groups. Remove them with `gh teacher team remove`, or leave them off this team, then re-run",
 				u, describeGroupSlug(ctx.Classroom, ctx.Assignment, other))
 		}
@@ -277,7 +277,7 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope cliutil.A
 		}
 		var free []string
 		for _, u := range rostered {
-			if other, taken := assigned[strings.ToLower(u)]; taken {
+			if other, taken := assigned[configrepo.LoginKey(u)]; taken {
 				_, _ = fmt.Fprintf(errOut, "Warning: %s member %q is already on %s in %s; skipping them in the copy.\n",
 					sourceTeam.Slug, u, describeGroupSlug(ctx.Classroom, ctx.Assignment, other), ctx.Assignment)
 				continue
@@ -297,7 +297,7 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope cliutil.A
 			return err
 		}
 		for _, u := range free {
-			assigned[strings.ToLower(u)] = slug
+			assigned[configrepo.LoginKey(u)] = slug
 		}
 		_, _ = fmt.Fprintf(out, "%s: created team %s (group %d, %d member(s), copied from %s)\n",
 			ctx.Org, slug, counter, len(free), sourceTeam.Slug)

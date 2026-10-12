@@ -54,7 +54,7 @@ func runTeamAdd(client githubapi.Client, out io.Writer, scope cliutil.Assignment
 	if err != nil {
 		return err
 	}
-	if !rosterLogins[strings.ToLower(username)] {
+	if !rosterLogins[configrepo.LoginKey(username)] {
 		return fmt.Errorf("%q is not on %s/%s/%s: add them with `gh teacher roster add %s %s %s`, then re-run",
 			username, ctx.Org, configrepo.ConfigRepoName, configrepo.RosterFilePath(ctx.Classroom),
 			ctx.Org, ctx.Classroom, username)
@@ -63,7 +63,7 @@ func runTeamAdd(client githubapi.Client, out io.Writer, scope cliutil.Assignment
 	if err != nil {
 		return err
 	}
-	if other, taken := assigned[strings.ToLower(username)]; taken && !strings.EqualFold(other, slug) {
+	if other, taken := assigned[configrepo.LoginKey(username)]; taken && !strings.EqualFold(other, slug) {
 		return fmt.Errorf("%s is already on %s and a student can be on only one of the assignment's groups. Remove them with `gh teacher team remove`, then re-run",
 			username, describeGroupSlug(ctx.Classroom, ctx.Assignment, other))
 	}

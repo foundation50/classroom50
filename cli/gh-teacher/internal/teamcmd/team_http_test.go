@@ -387,6 +387,24 @@ func TestRunTeamList_RejectsNonTeamAssignment(t *testing.T) {
 	}
 }
 
+// The shared prelude composes this command's own remediation hint onto the
+// not-registered error, so the full text is pinned here rather than in
+// configrepo.
+func TestRunTeamList_RejectsUnregisteredAssignment(t *testing.T) {
+	state := &teamCmdServer{}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out bytes.Buffer
+	err := runTeamList(client, &out, cliutil.AssignmentScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: "nope"})
+	want := `assignment "nope" is not registered in acme/` + configrepo.ConfigRepoName + `/cs101/assignments.json: ` +
+		"run `gh teacher assignment add acme cs101 nope --mode team ...` first"
+	if err == nil || err.Error() != want {
+		t.Fatalf("err = %v\nwant %s", err, want)
+	}
+}
+
 // The list happy path renders counters, members, size against the cap, and
 // snapshot drift.
 func TestRunTeamList_HappyPath(t *testing.T) {

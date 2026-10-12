@@ -356,9 +356,11 @@ func ClassifyMembershipReadError(path, subject string, err error) error {
 	return fmt.Errorf("GET %s: %w", path, err)
 }
 
-// Account is one element of a GitHub account listing (org members, repo
-// collaborators). RoleName is the collaborators endpoint's permission level
-// (read/triage/write/maintain/admin); the members endpoints leave it empty.
+// Account is one element of a GitHub account listing (org members, team
+// members, repo collaborators): the login paired with the numeric id the
+// roster's github_id column records. RoleName is the collaborators endpoint's
+// permission level (read/triage/write/maintain/admin); the members endpoints
+// leave it empty.
 type Account struct {
 	Login    string `json:"login"`
 	ID       int64  `json:"id"`

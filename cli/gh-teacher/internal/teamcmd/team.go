@@ -136,7 +136,7 @@ func splitRostered(usernames []string, rosterLogins map[string]bool) (rostered, 
 	seen := map[string]bool{}
 	for _, u := range usernames {
 		u = strings.TrimSpace(u)
-		key := strings.ToLower(u)
+		key := configrepo.LoginKey(u)
 		if key == "" || seen[key] {
 			continue
 		}
@@ -162,7 +162,7 @@ func loadAssignedLogins(client githubapi.Client, ctx teamContext) (map[string]st
 	assigned := map[string]string{}
 	for _, team := range teams {
 		for _, m := range team.MemberRefs {
-			assigned[strings.ToLower(m.Login)] = team.Slug
+			assigned[configrepo.LoginKey(m.Login)] = team.Slug
 		}
 	}
 	return assigned, nil
