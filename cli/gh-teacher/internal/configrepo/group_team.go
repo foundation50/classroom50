@@ -107,11 +107,7 @@ type GroupTeamInfo struct {
 
 // Logins projects MemberRefs to logins for readers that key on username only.
 func (t GroupTeamInfo) Logins() []string {
-	out := make([]string, 0, len(t.MemberRefs))
-	for _, m := range t.MemberRefs {
-		out = append(out, m.Login)
-	}
-	return out
+	return membership.Logins(t.MemberRefs)
 }
 
 // groupTeamPayload is the org-teams / team-GET shape the group paths decode.

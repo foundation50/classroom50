@@ -1,6 +1,7 @@
-// Package output holds CLI-wide presentation helpers that aren't domain logic —
-// currently the shared JSON encoder for every `--json` view and every
-// config-repo file gh-teacher writes, and the terminal cell guard. Stdlib-only.
+// Package output holds CLI-wide presentation helpers that aren't domain logic:
+// the shared JSON encoder for every `--json` view and every config-repo file
+// gh-teacher writes, the terminal cell guard, and the blank-cell table
+// placeholder. Stdlib-only.
 package output
 
 import (

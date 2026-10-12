@@ -94,13 +94,17 @@ func describeDrift(live, recorded []string, hasRecord bool) string {
 	if !hasRecord {
 		return "not in teams.json"
 	}
+	// Not LoginKey: this compares two login lists byte-for-byte after case
+	// folding, so a whitespace-padded hand edit in teams.json is reported as
+	// drift rather than hidden. The roster and assigned-login maps elsewhere
+	// in this package are indexes and do use LoginKey.
 	liveSet := map[string]bool{}
 	for _, m := range live {
-		liveSet[configrepo.LoginKey(m)] = true
+		liveSet[strings.ToLower(m)] = true
 	}
 	recordedSet := map[string]bool{}
 	for _, m := range recorded {
-		recordedSet[configrepo.LoginKey(m)] = true
+		recordedSet[strings.ToLower(m)] = true
 	}
 	var extra, missing []string
 	for m := range liveSet {

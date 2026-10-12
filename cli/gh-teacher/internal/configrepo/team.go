@@ -14,6 +14,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/membership"
 )
 
 // classroomTeamName derives the GitHub team name for a classroom:
@@ -974,9 +975,5 @@ func ListTeamMembers(client githubapi.Client, org, slug string) ([]string, error
 	if err != nil {
 		return nil, err
 	}
-	logins := make([]string, 0, len(members))
-	for _, m := range members {
-		logins = append(logins, m.Login)
-	}
-	return logins, nil
+	return membership.Logins(members), nil
 }
