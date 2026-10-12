@@ -14,10 +14,9 @@ import (
 )
 
 // member is one group member. ID is 0 when the read carried no id. A Fallback
-// member is derived from the repository name (a legacy founder), not from a
-// live read: it is exported only when it resolves to a roster row or the group
-// has no other member, so a founder who renamed their account does not
-// reappear as a stranger beside their id-bearing collaborator entry.
+// member comes from the repository name (a legacy founder), not a live read,
+// and is exported only when it resolves to a roster row or the group has no
+// other member, so a renamed founder is not also listed as a stranger.
 type member struct {
 	Login    string
 	ID       int64
@@ -71,11 +70,9 @@ type resolved struct {
 	known bool
 }
 
-// buildRows expands groups to one row per member. A member joins to the roster
-// by GitHub id first (so a renamed account keeps its row), then by lowercased
-// login. Groups order naturally (group-2 before group-10); members by the
-// web's last-name sort key. A group with no members, or whose members could
-// not be read, still yields one row so it stays visible.
+// buildRows expands groups to one row per member, joined to the roster by
+// GitHub id first, then by login (see member for the fallback rule). A group
+// with no members, or whose members could not be read, still yields one row.
 func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow {
 	byID := make(map[int64]configrepo.RosterRow, len(roster))
 	byLogin := make(map[string]configrepo.RosterRow, len(roster))
@@ -117,10 +114,8 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			continue
 		}
 		hasLive := slices.ContainsFunc(g.Members, func(m member) bool { return !m.Fallback })
-		// Dedupe on the resolved identity: a legacy founder is also a
-		// collaborator, possibly under a renamed login. An unrostered member's
-		// username is the lowercased live login so both surfaces spell it the
-		// same way.
+		// Dedupe on the resolved identity (see member). An unrostered member's
+		// username is the lowercased live login on both surfaces.
 		seen := map[string]bool{}
 		members := make([]resolved, 0, len(g.Members))
 		for _, m := range g.Members {
@@ -146,12 +141,14 @@ func buildRows(groups []groupSource, roster []configrepo.RosterRow) []memberRow 
 			rows = append(rows, base)
 			continue
 		}
-		// Natural order on the same key the web sorts by (naturalCompare over
-		// studentSortKeyByLastName), so both files list a group's members in the
-		// same order in every locale.
+		// Three-way on the key, then the login: two keys that are natural-equal
+		// but byte-different (leading zeros) must still fall through.
 		sort.SliceStable(members, func(i, j int) bool {
-			if members[i].key != members[j].key {
-				return naturalLess(members[i].key, members[j].key)
+			switch {
+			case naturalLess(members[i].key, members[j].key):
+				return true
+			case naturalLess(members[j].key, members[i].key):
+				return false
 			}
 			return naturalLess(members[i].row.Username, members[j].row.Username)
 		})
@@ -182,8 +179,7 @@ func loginKey(login string) string {
 	return strings.ToLower(strings.TrimSpace(login))
 }
 
-// sortKey is the web's last-name sort key (studentSortKeyByLastName): "Last
-// First", falling back to the login, then the email, for a nameless row.
+// sortKey mirrors the web's studentSortKeyByLastName.
 func sortKey(r configrepo.RosterRow) string {
 	name := strings.TrimSpace(strings.TrimSpace(r.LastName) + " " + strings.TrimSpace(r.FirstName))
 	if name == "" {
@@ -195,11 +191,9 @@ func sortKey(r configrepo.RosterRow) string {
 	return strings.ToLower(name)
 }
 
-// naturalLess is a locale-independent natural order: case-folded code points
-// (UTF-8 byte order equals code-point order) with digit runs compared as
-// numbers, leading zeros ignored. Mirrors naturalCompare in
-// web/src/domain/submissions/groupMembershipCsv.ts, pinned by the shared
-// fixture, so both exports order groups and members identically.
+// naturalLess is a locale-independent natural order (simple-case-folded code
+// points, digit runs as numbers), mirroring naturalCompare in
+// web/src/domain/submissions/groupMembershipCsv.ts; the shared fixture pins both.
 func naturalLess(a, b string) bool {
 	a, b = strings.ToLower(a), strings.ToLower(b)
 	for a != "" && b != "" {

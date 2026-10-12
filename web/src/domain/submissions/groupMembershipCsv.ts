@@ -4,7 +4,7 @@ import type { Student } from "@/types/classroom"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 import { groupExportName } from "@/util/groupTeam"
 import { resolveGitHubId } from "@/util/identity"
-import { placeholderStudent, studentSortKeyByLastName } from "@/util/students"
+import { placeholderStudent } from "@/util/students"
 
 // Header of the group-membership export. Hand-mirrored with NO compile-time
 // link by contract.GroupMembershipCSVColumns (`gh teacher group list --csv`);
@@ -32,11 +32,10 @@ export type GroupMembershipCsvRow = Record<GroupMembershipCsvColumn, string>
 // Mirrors contract.GroupMembershipNoteUnreadable.
 export const GROUP_MEMBERSHIP_NOTE_UNREADABLE = "membership could not be read"
 
-// A live member. `id` is the GitHub account id when the read carried one. A
-// `fallback` member is derived from the repository name (a legacy founder),
-// not from a live read: it is exported only when it resolves to a roster row
-// or the group has no other member, so a founder who renamed their account
-// does not reappear as a stranger beside their id-bearing collaborator entry.
+// A group member. `id` is the GitHub account id when the read carried one. A
+// `fallback` member comes from the repository name (a legacy founder), not a
+// live read, and is exported only when it resolves to a roster row or the group
+// has no other member, so a renamed founder is not also listed as a stranger.
 export type GroupMember = { login: string; id?: number; fallback?: boolean }
 
 export type GroupMembershipSource = {
@@ -49,13 +48,13 @@ export type GroupMembershipSource = {
   members: readonly GroupMember[] | undefined
 }
 
-// Locale-independent natural order: case-folded code points, with digit runs
-// compared as numbers (leading zeros ignored). Mirrors naturalLess in
-// cli/gh-teacher/internal/groupcmd/rows.go so both exports list members in
-// the same order in every locale; the UI keeps its locale-aware collation.
+// Locale-independent natural order: simple-case-folded code points, with digit
+// runs compared as numbers (leading zeros ignored). Mirrors naturalLess in
+// cli/gh-teacher/internal/groupcmd/rows.go, pinned by the shared fixture, so
+// both exports order groups and members identically in every locale.
 export function naturalCompare(a: string, b: string): number {
-  const x = a.toLowerCase()
-  const y = b.toLowerCase()
+  const x = foldSimple(a)
+  const y = foldSimple(b)
   let i = 0
   let j = 0
   while (i < x.length && j < y.length) {
@@ -84,6 +83,35 @@ export function naturalCompare(a: string, b: string): number {
 
 const isDigit = (cp: number) => cp >= 0x30 && cp <= 0x39
 
+// The member sort key, mirroring sortKey in rows.go: "Last First", else the
+// login, else the email, with no case folding here (naturalCompare folds). The
+// UI's studentSortKeyByLastName lowercases with the full mapping, which would
+// diverge from Go before the comparator runs.
+function exportSortKey(student: Student): string {
+  const name = `${student.last_name.trim()} ${student.first_name.trim()}`.trim()
+  return name || student.username.trim() || student.email.trim()
+}
+
+// Unicode's simple (one-to-one) lowercase mapping, which is what Go's
+// strings.ToLower applies. String.prototype.toLowerCase uses the full mapping
+// instead, which differs in two places: U+0130 becomes "i" plus a combining
+// dot, and a word-final capital sigma becomes U+03C2. Folding one code point
+// at a time removes the sigma context, and the dotted I is the only remaining
+// one-to-many mapping, so it is pinned explicitly.
+function foldSimple(s: string): string {
+  let out = ""
+  for (const ch of s) {
+    const cp = ch.codePointAt(0) as number
+    if (cp === 0x130) {
+      out += "i"
+      continue
+    }
+    const lower = ch.toLowerCase()
+    out += [...lower].length === 1 ? lower : ch
+  }
+  return out
+}
+
 // The digit run at `from`, stripped of leading zeros ("0" for an all-zero
 // run), and the index just past it.
 function leadingNumber(s: string, from: number): [string, number] {
@@ -95,8 +123,7 @@ function leadingNumber(s: string, from: number): [string, number] {
 
 // Every group the submissions page knows, mode-neutral, for the export. Team
 // mode lists every live team (including one with no repo or no members yet);
-// legacy lists every existing group repo. Members keep their GitHub id so the
-// export can join a renamed account to its roster row.
+// legacy lists every existing group repo.
 export function groupMembershipSources(input: {
   isTeamAssignment: boolean
   teamByOwner: ReadonlyMap<string, GroupTeamRef>
@@ -152,10 +179,8 @@ export function buildGroupMembershipCsvRows(
   groups: readonly GroupMembershipSource[],
   students: readonly Student[],
 ): GroupMembershipCsvRow[] {
-  // Resolve by github_id first so a student who renamed their GitHub account
-  // still joins to their roster row; the login is the fallback for roster
-  // rows without an id. resolveGitHubId mirrors the Go reader (leading zeros
-  // tolerated, anything else unresolved) so both surfaces join the same rows.
+  // GitHub id first, login second; resolveGitHubId mirrors the Go reader so
+  // both surfaces join the same roster rows.
   const byId = new Map<number, Student>()
   const byLogin = new Map<string, Student>()
   for (const student of students) {
@@ -201,9 +226,8 @@ export function buildGroupMembershipCsvRows(
       })
       continue
     }
-    // Dedupe on the resolved identity (a legacy founder is also a collaborator,
-    // possibly under a renamed login). An unrostered member's username is the
-    // lowercased live login so both surfaces spell it the same way.
+    // Dedupe on the resolved identity (see GroupMember). An unrostered member's
+    // username is the lowercased live login on both surfaces.
     const seen = new Set<string>()
     const members: { student: Student; key: string; known: boolean }[] = []
     const hasLive = g.members.some((m) => !m.fallback)
@@ -218,7 +242,7 @@ export function buildGroupMembershipCsvRows(
       const student = resolvedStudent ?? placeholderStudent(login.toLowerCase())
       members.push({
         student,
-        key: studentSortKeyByLastName(student),
+        key: exportSortKey(student),
         known: resolvedStudent !== undefined,
       })
     }
@@ -226,8 +250,6 @@ export function buildGroupMembershipCsvRows(
       rows.push({ ...block, ...emptyMember, note: "" })
       continue
     }
-    // Natural order on the last-name key, then the login, so both files list
-    // a group's members in the same order in every locale.
     members.sort(
       (a, b) =>
         naturalCompare(a.key, b.key) ||

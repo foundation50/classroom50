@@ -17,9 +17,21 @@
   ],
   "note_unreadable": "membership could not be read",
   "default_name": [
-    { "recorded": "", "counter": 2, "name": "Group 2" },
-    { "recorded": "", "counter": 10, "name": "Group 10" },
-    { "recorded": "The Sharks", "counter": 1, "name": "The Sharks" }
+    {
+      "recorded": "",
+      "counter": 2,
+      "name": "Group 2"
+    },
+    {
+      "recorded": "",
+      "counter": 10,
+      "name": "Group 10"
+    },
+    {
+      "recorded": "The Sharks",
+      "counter": 1,
+      "name": "The Sharks"
+    }
   ],
   "cases": [
     {
@@ -96,10 +108,20 @@
           "team_slug": "slug-10",
           "repo": "cs-hw1-group-10",
           "members": [
-            { "login": "jdoe10", "id": 10 },
-            { "login": "jdoe9", "id": 9 },
-            { "login": "Zed2" },
-            { "login": "zed10" }
+            {
+              "login": "jdoe10",
+              "id": 10
+            },
+            {
+              "login": "jdoe9",
+              "id": 9
+            },
+            {
+              "login": "Zed2"
+            },
+            {
+              "login": "zed10"
+            }
           ]
         },
         {
@@ -108,13 +130,32 @@
           "team_slug": "slug-2",
           "repo": "cs-hw1-group-2",
           "members": [
-            { "login": "jsmith10", "id": 110 },
-            { "login": "jsmith2", "id": 102 },
-            { "login": "bob", "id": 2 },
-            { "login": "alice" },
-            { "login": "ada-lovelace", "id": 1 },
-            { "login": "cat" },
-            { "login": "StrangerDev", "id": 99 }
+            {
+              "login": "jsmith10",
+              "id": 110
+            },
+            {
+              "login": "jsmith2",
+              "id": 102
+            },
+            {
+              "login": "bob",
+              "id": 2
+            },
+            {
+              "login": "alice"
+            },
+            {
+              "login": "ada-lovelace",
+              "id": 1
+            },
+            {
+              "login": "cat"
+            },
+            {
+              "login": "StrangerDev",
+              "id": 99
+            }
           ]
         },
         {
@@ -238,7 +279,21 @@
           "no",
           ""
         ],
-        ["group-3", "Empty", "slug-3", "", "", "", "", "", "", "", "", "", ""],
+        [
+          "group-3",
+          "Empty",
+          "slug-3",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
         [
           "group-10",
           "Tens",
@@ -339,6 +394,42 @@
           "section": "",
           "github_id": "",
           "role": "student"
+        },
+        {
+          "username": "inan",
+          "first_name": "Ayşe",
+          "last_name": "İnan",
+          "email": "",
+          "section": "",
+          "github_id": "",
+          "role": "student"
+        },
+        {
+          "username": "iyigun",
+          "first_name": "Can",
+          "last_name": "Iyigun",
+          "email": "",
+          "section": "",
+          "github_id": "",
+          "role": "student"
+        },
+        {
+          "username": "ody",
+          "first_name": "",
+          "last_name": "ΟΔΥΣΣΕΥΣ",
+          "email": "",
+          "section": "",
+          "github_id": "",
+          "role": "student"
+        },
+        {
+          "username": "odz",
+          "first_name": "",
+          "last_name": "οδυσσευσ",
+          "email": "",
+          "section": "",
+          "github_id": "",
+          "role": "student"
         }
       ],
       "groups": [
@@ -348,12 +439,36 @@
           "team_slug": "slug-1",
           "repo": "cs-hw1-group-1",
           "members": [
-            { "login": "ee" },
-            { "login": "zz" },
-            { "login": "ef" },
-            { "login": "aa" },
-            { "login": "f_oo" },
-            { "login": "f-oo" }
+            {
+              "login": "ee"
+            },
+            {
+              "login": "zz"
+            },
+            {
+              "login": "ef"
+            },
+            {
+              "login": "aa"
+            },
+            {
+              "login": "f_oo"
+            },
+            {
+              "login": "f-oo"
+            },
+            {
+              "login": "iyigun"
+            },
+            {
+              "login": "inan"
+            },
+            {
+              "login": "odz"
+            },
+            {
+              "login": "ody"
+            }
           ]
         }
       ],
@@ -408,6 +523,36 @@
           "Accents",
           "slug-1",
           "cs-hw1-group-1",
+          "inan",
+          "Ayşe",
+          "İnan",
+          "",
+          "",
+          "",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-1",
+          "Accents",
+          "slug-1",
+          "cs-hw1-group-1",
+          "iyigun",
+          "Can",
+          "Iyigun",
+          "",
+          "",
+          "",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-1",
+          "Accents",
+          "slug-1",
+          "cs-hw1-group-1",
           "zz",
           "Zoe",
           "Zed",
@@ -447,6 +592,107 @@
           "student",
           "yes",
           ""
+        ],
+        [
+          "group-1",
+          "Accents",
+          "slug-1",
+          "cs-hw1-group-1",
+          "ody",
+          "",
+          "ΟΔΥΣΣΕΥΣ",
+          "",
+          "",
+          "",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-1",
+          "Accents",
+          "slug-1",
+          "cs-hw1-group-1",
+          "odz",
+          "",
+          "οδυσσευσ",
+          "",
+          "",
+          "",
+          "student",
+          "yes",
+          ""
+        ]
+      ]
+    },
+    {
+      "name": "keys that are natural-equal but byte-different fall through to the login on both surfaces",
+      "roster": [
+        {
+          "username": "b-login",
+          "first_name": "Team 01",
+          "last_name": "",
+          "email": "",
+          "section": "",
+          "github_id": "",
+          "role": "student"
+        },
+        {
+          "username": "a-login",
+          "first_name": "Team 1",
+          "last_name": "",
+          "email": "",
+          "section": "",
+          "github_id": "",
+          "role": "student"
+        }
+      ],
+      "groups": [
+        {
+          "group": "group-1",
+          "name": "Zeros",
+          "team_slug": "slug-1",
+          "repo": "",
+          "members": [
+            {
+              "login": "b-login"
+            },
+            {
+              "login": "a-login"
+            }
+          ]
+        }
+      ],
+      "rows": [
+        [
+          "group-1",
+          "Zeros",
+          "slug-1",
+          "",
+          "a-login",
+          "Team 1",
+          "",
+          "",
+          "",
+          "",
+          "student",
+          "yes",
+          ""
+        ],
+        [
+          "group-1",
+          "Zeros",
+          "slug-1",
+          "",
+          "b-login",
+          "Team 01",
+          "",
+          "",
+          "",
+          "",
+          "student",
+          "yes",
+          ""
         ]
       ]
     },
@@ -470,9 +716,18 @@
           "team_slug": "",
           "repo": "cs-hw1-alice",
           "members": [
-            { "login": "alice", "id": 1 },
-            { "login": "StrangerDev", "id": 7 },
-            { "login": "alice", "fallback": true }
+            {
+              "login": "alice",
+              "id": 1
+            },
+            {
+              "login": "StrangerDev",
+              "id": 7
+            },
+            {
+              "login": "alice",
+              "fallback": true
+            }
           ]
         }
       ],
@@ -529,8 +784,14 @@
           "team_slug": "",
           "repo": "cs-hw1-alice",
           "members": [
-            { "login": "ada-lovelace", "id": 1 },
-            { "login": "alice", "fallback": true }
+            {
+              "login": "ada-lovelace",
+              "id": 1
+            },
+            {
+              "login": "alice",
+              "fallback": true
+            }
           ]
         },
         {
@@ -538,7 +799,12 @@
           "name": "",
           "team_slug": "",
           "repo": "cs-hw1-bob",
-          "members": [{ "login": "bob", "fallback": true }]
+          "members": [
+            {
+              "login": "bob",
+              "fallback": true
+            }
+          ]
         }
       ],
       "rows": [
@@ -557,7 +823,21 @@
           "yes",
           ""
         ],
-        ["bob", "", "", "cs-hw1-bob", "bob", "", "", "", "", "", "", "no", ""]
+        [
+          "bob",
+          "",
+          "",
+          "cs-hw1-bob",
+          "bob",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "no",
+          ""
+        ]
       ]
     },
     {
@@ -588,7 +868,15 @@
           "name": "Trim",
           "team_slug": "slug-1",
           "repo": "",
-          "members": [{ "login": " alice ", "id": 1 }, { "login": "  " }]
+          "members": [
+            {
+              "login": " alice ",
+              "id": 1
+            },
+            {
+              "login": "  "
+            }
+          ]
         }
       ],
       "rows": [
@@ -637,7 +925,15 @@
           "name": "Ids",
           "team_slug": "slug-1",
           "repo": "",
-          "members": [{ "login": "padded", "id": 7 }, { "login": "evil" }]
+          "members": [
+            {
+              "login": "padded",
+              "id": 7
+            },
+            {
+              "login": "evil"
+            }
+          ]
         }
       ],
       "rows": [
@@ -692,7 +988,12 @@
           "name": "+SUM(1)",
           "team_slug": "-slug",
           "repo": "@repo",
-          "members": [{ "login": "=evil", "id": 42 }]
+          "members": [
+            {
+              "login": "=evil",
+              "id": 42
+            }
+          ]
         }
       ],
       "rows": [

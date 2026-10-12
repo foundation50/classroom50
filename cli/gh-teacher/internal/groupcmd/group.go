@@ -316,18 +316,21 @@ func render(out, errOut io.Writer, s scope, groups []groupSource, rows []memberR
 	}
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "GROUP\tNAME\tUSERNAME\tSTUDENT\tEMAIL\tSECTION\tIN_ROSTER")
+	// Every cell is student-influenced (a team name, a login, roster text), so
+	// it goes through output.Printable; the CSV and JSON stay byte-exact.
+	cell := func(s string) string { return output.Printable(dash(s)) }
 	for _, r := range rows {
 		student := strings.TrimSpace(r.FirstName + " " + r.LastName)
 		if r.Note != "" {
-			_, _ = fmt.Fprintf(tw, "%s\t%s\t(%s)\t\t\t\t\n", r.Group, dash(r.GroupName), r.Note)
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t(%s)\t\t\t\t\n", cell(r.Group), cell(r.GroupName), r.Note)
 			continue
 		}
 		if r.Username == "" {
-			_, _ = fmt.Fprintf(tw, "%s\t%s\t(no members)\t\t\t\t\n", r.Group, dash(r.GroupName))
+			_, _ = fmt.Fprintf(tw, "%s\t%s\t(no members)\t\t\t\t\n", cell(r.Group), cell(r.GroupName))
 			continue
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			r.Group, dash(r.GroupName), r.Username, dash(student), dash(r.Email), dash(r.Section), r.InRoster)
+			cell(r.Group), cell(r.GroupName), cell(r.Username), cell(student), cell(r.Email), cell(r.Section), r.InRoster)
 	}
 	if err := tw.Flush(); err != nil {
 		return err

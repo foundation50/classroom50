@@ -298,10 +298,12 @@ func ListAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 }
 
 // ListAssignmentGroupTeamsLenient is ListAssignmentGroupTeams for a read-only
-// report: a team whose member read fails is kept with nil Members/MemberRefs
-// and its error returned in `unreadable` (keyed by slug) instead of aborting,
-// so one bad team cannot hide the rest. A rate limit still aborts, since every
-// later read would fail the same way.
+// report, matching what the web shows: a team whose description record is
+// missing or fails verification is kept with a zero Record (unnamed), and a
+// team whose member read fails is kept with nil Members/MemberRefs and its
+// error returned in `unreadable` (keyed by slug), so one bad team cannot hide
+// the rest. A rate limit still aborts, since every later read would fail the
+// same way.
 func ListAssignmentGroupTeamsLenient(client githubapi.Client, org, classroom, assignment string) (teams []GroupTeamInfo, unreadable map[string]error, err error) {
 	return listAssignmentGroupTeams(client, org, classroom, assignment, true)
 }
@@ -321,7 +323,10 @@ func listAssignmentGroupTeams(client githubapi.Client, org, classroom, assignmen
 		}
 		record, ok := ParseGroupDescription(t.Description)
 		if !ok || !VerifyGroupDescription(t.Slug, record) {
-			continue
+			if !lenient {
+				continue
+			}
+			record = GroupDescription{}
 		}
 		info := GroupTeamInfo{ID: t.ID, Slug: t.Slug, Counter: counter, Record: record}
 		refs, err := ListTeamMembersWithIDs(client, org, t.Slug)

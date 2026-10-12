@@ -123,7 +123,7 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 		// Project onto the canonical width so recordToRow stays the single
 		// source of the identity rule and github_id/role parsing.
 		record = importRecordToCanonical(record, columns)
-		row, err := recordToRow(record, canonicalLayout, line)
+		row, err := recordToRow(record, canonicalLayout, line, false)
 		if err != nil {
 			rowErrs = append(rowErrs, err)
 			continue

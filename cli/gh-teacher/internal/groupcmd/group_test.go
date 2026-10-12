@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -80,18 +79,19 @@ func TestBuildRows_SharedCases(t *testing.T) {
 	}
 	for _, c := range doc.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			roster := make([]configrepo.RosterRow, 0, len(c.Roster))
+			// The fixture carries raw roster.csv cells; run them through the
+			// production reader the command uses, so the oracle also pins how a
+			// padded, zero-padded, or unparsable cell reaches the builder.
+			var rosterCSV bytes.Buffer
+			w := csv.NewWriter(&rosterCSV)
+			_ = w.Write(configrepo.RosterColumns)
 			for _, r := range c.Roster {
-				// The fixture carries raw roster.csv text; resolve it the way the
-				// roster reader does (zero-padded resolves, anything else is 0).
-				id, parseErr := strconv.ParseInt(strings.TrimSpace(r.GitHubID), 10, 64)
-				if parseErr != nil || id <= 0 {
-					id = 0
-				}
-				roster = append(roster, configrepo.RosterRow{
-					Username: r.Username, FirstName: r.FirstName, LastName: r.LastName,
-					Email: r.Email, Section: r.Section, GitHubID: id, Role: r.Role,
-				})
+				_ = w.Write([]string{r.Username, r.FirstName, r.LastName, r.Email, r.Section, r.GitHubID, r.Role})
+			}
+			w.Flush()
+			roster, err := configrepo.ParseRosterLenient(rosterCSV.Bytes())
+			if err != nil {
+				t.Fatalf("ParseRosterLenient: %v", err)
 			}
 			groups := make([]groupSource, 0, len(c.Groups))
 			for _, g := range c.Groups {
@@ -200,6 +200,23 @@ const (
 	testAssignment = "project"
 )
 
+// accountID is the fake GitHub account id for a login: the roster's id for the
+// two rostered fixtures (alice 1, bob 2), a distinct id otherwise, so the
+// id-first join is exercised rather than masked by colliding ids.
+func accountID(login string) int {
+	switch strings.ToLower(login) {
+	case "alice":
+		return 1
+	case "bob":
+		return 2
+	}
+	id := 1000
+	for _, c := range login {
+		id = id*31 + int(c)
+	}
+	return id
+}
+
 func contents(data string) string {
 	return `{"content":"` + base64.StdEncoding.EncodeToString([]byte(data)) + `","encoding":"base64"}`
 }
@@ -225,7 +242,9 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 		case path == repoBase+"/contents/"+testClassroom+"/roster.csv":
 			_, _ = w.Write([]byte(contents(configrepo.FullRosterHeader + "\n" +
 				"alice,Alice,Ada,alice@x.edu,A,1,student\n" +
-				"bob,Bob,Babbage,bob@x.edu,B,2,student\n")))
+				"bob,Bob,Babbage,bob@x.edu,B,2,student\n" +
+				// A hand-edited github_id: the lenient read keeps the row.
+				"carol,Carol,Cantor,,,=99,student\n")))
 		case path == "/orgs/"+testOrg+"/repos":
 			if page != "1" {
 				_, _ = w.Write([]byte(`[]`))
@@ -256,8 +275,8 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 				return
 			}
 			members := make([]map[string]any, 0)
-			for i, login := range s.membersBySlug[slug] {
-				members = append(members, map[string]any{"login": login, "id": i + 1})
+			for _, login := range s.membersBySlug[slug] {
+				members = append(members, map[string]any{"login": login, "id": accountID(login)})
 			}
 			_ = json.NewEncoder(w).Encode(members)
 		case strings.HasPrefix(path, "/repos/"+testOrg+"/") && strings.HasSuffix(path, "/collaborators"):
@@ -279,8 +298,8 @@ func (s *groupServer) handler(t *testing.T) http.Handler {
 			}
 			logins := s.collaborators[repo]
 			out := make([]map[string]any, 0, len(logins))
-			for i, login := range logins {
-				out = append(out, map[string]any{"login": login, "id": i + 1})
+			for _, login := range logins {
+				out = append(out, map[string]any{"login": login, "id": accountID(login)})
 			}
 			_ = json.NewEncoder(w).Encode(out)
 		default:
@@ -303,6 +322,7 @@ func run(t *testing.T, state *groupServer, format outputFormat) (string, string,
 func TestRunGroupList_TeamMode_CSV(t *testing.T) {
 	slug1 := contract.GroupTeamName(testClassroom, testAssignment, 1)
 	slug2 := contract.GroupTeamName(testClassroom, testAssignment, 2)
+	slug3 := contract.GroupTeamName(testClassroom, testAssignment, 3)
 	named, _ := configrepo.MarshalGroupDescription(testClassroom, testAssignment, "The Sharks")
 	unnamed, _ := configrepo.MarshalGroupDescription(testClassroom, testAssignment, "")
 	state := &groupServer{
@@ -312,8 +332,11 @@ func TestRunGroupList_TeamMode_CSV(t *testing.T) {
 		orgTeams: []map[string]any{
 			{"id": 501, "slug": slug1, "description": named},
 			{"id": 502, "slug": slug2, "description": unnamed},
+			// A hand-edited description fails verification: the web still shows
+			// the team, so the export keeps it too, unnamed.
+			{"id": 503, "slug": slug3, "description": "edited by a student"},
 		},
-		membersBySlug: map[string][]string{slug1: {"bob", "alice", "eve"}, slug2: {}},
+		membersBySlug: map[string][]string{slug1: {"bob", "alice", "eve"}, slug2: {}, slug3: {"carol"}},
 	}
 	out, errOut, err := run(t, state, formatCSV)
 	if err != nil {
@@ -334,6 +357,8 @@ func TestRunGroupList_TeamMode_CSV(t *testing.T) {
 		{"group-1", "The Sharks", slug1, "cs101-project-group-1", "bob", "Bob", "Babbage", "bob@x.edu", "B", "2", "student", "yes", ""},
 		{"group-1", "The Sharks", slug1, "cs101-project-group-1", "eve", "", "", "", "", "", "", "no", ""},
 		{"group-2", "Group 2", slug2, "", "", "", "", "", "", "", "", "", ""},
+		// carol's roster github_id is "=99": kept, unresolved, written blank.
+		{"group-3", "Group 3", slug3, "", "carol", "Carol", "Cantor", "", "", "", "student", "yes", ""},
 	}
 	if len(records)-1 != len(want) {
 		t.Fatalf("got %d rows, want %d:\n%s", len(records)-1, len(want), out)
@@ -418,9 +443,10 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 		orgRepos: []string{
 			"cs101-project-alice", "cs101-project-zed",
 			"cs101-project-bonus-alice", // sibling slug: excluded
-			"cs101-project",             // bare prefix: excluded
+			"cs101-project",             // bare prefix: excluded (no trailing dash)
+			"cs101-project-",            // empty founder segment: excluded
 		},
-		collaborators:  map[string][]string{"cs101-project-alice": {"alice", "bob", "=Evil"}},
+		collaborators:  map[string][]string{"cs101-project-alice": {"alice", "bob", "carol", "=Evil"}},
 		collabFailures: map[string]int{"cs101-project-zed": http.StatusForbidden},
 	}
 	out, errOut, err := run(t, state, formatTable)
@@ -436,10 +462,7 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 	if !strings.Contains(out, "=evil") || strings.Contains(out, "=Evil") {
 		t.Errorf("table should lowercase the collaborator login:\n%s", out)
 	}
-	if strings.Contains(out, "bonus") || strings.Contains(out, "\ncs101-project\t") {
-		t.Errorf("sibling or bare-prefix repo leaked into the table:\n%s", out)
-	}
-	if !strings.Contains(errOut, "warning: cs101-project-zed") || !strings.Contains(errOut, "2 group(s), 3 member(s), 1 not on the roster") {
+	if !strings.Contains(errOut, "warning: cs101-project-zed") || !strings.Contains(errOut, "2 group(s), 4 member(s), 1 not on the roster") {
 		t.Errorf("stderr = %q", errOut)
 	}
 
@@ -451,8 +474,15 @@ func TestRunGroupList_LegacyMode_TableAndJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOut), &rows); err != nil {
 		t.Fatalf("json: %v\n%s", err, jsonOut)
 	}
-	if len(rows) != 4 || rows[0].Group != "alice" || rows[0].TeamSlug != "" || rows[3].Note != contract.GroupMembershipNoteUnreadable {
+	if len(rows) != 5 || rows[0].Group != "alice" || rows[0].TeamSlug != "" || rows[4].Note != contract.GroupMembershipNoteUnreadable {
 		t.Fatalf("rows = %+v", rows)
+	}
+	// Only the two real group repos are groups: the sibling slug, the bare
+	// prefix, and the empty founder segment are all excluded.
+	for _, r := range rows {
+		if r.Group != "alice" && r.Group != "zed" {
+			t.Errorf("unexpected group %q in rows", r.Group)
+		}
 	}
 	var unrostered *memberRow
 	for i := range rows {
@@ -489,6 +519,76 @@ func TestRunGroupList_LegacyMode_RateLimitAborts(t *testing.T) {
 	}
 	if out != "" {
 		t.Errorf("no CSV should be written on a rate limit, got:\n%s", out)
+	}
+}
+
+func TestResolveFormat(t *testing.T) {
+	cases := []struct {
+		json, csv bool
+		want      outputFormat
+	}{
+		{false, false, formatTable}, {true, false, formatJSON}, {false, true, formatCSV}, {true, true, formatJSON},
+	}
+	for _, c := range cases {
+		if got := resolveFormat(c.json, c.csv); got != c.want {
+			t.Errorf("resolveFormat(%v, %v) = %v, want %v", c.json, c.csv, got, c.want)
+		}
+	}
+}
+
+// The table is the one surface where a student-chosen name is printed to a
+// terminal: control characters must not forge a row or recolor the output.
+func TestRunGroupList_TeamMode_TableSanitizesCells(t *testing.T) {
+	slug1 := contract.GroupTeamName(testClassroom, testAssignment, 1)
+	slug2 := contract.GroupTeamName(testClassroom, testAssignment, 2)
+	hostile, _ := configrepo.MarshalGroupDescription(testClassroom, testAssignment, "Sharks\x1b[31m\nstranger\tyes")
+	unnamed, _ := configrepo.MarshalGroupDescription(testClassroom, testAssignment, "")
+	state := &groupServer{
+		mode: "team",
+		orgTeams: []map[string]any{
+			{"id": 501, "slug": slug1, "description": hostile},
+			{"id": 502, "slug": slug2, "description": unnamed},
+		},
+		membersBySlug: map[string][]string{slug1: {"alice"}, slug2: {}},
+	}
+	out, _, err := run(t, state, formatTable)
+	if err != nil {
+		t.Fatalf("runGroupList: %v", err)
+	}
+	if strings.Contains(out, "\x1b") || strings.Contains(out, "\nstranger") {
+		t.Errorf("control characters reached the table:\n%q", out)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("want header + 2 rows, got %d lines:\n%s", len(lines), out)
+	}
+	if !strings.Contains(lines[2], "(no members)") {
+		t.Errorf("empty team row = %q", lines[2])
+	}
+	// The CSV keeps the recorded name byte-exact; only the terminal is guarded.
+	csvOut, _, _ := run(t, state, formatCSV)
+	if !strings.Contains(csvOut, "\x1b[31m") {
+		t.Errorf("csv should carry the raw name:\n%q", csvOut)
+	}
+}
+
+// A legacy assignment with no group repos prints a hint instead of an empty
+// table, and --json still emits a valid (empty) array.
+func TestRunGroupList_LegacyMode_NoGroups(t *testing.T) {
+	state := &groupServer{mode: "group", orgRepos: []string{"unrelated"}}
+	out, errOut, err := run(t, state, formatTable)
+	if err != nil {
+		t.Fatalf("runGroupList: %v", err)
+	}
+	if out != "cs101/project: no groups yet\n" || errOut != "" {
+		t.Errorf("table = %q, stderr = %q", out, errOut)
+	}
+	jsonOut, _, err := run(t, state, formatJSON)
+	if err != nil {
+		t.Fatalf("runGroupList --json: %v", err)
+	}
+	if strings.TrimSpace(jsonOut) != "[]" {
+		t.Errorf("json = %q, want []", jsonOut)
 	}
 }
 

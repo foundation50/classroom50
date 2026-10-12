@@ -1302,9 +1302,10 @@ const SubmissionsPageContent = () => {
       groupMembershipSourceList,
       csvStudents,
     )
+    // "\n" like the CLI's writer, so the two files are byte-identical.
     const csv = Papa.unparse(
       { fields: [...GROUP_MEMBERSHIP_CSV_COLUMNS], data: rows },
-      { header: true },
+      { header: true, newline: "\n" },
     )
     downloadCsv(csv, `${classroom}-${assignment}-groups.csv`)
   }

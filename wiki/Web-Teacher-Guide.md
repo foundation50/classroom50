@@ -1239,8 +1239,11 @@ columns. Each row carries:
 The export reads live membership (repository collaborators or GitHub Team
 members), not the last collected snapshot, so a group that hasn't submitted
 yet is included. The menu item stays disabled until the roster and every
-group's membership have loaded, and when one of those reads failed, so a
-reload is the fix rather than a file that marks everyone unrostered.
+group's membership have loaded, and when the roster or the group list itself
+failed to load, so a reload is the fix rather than a file that marks everyone
+unrostered. If just one group's members could not be read, the download still
+works: that group gets a single row with `membership could not be read` in the
+`note` column.
 `gh teacher group list --csv` writes the same file from the command line; see
 [`group list`](gh-teacher#group-list).
 

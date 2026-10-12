@@ -345,7 +345,7 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 			}
 			return nil, fmt.Errorf("line %d: %w", line, err)
 		}
-		row, err := recordToRow(record, layout, line)
+		row, err := recordToRow(record, layout, line, lenient)
 		if err != nil {
 			if lenient {
 				rows = append(rows, RosterRow{
@@ -364,8 +364,11 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 
 // recordToRow maps a data record onto a RosterRow through the header layout:
 // canonical cells by name (role "" when the header lacks it), extra cells into
-// Extra in header order.
-func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, error) {
+// Extra in header order. A lenient read keeps a row whose github_id does not
+// parse (unresolved, cell preserved) rather than erroring, so a read-only join
+// such as the group export still sees the student; the strict read errors,
+// since a write would otherwise canonicalize garbage.
+func recordToRow(record []string, layout rosterLayout, line int, lenient bool) (RosterRow, error) {
 	// Guard the width before indexing: lenient parsing leaves FieldsPerRecord
 	// unenforced, so a mis-widthed row reaches here — error (the caller
 	// preserves it raw) rather than panicking on an out-of-range index.
@@ -400,7 +403,7 @@ func recordToRow(record []string, layout rosterLayout, line int) (RosterRow, err
 	}
 	if trimmed := strings.TrimSpace(githubIDCell); trimmed != "" {
 		id, err := parseGitHubID(trimmed)
-		if err != nil {
+		if err != nil && !lenient {
 			return RosterRow{}, fmt.Errorf("line %d: invalid github_id %q: %w", line, githubIDCell, err)
 		}
 		// id == 0 means readable but unusable: leave GitHubID unresolved and keep
