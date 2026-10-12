@@ -1,13 +1,87 @@
 package configrepo
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
+
+func TestReadFileContents(t *testing.T) {
+	const big = `{"schema":"v1","assignments":{}}`
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/classroom50/contents/cs50/small.json", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"type": "file", "sha": "small-sha",
+			"encoding": "base64", "content": "e30=\n",
+		})
+	})
+	// GitHub's shape for a file over the 1 MB inline ceiling (#1105): empty
+	// content, encoding "none", but the blob sha is still present.
+	mux.HandleFunc("/repos/o/classroom50/contents/cs50/scores.json", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("ref") != "main" {
+			t.Errorf("ref = %q, want main", r.URL.Query().Get("ref"))
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"type": "file", "sha": "big-sha", "size": 1148728,
+			"encoding": "none", "content": "",
+		})
+	})
+	mux.HandleFunc("/repos/o/classroom50/git/blobs/big-sha", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"sha": "big-sha", "encoding": "base64",
+			"content": base64.StdEncoding.EncodeToString([]byte(big)),
+		})
+	})
+	mux.HandleFunc("/repos/o/classroom50/contents/cs50/no-sha.json", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"type": "file", "encoding": "none", "content": ""})
+	})
+	mux.HandleFunc("/repos/o/classroom50/contents/cs50/missing.json", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	t.Run("inline base64 decodes", func(t *testing.T) {
+		data, ok, err := ReadFileContents(client, "o", "classroom50", "cs50/small.json", "main")
+		if err != nil || !ok {
+			t.Fatalf("ok=%v err=%v", ok, err)
+		}
+		if string(data) != "{}" {
+			t.Errorf("data = %q, want {}", data)
+		}
+	})
+
+	t.Run("oversized file falls back to the git-blobs API", func(t *testing.T) {
+		data, ok, err := ReadFileContents(client, "o", "classroom50", "cs50/scores.json", "main")
+		if err != nil || !ok {
+			t.Fatalf("ok=%v err=%v", ok, err)
+		}
+		if string(data) != big {
+			t.Errorf("data = %q, want blob body", data)
+		}
+	})
+
+	t.Run("non-base64 without a sha still errors", func(t *testing.T) {
+		_, _, err := ReadFileContents(client, "o", "classroom50", "cs50/no-sha.json", "main")
+		if err == nil || !strings.Contains(err.Error(), `unexpected encoding "none"`) {
+			t.Fatalf("err = %v, want unexpected-encoding error", err)
+		}
+	})
+
+	t.Run("404 returns ok=false without error", func(t *testing.T) {
+		data, ok, err := ReadFileContents(client, "o", "classroom50", "cs50/missing.json", "main")
+		if err != nil || ok || data != nil {
+			t.Fatalf("data=%q ok=%v err=%v, want nil/false/nil", data, ok, err)
+		}
+	})
+}
 
 func TestListDirContents(t *testing.T) {
 	mux := http.NewServeMux()

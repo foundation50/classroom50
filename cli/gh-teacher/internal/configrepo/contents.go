@@ -30,19 +30,19 @@ type ContentEntry struct {
 }
 
 // ReadFileContents reads path at ref and decodes the contents API's
-// base64 envelope. (nil, false, nil) on missing path. For payloads near
-// or over the contents API's 1MB ceiling, use the git-blobs API instead.
+// base64 envelope. (nil, false, nil) on missing path.
+//
+// The contents API inlines at most 1 MB; past that it answers with
+// `encoding: "none"` and an empty body (#1105). scores.json grows with
+// every submission and crosses that line in a large classroom, so the
+// oversized case is re-read through the git-blobs API by sha, which
+// serves blobs up to 100 MB.
 func ReadFileContents(client githubapi.Client, owner, repo, path, ref string) ([]byte, bool, error) {
-	segs := strings.Split(path, "/")
-	for i := range segs {
-		segs[i] = url.PathEscape(segs[i])
-	}
-	apiPath := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
-		url.PathEscape(owner), url.PathEscape(repo),
-		strings.Join(segs, "/"), url.PathEscape(ref))
+	apiPath := contentsAPIPath(owner, repo, path, ref)
 	var resp struct {
 		Content  string `json:"content"`
 		Encoding string `json:"encoding"`
+		SHA      string `json:"sha"`
 	}
 	if err := client.Get(apiPath, &resp); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
@@ -51,13 +51,42 @@ func ReadFileContents(client githubapi.Client, owner, repo, path, ref string) ([
 		return nil, false, fmt.Errorf("GET %s: %w", apiPath, err)
 	}
 	if resp.Encoding != "base64" {
-		return nil, false, fmt.Errorf("GET %s: unexpected encoding %q (expected base64)", apiPath, resp.Encoding)
+		if resp.SHA == "" {
+			return nil, false, fmt.Errorf("GET %s: unexpected encoding %q (expected base64)", apiPath, resp.Encoding)
+		}
+		data, err := readBlob(client, owner, repo, resp.SHA)
+		if err != nil {
+			return nil, false, fmt.Errorf("GET %s: file too large to inline, fallback failed: %w", apiPath, err)
+		}
+		return data, true, nil
 	}
 	data, err := ghutil.DecodeContentsBase64(resp.Content)
 	if err != nil {
 		return nil, false, fmt.Errorf("GET %s: decode base64: %w", apiPath, err)
 	}
 	return data, true, nil
+}
+
+// readBlob fetches a blob by sha through the git-data API, which always
+// base64-encodes regardless of size.
+func readBlob(client githubapi.Client, owner, repo, sha string) ([]byte, error) {
+	apiPath := fmt.Sprintf("repos/%s/%s/git/blobs/%s",
+		url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(sha))
+	var resp struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := client.Get(apiPath, &resp); err != nil {
+		return nil, fmt.Errorf("GET %s: %w", apiPath, err)
+	}
+	if resp.Encoding != "base64" {
+		return nil, fmt.Errorf("GET %s: unexpected encoding %q (expected base64)", apiPath, resp.Encoding)
+	}
+	data, err := ghutil.DecodeContentsBase64(resp.Content)
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: decode base64: %w", apiPath, err)
+	}
+	return data, nil
 }
 
 // ContentsExists reports whether path exists at ref (empty: the default
