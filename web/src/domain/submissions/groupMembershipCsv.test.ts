@@ -13,6 +13,7 @@ import {
   downloadGroupsDisabledReason,
   groupMembershipSources,
   naturalCompare,
+  serializeGroupMembershipCsv,
   type GroupMember,
 } from "./groupMembershipCsv"
 
@@ -77,6 +78,35 @@ describe("buildGroupMembershipCsvRows (shared cases)", () => {
       ).toEqual(c.rows)
     })
   }
+})
+
+describe("serializeGroupMembershipCsv", () => {
+  // The byte shape Go's csv.Writer produces: LF separators, a terminated last
+  // record, and quoting only where a cell needs it.
+  it("writes the file byte for byte like the CLI", () => {
+    const [row] = buildGroupMembershipCsvRows(
+      [
+        {
+          group: "group-1",
+          name: "The Sharks, Jr",
+          teamSlug: "slug-1",
+          repoName: "cs-hw1-group-1",
+          members: [],
+        },
+      ],
+      [],
+    )
+    expect(serializeGroupMembershipCsv([row])).toBe(
+      `${GROUP_MEMBERSHIP_CSV_COLUMNS.join(",")}\n` +
+        'group-1,"The Sharks, Jr",slug-1,cs-hw1-group-1,,,,,,,,,\n',
+    )
+  })
+
+  it("ends an empty export with the header line alone", () => {
+    expect(serializeGroupMembershipCsv([])).toBe(
+      `${GROUP_MEMBERSHIP_CSV_COLUMNS.join(",")}\n`,
+    )
+  })
 })
 
 describe("naturalCompare", () => {

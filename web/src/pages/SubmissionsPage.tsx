@@ -116,10 +116,10 @@ import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { downloadCsv } from "@/util/downloadBlob"
 import {
-  GROUP_MEMBERSHIP_CSV_COLUMNS,
   buildGroupMembershipCsvRows,
   downloadGroupsDisabledReason,
   groupMembershipSources,
+  serializeGroupMembershipCsv,
 } from "@/domain/submissions/groupMembershipCsv"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
@@ -1302,12 +1302,10 @@ const SubmissionsPageContent = () => {
       groupMembershipSourceList,
       csvStudents,
     )
-    // "\n" like the CLI's writer, so the two files are byte-identical.
-    const csv = Papa.unparse(
-      { fields: [...GROUP_MEMBERSHIP_CSV_COLUMNS], data: rows },
-      { header: true, newline: "\n" },
+    downloadCsv(
+      serializeGroupMembershipCsv(rows),
+      `${classroom}-${assignment}-groups.csv`,
     )
-    downloadCsv(csv, `${classroom}-${assignment}-groups.csv`)
   }
 
   if (!org || !classroom || !assignment) {

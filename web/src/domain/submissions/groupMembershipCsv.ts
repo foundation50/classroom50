@@ -1,3 +1,5 @@
+import Papa from "papaparse"
+
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { GitHubUser } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
@@ -171,6 +173,20 @@ export function downloadGroupsDisabledReason(input: {
   if (input.unavailable) return "unavailable"
   if (input.sourceCount === 0) return "empty"
   return undefined
+}
+
+// The downloaded document: "\n" separators and a terminated last record,
+// like Go's csv.Writer, so the web file and `gh teacher group list --csv` are
+// byte-identical for the same rows. Papa terminates a header-only document
+// but not one with rows, hence the check.
+export function serializeGroupMembershipCsv(
+  rows: readonly GroupMembershipCsvRow[],
+): string {
+  const csv = Papa.unparse(
+    { fields: [...GROUP_MEMBERSHIP_CSV_COLUMNS], data: [...rows] },
+    { header: true, newline: "\n" },
+  )
+  return csv.endsWith("\n") ? csv : `${csv}\n`
 }
 
 export function buildGroupMembershipCsvRows(
