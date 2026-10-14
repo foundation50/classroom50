@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
-import { invalidateAssignments } from "@/github-core/queries"
+import { seedAssignments } from "@/github-core/queries"
 import {
   copyAssignmentWithConflictRetry,
   type CopyAssignmentInput,
@@ -16,7 +16,7 @@ import { resolveLocalizedMessage } from "@/types/localizedMessage"
 type UseReuseAssignmentParams = {
   org: string
   // Where the copy lands (a sibling classroom for push, the current one for
-  // pull). Its assignments.json is invalidated on success.
+  // pull). Its assignments.json is seeded with the committed file on success.
   targetClassroom: string
   // The source assignment, or null until one is chosen (pull selects it).
   source: Assignment | null
@@ -99,7 +99,13 @@ export function useReuseAssignment({
     mutationFn: (input: CopyAssignmentInput) =>
       copyAssignmentWithConflictRetry(client, input),
     onSuccess: (result) => {
-      invalidateAssignments(queryClient, org, targetClassroom)
+      seedAssignments(
+        queryClient,
+        org,
+        targetClassroom,
+        result.assignments,
+        result,
+      )
       // A template-grant failure doesn't fail the copy, and the forks notice
       // is not a failure at all; both are worth reading before the modal goes,
       // so either keeps it open. Otherwise close.
