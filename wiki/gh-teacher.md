@@ -85,7 +85,9 @@ available. A hard failure stops `init` before it changes anything.
    `none` and turns every member privilege off except private-repository creation
    (so `gh student accept` works), public Pages creation (so the `classroom50`
    repository can publish), and team creation (for student-formed groups).
-   Plan-gated rejections are retried per field and reported.
+   Discussion creation by read-access members is left at the organization's own
+   setting (it is not a repository-admin power). Plan-gated rejections are
+   retried per field and reported.
 2. **Org Actions.** Turns GitHub Actions on if it's off org-wide.
 3. **$0 Actions budget cap.** Stops paid overage; created only when the org
    has no Actions budget yet. Never fatal.

@@ -31,12 +31,16 @@ export type MemberDefaultSetting = {
   verifyOnly?: boolean
 }
 
-// The 15 member-default fields, in the CLI's order. Criticality and
+// The 14 member-default fields, in the CLI's order. Criticality and
 // enterprise-only flags mirror the CLI: critical marks lockdown fields whose
 // absence re-opens the org-wide repo-admin danger; enterprise-only fields have
 // no member-privileges toggle on Team/Free, so init skips them there. A field
 // whose desired VALUE (rather than applicability) differs off-enterprise is
 // handled by NON_ENTERPRISE_OVERRIDES instead.
+//
+// readers_can_create_discussions is deliberately absent: it isn't a repo-admin
+// power, and forcing it off broke teachers' read-only discussion-board repos
+// (discussion #1098). The org default is left alone.
 const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
   {
     field: "default_repository_permission",
@@ -142,14 +146,6 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
     enterpriseOnly: false,
   },
   {
-    field: "readers_can_create_discussions",
-    value: false,
-    desc: "discussion creation by read-access members disabled",
-    manualFix: 'uncheck "Allow users with read access to create discussions"',
-    critical: true,
-    enterpriseOnly: false,
-  },
-  {
     // Enforced TRUE: load-bearing for student-formed group assignments
     // (team_formation: student) — the founding student creates the GitHub
     // team at accept. Non-critical like the other enabling fields: an org
@@ -228,9 +224,9 @@ export function isWritable(setting: MemberDefaultSetting): boolean {
 }
 
 // memberDefaultSettings returns the in-scope settings for a plan. "enterprise"
-// gets all 15 verbatim; every other plan (team/free/unknown) is treated as
+// gets all 14 verbatim; every other plan (team/free/unknown) is treated as
 // non-enterprise, which drops the 3 enterprise-only fields and applies
-// NON_ENTERPRISE_OVERRIDES, leaving 12.
+// NON_ENTERPRISE_OVERRIDES, leaving 11.
 export function memberDefaultSettings(
   plan: string | undefined,
 ): MemberDefaultSetting[] {

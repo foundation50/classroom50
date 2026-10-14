@@ -132,6 +132,10 @@ func MemberDefaultSettings(plan string) []MemberDefaultSetting {
 //     (team_formation: student) have the founding student create the team.
 //   - everything else false: locks the privilege / repo-admin power to owners.
 //
+// readers_can_create_discussions is deliberately absent: it isn't a repo-admin
+// power, and forcing it off broke teachers' read-only discussion-board repos
+// (discussion #1098). The org default is left alone.
+//
 // The four web-UI-only privileges with no REST field are handled by
 // ManualHardeningSteps, not here.
 func allMemberDefaultSettings() []MemberDefaultSetting {
@@ -225,13 +229,6 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			Value:     false,
 			Desc:      "member issue deletion disabled",
 			ManualFix: `uncheck "Allow members to delete issues for this organization"`,
-			Critical:  true,
-		},
-		{
-			Field:     "readers_can_create_discussions",
-			Value:     false,
-			Desc:      "discussion creation by read-access members disabled",
-			ManualFix: `uncheck "Allow users with read access to create discussions"`,
 			Critical:  true,
 		},
 		{

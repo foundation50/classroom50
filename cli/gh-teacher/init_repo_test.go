@@ -98,12 +98,16 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 		"members_can_delete_repositories",
 		"members_can_change_repo_visibility",
 		"members_can_delete_issues",
-		"readers_can_create_discussions",
 		"members_can_create_private_pages",
 	} {
 		if v, ok := gotBody[f]; !ok || v != false {
 			t.Errorf("combined PATCH field %s = %v (present=%v), want false", f, v, ok)
 		}
+	}
+	// Discussion creation by read-access members is the org's own business
+	// (discussion #1098): the lockdown must neither force it off nor touch it.
+	if _, ok := gotBody["readers_can_create_discussions"]; ok {
+		t.Errorf("combined PATCH must not send readers_can_create_discussions")
 	}
 	// Member team creation is ENFORCED true: student-formed group assignments
 	// (team_formation: student) have the founding student create the GitHub

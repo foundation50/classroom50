@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import orgpolicyGoSource from "../../../cli/gh-teacher/internal/orgpolicy/orgpolicy.go?raw"
+
 import {
   classifyDefaults,
   isWritable,
@@ -11,6 +13,25 @@ import {
 // These tests pin the parity-critical invariants: plan-aware field count,
 // criticality flags, and the three-state classification the settings page and
 // audit depend on.
+
+// Parses the CLI's canonical list out of its Go source so the mirror is checked
+// against the real thing rather than a hand-copied expectation. Only
+// allMemberDefaultSettings carries `Field:` literals; nonEnterpriseOverrides
+// is keyed by field name and has none.
+function cliMemberDefaultSettings() {
+  const start = orgpolicyGoSource.indexOf("func allMemberDefaultSettings()")
+  const end = orgpolicyGoSource.indexOf("\n}\n", start)
+  expect(start, "allMemberDefaultSettings in orgpolicy.go").toBeGreaterThan(-1)
+  const body = orgpolicyGoSource.slice(start, end)
+  return [...body.matchAll(/Field:\s+"([a-z_]+)",([\s\S]*?)\n\t\t\}/g)].map(
+    ([, field, rest]) => ({
+      field,
+      value: JSON.parse(/Value:\s+(\S+),/.exec(rest)![1]) as boolean | string,
+      critical: /Critical:\s+true/.test(rest),
+      enterpriseOnly: /enterpriseOnly:\s+true/.test(rest),
+    }),
+  )
+}
 
 const ENTERPRISE_ONLY_FIELDS = [
   "members_can_create_internal_repositories",
@@ -39,15 +60,15 @@ function enforcedLive(plan: string | undefined): Record<string, unknown> {
 }
 
 describe("memberDefaultSettings", () => {
-  it("returns all 15 fields on enterprise", () => {
-    expect(memberDefaultSettings("enterprise")).toHaveLength(15)
+  it("returns all 14 fields on enterprise", () => {
+    expect(memberDefaultSettings("enterprise")).toHaveLength(14)
   })
 
   it.each(["team", "free", "", undefined])(
-    "returns 12 fields with no enterprise-only fields on %s",
+    "returns 11 fields with no enterprise-only fields on %s",
     (plan) => {
       const settings = memberDefaultSettings(plan)
-      expect(settings).toHaveLength(12)
+      expect(settings).toHaveLength(11)
       const fields = settings.map((s) => s.field)
       for (const ent of ENTERPRISE_ONLY_FIELDS) {
         expect(fields).not.toContain(ent)
@@ -129,6 +150,36 @@ describe("memberDefaultSettings", () => {
     expect(afterOverride?.value).toBe(false)
   })
 
+  // Discussion #1098: a teacher's read-only discussion-board repo needs
+  // students to open discussions. The toggle isn't a repo-admin power, so the
+  // lockdown leaves it alone on every plan.
+  it.each(["enterprise", "team", "free", "", undefined])(
+    "leaves readers_can_create_discussions out of scope on %s",
+    (plan) => {
+      const fields = memberDefaultSettings(plan).map((s) => s.field)
+      expect(fields).not.toContain("readers_can_create_discussions")
+    },
+  )
+
+  // The two lists are hand-mirrored and every other test here is
+  // self-referential, so a field dropped or re-added on one side only would
+  // keep both suites green while init and the web audit disagree about what the
+  // org must look like. The enterprise list is the canonical one verbatim.
+  it("mirrors the CLI's canonical list: fields, values, and flags in order", () => {
+    const cli = cliMemberDefaultSettings()
+    expect(cli.length).toBeGreaterThan(0)
+    expect(
+      memberDefaultSettings("enterprise").map(
+        ({ field, value, critical, enterpriseOnly }) => ({
+          field,
+          value,
+          critical,
+          enterpriseOnly,
+        }),
+      ),
+    ).toEqual(cli)
+  })
+
   it("marks exactly the four enabling fields non-critical on enterprise, everything else critical", () => {
     for (const s of memberDefaultSettings("enterprise")) {
       const expectCritical = !NON_CRITICAL_FIELDS.includes(s.field)
@@ -158,7 +209,7 @@ describe("classifyDefaults", () => {
       enforcedLive("enterprise"),
       "enterprise",
     )
-    expect(verdicts).toHaveLength(15)
+    expect(verdicts).toHaveLength(14)
     expect(verdicts.every((v) => v.enforced)).toBe(true)
     expect(criticalMissed).toBe(false)
   })
@@ -191,7 +242,7 @@ describe("classifyDefaults", () => {
     // A wrong value for an enterprise-only field must not affect a team verdict.
     live.members_can_view_dependency_insights = true
     const { verdicts, criticalMissed } = classifyDefaults(live, "team")
-    expect(verdicts).toHaveLength(12)
+    expect(verdicts).toHaveLength(11)
     expect(
       verdicts.some(
         (v) => v.setting.field === "members_can_view_dependency_insights",
@@ -220,6 +271,23 @@ describe("classifyDefaults", () => {
     const { criticalMissed } = classifyDefaults({}, "team")
     expect(criticalMissed).toBe(true)
   })
+
+  // The #1098 org: the teacher turned reader discussions back on. That is the
+  // org's own business, so it must be neither a verdict nor a critical miss.
+  it.each(["enterprise", "team"])(
+    "ignores readers_can_create_discussions on %s even when it is on",
+    (plan) => {
+      const live = enforcedLive(plan)
+      live.readers_can_create_discussions = true
+      const { verdicts, criticalMissed } = classifyDefaults(live, plan)
+      expect(criticalMissed).toBe(false)
+      expect(
+        verdicts.some(
+          (v) => v.setting.field === "readers_can_create_discussions",
+        ),
+      ).toBe(false)
+    },
+  )
 })
 
 describe("manualHardeningSteps", () => {
