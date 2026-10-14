@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 
 // Write-path tests for teams.json; the pure helpers live in teamsFile.test.ts.
 
@@ -96,10 +97,69 @@ describe("writeTeamsFile", () => {
     })
 
     expect(commitConfigRepoFiles).toHaveBeenCalledTimes(1)
-    expect(returned).toEqual(committedFile())
-    expect(returned.assignments).toEqual({})
+    expect(returned.teamsFile).toEqual(committedFile())
+    expect(returned.teamsFile.assignments).toEqual({})
     // Unknown top-level fields ride along, as the read-modify-write promises.
-    expect(returned.note).toBe("hand-added")
+    expect(returned.teamsFile.note).toBe("hand-added")
+    // The commit chain the seed is ordered by.
+    expect(returned.previousCommitSha).toBe("HEAD")
+    expect(returned.newCommitSha).toBe("NEWCOMMIT")
+  })
+
+  // A 409 re-runs the whole read-modify-write; the returned file must be the
+  // one the winning attempt committed, built on the re-read, not the first.
+  it("returns the file from the attempt that landed after a conflict", async () => {
+    const conflict = new GitHubAPIError({
+      status: 409,
+      url: "/repos/acme/classroom50/git/refs/heads/main",
+      message: "Conflict",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+    commitConfigRepoFiles
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce({
+        newTreeSha: "TREE2",
+        newCommitSha: "COMMIT2",
+        updatedRef: { ref: "refs/heads/main" },
+      })
+    readConfigRepoHeadAt
+      .mockResolvedValueOnce({
+        configBranch: "main",
+        headSha: "HEAD1",
+        baseTreeSha: "T1",
+      })
+      .mockResolvedValueOnce({
+        configBranch: "main",
+        headSha: "HEAD2",
+        baseTreeSha: "T2",
+      })
+    let reads = 0
+    const returned = await writeTeamsFile(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      message: "Update teams",
+      update: (file) => ({ ...file, note: `attempt-${++reads}` }),
+    })
+
+    expect(commitConfigRepoFiles).toHaveBeenCalledTimes(2)
+    expect(returned.teamsFile.note).toBe("attempt-2")
+    expect(returned.previousCommitSha).toBe("HEAD2")
+    expect(returned.newCommitSha).toBe("COMMIT2")
+    const [, , , entries] = commitConfigRepoFiles.mock.calls[1] as unknown as [
+      unknown,
+      unknown,
+      unknown,
+      { path: string; content: string }[],
+    ]
+    expect(JSON.parse(entries[0].content).note).toBe("attempt-2")
   })
 })
 
@@ -120,8 +180,8 @@ describe("saveTeamsSnapshot", () => {
       teams,
     })
 
-    expect(returned).toEqual(committedFile())
-    expect(returned.assignments.hw1.teams).toEqual(teams)
+    expect(returned.teamsFile).toEqual(committedFile())
+    expect(returned.teamsFile.assignments.hw1.teams).toEqual(teams)
   })
 })
 
@@ -134,8 +194,8 @@ describe("syncTeamsSnapshot", () => {
       formation: "teacher",
     })
 
-    expect(returned).toEqual(committedFile())
-    expect(returned.assignments.hw1.teams).toEqual([
+    expect(returned.teamsFile).toEqual(committedFile())
+    expect(returned.teamsFile.assignments.hw1.teams).toEqual([
       {
         slug: "classroom50-group-1",
         id: 11,

@@ -5,7 +5,7 @@ import {
   createGroupTeam,
   type GroupTeamRef,
 } from "./groupTeams"
-import { syncTeamsSnapshot, type TeamsFile } from "./teamsFile"
+import { syncTeamsSnapshot, type TeamsFileWrite } from "./teamsFile"
 
 // One planned group of a copy plan: identity (`key` = the SOURCE team's slug,
 // stable across edits), the display name carried over (absent = the source
@@ -101,10 +101,10 @@ export type ApplyGroupsPlanResult = {
   // Set when a team CREATE failed: the apply stopped there, and `remaining`
   // lists the planned groups (the failed one first) that were not created.
   createFailure?: { key: string; error: unknown; remaining: string[] }
-  // The teams.json the closing sync committed, for seeding the read cache.
-  // Absent when nothing was created or the best-effort sync failed, in which
-  // case the caller refetches instead.
-  teamsFile?: TeamsFile
+  // The closing sync's teams.json write, for seeding the read cache. Absent
+  // when nothing was created or the best-effort sync failed, in which case the
+  // caller refetches instead.
+  teamsWrite?: TeamsFileWrite
 }
 
 // Apply a copy plan to the current assignment, sequentially: for each planned
@@ -172,7 +172,7 @@ export async function applyGroupsPlan(
     // Best-effort, like every teacher-side resync: a failed sync leaves the
     // drift badge to catch it.
     try {
-      result.teamsFile = await syncTeamsSnapshot(client, {
+      result.teamsWrite = await syncTeamsSnapshot(client, {
         org,
         classroom,
         assignment,

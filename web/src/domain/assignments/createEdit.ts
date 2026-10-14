@@ -76,8 +76,7 @@ import type { LocalizedMessage } from "@/types/localizedMessage"
 import { templateForksNotice } from "./templateWarnings"
 
 export type CreateAssignmentResult = CreateClassroomResult & {
-  // The assignments.json that was committed, so the hook can seed the read
-  // cache instead of refetching a file GitHub may still serve stale (#1004).
+  // The assignments.json as committed; the hook seeds the read cache from it.
   assignments: AssignmentsFile
   // Set when the assignment saved but the follow-up team read grant on a
   // private in-org template failed — a non-fatal warning the UI surfaces
@@ -1325,8 +1324,7 @@ export type SetAssignmentClosedResult = Omit<
   updatedRef?: CreateClassroomResult["updatedRef"]
   // The flag value that landed. Echoed so the caller doesn't reread.
   closed: boolean
-  // The assignments.json now at head (committed, or unchanged on a no-op), for
-  // seeding the read cache without a stale refetch (#1004).
+  // The assignments.json at head (committed, or unchanged on a no-op).
   assignments: AssignmentsFile
 }
 
@@ -1339,8 +1337,7 @@ export type SetAssignmentLockResult = Omit<
   updatedRef?: CreateClassroomResult["updatedRef"]
   // The flag value that landed. Echoed so the caller doesn't reread.
   locked: boolean
-  // The assignments.json now at head (committed, or unchanged on a no-op), for
-  // seeding the read cache without a stale refetch (#1004).
+  // The assignments.json at head (committed, or unchanged on a no-op).
   assignments: AssignmentsFile
   // Set when the flag flip committed but reconciling the private-template
   // student-team access failed (non-fatal): a locked assignment whose student

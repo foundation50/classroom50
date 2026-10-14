@@ -25,8 +25,8 @@ export function useSaveTeamsSnapshot(params: {
         assignment,
         teams: input.teams,
       }),
-    onSuccess: (teamsFile) => {
-      seedTeamsFile(queryClient, org, classroom, teamsFile)
+    onSuccess: (written) => {
+      seedTeamsFile(queryClient, org, classroom, written)
     },
   })
 }
@@ -52,8 +52,8 @@ export function useSyncTeamsSnapshot(params: {
         assignment,
         formation: input.formation,
       }),
-    onSuccess: (teamsFile) => {
-      seedTeamsFile(queryClient, org, classroom, teamsFile)
+    onSuccess: (written) => {
+      seedTeamsFile(queryClient, org, classroom, written)
     },
   })
 }

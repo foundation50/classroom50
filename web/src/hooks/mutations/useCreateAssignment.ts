@@ -11,8 +11,7 @@ import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwne
 
 // Create an assignment. The hook owns the assignments.json cache reconcile
 // (unmount-safe — the new assignment must appear even if the creator navigates
-// away): the committed file is SEEDED rather than refetched, since GitHub's
-// contents API can still serve the pre-write body for a few seconds (#1004).
+// away), seeding the committed file rather than refetching (see seedJsonFile).
 // Also owns the unmount-safe deploy-tracking `onWrite` follow-up. UI (toasts,
 // navigate, inline error/warning banners) stays at the call site, including the
 // templateGrantWarning branch, which decides whether to navigate — see
@@ -40,7 +39,7 @@ export function useCreateAssignment(
     mutationFn: (input) =>
       createAssignment(client, { ...input, canGrantTemplateAccess }),
     onSuccess: (result, input) => {
-      seedAssignments(queryClient, org, classroom, result.assignments)
+      seedAssignments(queryClient, org, classroom, result.assignments, result)
       onWrite?.(result, input)
     },
   })

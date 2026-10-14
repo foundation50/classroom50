@@ -6,16 +6,21 @@ import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
 import { githubKeys } from "@/github-core/queries"
-import type { TeamsFile } from "@/domain/teams/teamsFile"
+import type { TeamsFile, TeamsFileWrite } from "@/domain/teams/teamsFile"
 
 const WRITTEN: TeamsFile = {
   schema: "classroom50/teams/v1",
   assignments: { hw1: { teams: [] } },
 }
+const WRITE: TeamsFileWrite = {
+  previousCommitSha: "C0",
+  newCommitSha: "C1",
+  teamsFile: WRITTEN,
+}
 
-const saveTeamsSnapshot = vi.fn(async () => WRITTEN)
-const syncTeamsSnapshot = vi.fn(async () => WRITTEN)
-const writeTeamsFile = vi.fn(async () => WRITTEN)
+const saveTeamsSnapshot = vi.fn(async () => WRITE)
+const syncTeamsSnapshot = vi.fn(async () => WRITE)
+const writeTeamsFile = vi.fn(async () => WRITE)
 vi.mock("@/domain/teams/teamsFile", () => ({
   saveTeamsSnapshot: (...a: unknown[]) => saveTeamsSnapshot(...(a as [])),
   syncTeamsSnapshot: (...a: unknown[]) => syncTeamsSnapshot(...(a as [])),
@@ -29,7 +34,7 @@ vi.mock("@/domain/teams/groupTeams", () => ({
 const applyGroupsPlan = vi.fn<() => Promise<unknown>>(async () => ({
   created: [{ key: "k", slug: "t" }],
   memberWarnings: [],
-  teamsFile: WRITTEN,
+  teamsWrite: WRITE,
 }))
 vi.mock("@/domain/teams/copyGroupsPlan", () => ({
   applyGroupsPlan: (...a: unknown[]) => applyGroupsPlan(...(a as [])),

@@ -47,10 +47,10 @@ export type BulkLockResult = {
   // render and submit). Reported, never fatal.
   missing: string[]
   outcomes: BulkAssignmentOutcome[]
+  // The head the write was read against, and the commit it produced (null when
+  // nothing needed the write, in which case `assignments` is the file at head).
+  previousCommitSha: string
   newCommitSha: string | null
-  // The assignments.json now at head (committed, or unchanged when nothing
-  // needed the write), for seeding the read cache instead of racing a stale
-  // refetch (#1004).
   assignments: AssignmentsFile
 }
 
@@ -147,6 +147,7 @@ export async function setAssignmentsLock(
     changed,
     missing,
     outcomes,
+    previousCommitSha: ctx.headSha,
     newCommitSha,
     assignments: nextAssignments,
   }
@@ -193,6 +194,7 @@ export type BulkDeleteResult = {
   deleted: string[]
   // Selected slugs already absent from assignments.json.
   missing: string[]
+  previousCommitSha: string
   newCommitSha: string | null
   assignments: AssignmentsFile
 }
@@ -220,7 +222,13 @@ export async function deleteAssignments(
   const missing = slugs.filter((slug) => !existing.has(slug))
 
   if (deleted.length === 0) {
-    return { deleted, missing, newCommitSha: null, assignments: ctx.current }
+    return {
+      deleted,
+      missing,
+      previousCommitSha: ctx.headSha,
+      newCommitSha: null,
+      assignments: ctx.current,
+    }
   }
 
   const removing = new Set(deleted)
@@ -237,7 +245,13 @@ export async function deleteAssignments(
     `Delete ${assignmentCount(deleted.length)}: ${classroom}`,
   )
 
-  return { deleted, missing, newCommitSha, assignments: nextAssignments }
+  return {
+    deleted,
+    missing,
+    previousCommitSha: ctx.headSha,
+    newCommitSha,
+    assignments: nextAssignments,
+  }
 }
 
 export function deleteAssignmentsWithConflictRetry(
@@ -267,6 +281,7 @@ export type BulkCopyOutcome = {
 
 export type BulkCopyResult = {
   outcomes: BulkCopyOutcome[]
+  previousCommitSha: string
   newCommitSha: string | null
   // The target's assignments.json now at head.
   assignments: AssignmentsFile
@@ -356,7 +371,12 @@ export async function copyAssignments(
   }
 
   if (entries.length === 0) {
-    return { outcomes, newCommitSha: null, assignments: ctx.current }
+    return {
+      outcomes,
+      previousCommitSha: ctx.headSha,
+      newCommitSha: null,
+      assignments: ctx.current,
+    }
   }
 
   const { newCommitSha } = await commitAssignments(
@@ -407,7 +427,12 @@ export async function copyAssignments(
     if (grant?.forks) outcome.templateForksNotice = grant.forks
   }
 
-  return { outcomes, newCommitSha, assignments: claimed }
+  return {
+    outcomes,
+    previousCommitSha: ctx.headSha,
+    newCommitSha,
+    assignments: claimed,
+  }
 }
 
 export function copyAssignmentsWithConflictRetry(

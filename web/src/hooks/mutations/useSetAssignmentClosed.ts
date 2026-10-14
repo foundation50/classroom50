@@ -10,9 +10,8 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Close or reopen an assignment's submission window. The hook owns the
 // assignments.json cache reconcile (unmount-safe — the status badge must update
-// even if the teacher navigates away): the committed file is SEEDED rather than
-// refetched, since a refetch can race GitHub's eventual contents API (#1004).
-// Unlike useSetAssignmentLock this has no template-access side effect; the
+// even if the teacher navigates away), seeding the committed file rather than
+// refetching (see seedJsonFile). Unlike useSetAssignmentLock this has no template-access side effect; the
 // per-repo collaborator downgrade that "Close submission" performs lives in the
 // calling modal.
 export function useSetAssignmentClosed(
@@ -33,7 +32,7 @@ export function useSetAssignmentClosed(
   >({
     mutationFn: (input) => setAssignmentClosedWithConflictRetry(client, input),
     onSuccess: (result, input) => {
-      seedAssignments(queryClient, org, classroom, result.assignments)
+      seedAssignments(queryClient, org, classroom, result.assignments, result)
       onWrite?.(result, input)
     },
   })

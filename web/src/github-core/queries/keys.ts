@@ -1,5 +1,7 @@
-import type { QueryClient } from "@tanstack/react-query"
+import { hashKey, type QueryClient } from "@tanstack/react-query"
 
+import type { AssignmentsFile } from "@/domain/queries/assignments"
+import type { TeamsFile } from "@/domain/teams/teamsFile"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import {
@@ -419,11 +421,47 @@ export function invalidateAssignments(
 // cancelled first so a slow stale response can't land on top of the seed, and
 // the document is JSON round-tripped so consumers see exactly what parsing the
 // committed file yields (no `undefined` members, same shape as the wire).
-export function seedJsonFile(
+//
+// Seeds must also land in commit order. A writer resolves only after its
+// post-commit work (template grants, team reconciles), so a second writer that
+// committed on top of it can resolve first; letting the first then seed would
+// pin its older document for the whole staleTime. Each seed records the commit
+// it replaced as superseded, so a write whose own commit is already superseded
+// is behind the cache and skipped.
+export type CommittedWrite = {
+  previousCommitSha: string
+  newCommitSha: string
+}
+
+// Per QueryClient and key: every commit sha a later seed has built on top of.
+const supersededByClient = new WeakMap<QueryClient, Map<string, Set<string>>>()
+
+function supersededFor(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  let byKey = supersededByClient.get(queryClient)
+  if (!byKey) {
+    byKey = new Map()
+    supersededByClient.set(queryClient, byKey)
+  }
+  const hash = hashKey(queryKey)
+  let set = byKey.get(hash)
+  if (!set) {
+    set = new Set()
+    byKey.set(hash, set)
+  }
+  return set
+}
+
+export function seedJsonFile<T>(
   queryClient: QueryClient,
   queryKey: readonly unknown[],
-  document: unknown,
+  document: T,
+  commit?: CommittedWrite,
 ) {
+  if (commit) {
+    const superseded = supersededFor(queryClient, queryKey)
+    if (superseded.has(commit.newCommitSha)) return
+    superseded.add(commit.previousCommitSha)
+  }
   void queryClient.cancelQueries({ queryKey })
   queryClient.setQueryData(queryKey, JSON.parse(JSON.stringify(document)))
 }
@@ -434,23 +472,31 @@ export function seedAssignments(
   queryClient: QueryClient,
   org: string,
   classroom: string,
-  assignments: unknown,
+  assignments: AssignmentsFile,
+  commit?: CommittedWrite,
 ) {
   seedJsonFile(
     queryClient,
     githubKeys.assignmentsFile(org, classroom),
     assignments,
+    commit,
   )
 }
 
 // Same for teams.json: every teacher-side snapshot write hands back the file
 // it committed, so the drift badge compares live membership against that
-// rather than a stale read.
+// rather than a stale read. A best-effort snapshot write that did not land
+// hands back nothing, and the read is refetched instead.
 export function seedTeamsFile(
   queryClient: QueryClient,
   org: string,
   classroom: string,
-  teamsFile: unknown,
+  committed: (CommittedWrite & { teamsFile: TeamsFile }) | undefined,
 ) {
-  seedJsonFile(queryClient, githubKeys.teamsFile(org, classroom), teamsFile)
+  const queryKey = githubKeys.teamsFile(org, classroom)
+  if (!committed) {
+    void queryClient.invalidateQueries({ queryKey })
+    return
+  }
+  seedJsonFile(queryClient, queryKey, committed.teamsFile, committed)
 }

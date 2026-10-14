@@ -26,7 +26,12 @@ import {
   fetchGithubUserWithScopes,
   GitHubUserFetchError,
 } from "./github-user-api"
-import { isDefinitiveGitHubStatus } from "@/github-core/errors"
+import {
+  isDefinitiveGitHubStatus,
+  MAX_QUERY_RATE_LIMIT_DELAY_MS,
+  rateLimitWaitMs,
+  retryDelayForGitHubError,
+} from "@/github-core/errors"
 import router from "@/router"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
@@ -105,10 +110,9 @@ function formatError(
 }
 
 // Cold-reload teardown gate: a stored token is only torn down when /user
-// validation returns a definitive 401 (revoked/expired). A 403 is usually
-// rate-limiting and a 5xx/network blip is transient — expiring on either would
-// wipe a valid token (GitHubUserFetchError carries no headers to tell them
-// apart), so both are preserved.
+// validation returns a definitive 401 (revoked/expired). A 403 (often a rate
+// limit, see isRateLimited) and a 5xx/network blip are preserved: expiring on
+// either would wipe a valid token.
 export function shouldExpireOnUserError(error: unknown): boolean {
   return error instanceof GitHubUserFetchError && error.status === 401
 }
@@ -316,14 +320,21 @@ function useGithubAuthState() {
     // A definitive status (401 revoked, 403 SSO/blocked, 404) resolves
     // immediately — retrying can't change it. Transient failures (5xx/network,
     // a rate-limited 403) self-heal with a bounded retry so a momentary blip
-    // doesn't eject a signed-in user. Shares the policy with the GitHub-client
-    // reads (see retryTransientGitHubError / isDefinitiveGitHubStatus).
+    // doesn't eject a signed-in user, and a throttle that outlasts the retry
+    // window surfaces now rather than after two guaranteed failures. Shares the
+    // policy and the Retry-After-aware delay with the GitHub-client reads (see
+    // retryTransientGitHubError / retryDelayForGitHubError).
     retry: (failureCount, error) => {
       if (!isTransientUserError(error)) {
         return false
       }
+      const wait = rateLimitWaitMs(error)
+      if (wait !== null && wait > MAX_QUERY_RATE_LIMIT_DELAY_MS) {
+        return false
+      }
       return failureCount < 2
     },
+    retryDelay: retryDelayForGitHubError,
   })
 
   // Auth-flow mutations — a deliberate exception to the hooks/mutations/

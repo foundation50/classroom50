@@ -13,12 +13,18 @@ const WRITTEN: AssignmentsFile = {
 } as AssignmentsFile
 
 const copyAssignments = vi.fn<(input: unknown) => Promise<unknown>>(
-  async () => ({ outcomes: [], newCommitSha: "c", assignments: WRITTEN }),
+  async () => ({
+    outcomes: [],
+    previousCommitSha: "p",
+    newCommitSha: "c",
+    assignments: WRITTEN,
+  }),
 )
 const deleteAssignments = vi.fn<(input: unknown) => Promise<unknown>>(
   async () => ({
     deleted: ["hw2"],
     missing: [],
+    previousCommitSha: "p",
     newCommitSha: "d",
     assignments: WRITTEN,
   }),
@@ -28,6 +34,7 @@ const setAssignmentsLock = vi.fn<(input: unknown) => Promise<unknown>>(
     changed: ["hw1"],
     missing: [],
     outcomes: [],
+    previousCommitSha: "p",
     newCommitSha: "l",
     assignments: WRITTEN,
   }),

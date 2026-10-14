@@ -6,9 +6,8 @@ import { seedAssignments } from "@/github-core/queries"
 
 // Delete an assignment from a classroom. The hook owns the assignments.json
 // cache reconcile so it runs even when the caller unmounts on success (the
-// submissions page navigates away as the row disappears). The committed file is
-// SEEDED rather than refetched: GitHub's contents API can still serve the
-// pre-delete body for a few seconds, which would resurrect the row (#1004).
+// submissions page navigates away as the row disappears); it seeds the
+// committed file rather than refetching (see seedJsonFile).
 export function useDeleteAssignment() {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -17,7 +16,7 @@ export function useDeleteAssignment() {
     mutationFn: (input: DeleteAssignmentInput) =>
       deleteAssignmentWithConflictRetry(client, input),
     onSuccess: (result, { org, classroom }) => {
-      seedAssignments(queryClient, org, classroom, result.assignments)
+      seedAssignments(queryClient, org, classroom, result.assignments, result)
     },
   })
 }

@@ -106,7 +106,14 @@ export function removeTeamFromSnapshot(
 // one; the whole read -> update -> commit runs inside withGitConflictRetry, so
 // a concurrent config-repo write is re-read and retried rather than lost. No
 // archive guard: group-team bookkeeping stays writable on an archived classroom
-// (teardown records deletions here). Returns the file as committed.
+// (teardown records deletions here). Returns the file as committed, with the
+// commit it replaced and produced, so the caller can seed the read cache.
+export type TeamsFileWrite = {
+  previousCommitSha: string
+  newCommitSha: string
+  teamsFile: TeamsFile
+}
+
 export async function writeTeamsFile(
   client: GitHubClient,
   input: {
@@ -115,7 +122,7 @@ export async function writeTeamsFile(
     message: string
     update: (file: TeamsFile) => TeamsFile
   },
-): Promise<TeamsFile> {
+): Promise<TeamsFileWrite> {
   const { org, classroom, message, update } = input
   return withGitConflictRetry(async () => {
     const configBranch = await getConfigRepoBranch(client, org)
@@ -126,19 +133,18 @@ export async function writeTeamsFile(
       ref: head.headSha,
     })
     const next = update(current)
-    await commitConfigRepoFiles(
+    const { newCommitSha } = await commitConfigRepoFiles(
       client,
       org,
       head,
       [jsonFileEntry(teamsFilePath(classroom), next)],
       message,
     )
-    return next
+    return { previousCommitSha: head.headSha, newCommitSha, teamsFile: next }
   })
 }
 
 // Snapshot one assignment's group teams into teams.json (teacher-side write).
-// Returns the committed file so the caller can seed the read cache (#1004).
 export async function saveTeamsSnapshot(
   client: GitHubClient,
   input: {
@@ -147,7 +153,7 @@ export async function saveTeamsSnapshot(
     assignment: string
     teams: TeamsFileTeam[]
   },
-): Promise<TeamsFile> {
+): Promise<TeamsFileWrite> {
   const { org, classroom, assignment, teams } = input
   return writeTeamsFile(client, {
     org,
@@ -200,7 +206,7 @@ export async function syncTeamsSnapshot(
     assignment: string
     formation: TeamFormation
   },
-): Promise<TeamsFile> {
+): Promise<TeamsFileWrite> {
   const teams = await snapshotLiveTeams(client, input)
   return saveTeamsSnapshot(client, { ...input, teams })
 }

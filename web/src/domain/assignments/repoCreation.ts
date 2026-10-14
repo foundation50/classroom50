@@ -41,7 +41,8 @@ const extractTemplate = (template: string) => {
 // came from a concurrent accept (a double-click, a second tab), GitHub's repo
 // read can still 404 for a few seconds after the create that won, so the GET
 // rides out that lag rather than failing an accept the student just watched
-// succeed. Bounded well under the accept-setup budget (~7s).
+// succeed. Five attempts with the back-off capped at 2s wait at most 5.5s in
+// total, inside the accept-setup budget (~7s).
 function readExistingAssignmentRepo(
   client: GitHubClient,
   owner: string,
@@ -49,7 +50,7 @@ function readExistingAssignmentRepo(
 ): Promise<GitHubRepo> {
   return withFreshRepoRetry(
     () => client.request<GitHubRepo>(`/repos/${owner}/${name}`),
-    { attempts: 5, baseDelayMs: 500, backoffFactor: 2 },
+    { attempts: 5, baseDelayMs: 500, backoffFactor: 2, maxDelayMs: 2_000 },
   )
 }
 

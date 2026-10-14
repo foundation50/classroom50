@@ -1,16 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import {
-  githubKeys,
-  invalidateGroupTeams,
-  seedTeamsFile,
-} from "@/github-core/queries"
+import { invalidateGroupTeams, seedTeamsFile } from "@/github-core/queries"
 import { deleteGroupTeam } from "@/domain/teams/groupTeams"
 import {
   removeTeamFromSnapshot,
   writeTeamsFile,
-  type TeamsFile,
+  type TeamsFileWrite,
 } from "@/domain/teams/teamsFile"
 import { logger } from "@/lib/logger"
 
@@ -34,7 +30,7 @@ export function useDeleteGroupTeam(params: {
     mutationFn: async (input: {
       slug: string
       id: number
-    }): Promise<{ teamsFile?: TeamsFile }> => {
+    }): Promise<TeamsFileWrite | undefined> => {
       await deleteGroupTeam(client, org, {
         slug: input.slug,
         id: input.id,
@@ -42,14 +38,13 @@ export function useDeleteGroupTeam(params: {
         assignment,
       })
       try {
-        const teamsFile = await writeTeamsFile(client, {
+        return await writeTeamsFile(client, {
           org,
           classroom,
           message: `Update teams: ${classroom}/${assignment}`,
           update: (file) =>
             removeTeamFromSnapshot(file, assignment, input.slug),
         })
-        return { teamsFile }
       } catch (err) {
         log.warn("teams.json cleanup after delete failed (non-fatal)", {
           org,
@@ -58,20 +53,12 @@ export function useDeleteGroupTeam(params: {
           slug: input.slug,
           err,
         })
-        return {}
+        return undefined
       }
     },
-    onSuccess: ({ teamsFile }, input) => {
+    onSuccess: (written, input) => {
       invalidateGroupTeams(queryClient, org, classroom, assignment, input.slug)
-      // Seed from the commit when it landed; a failed cleanup left the file
-      // as it was, so refetch and let the drift badge report the stale row.
-      if (teamsFile) {
-        seedTeamsFile(queryClient, org, classroom, teamsFile)
-      } else {
-        void queryClient.invalidateQueries({
-          queryKey: githubKeys.teamsFile(org, classroom),
-        })
-      }
+      seedTeamsFile(queryClient, org, classroom, written)
     },
   })
 }

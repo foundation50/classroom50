@@ -126,4 +126,27 @@ describe("createAssignmentRepo after a 422 already-exists", () => {
     expect(err).toBeInstanceOf(GitHubAPIError)
     expect((err as GitHubAPIError).status).toBe(404)
   })
+
+  // The lag tolerance has to fit inside the accept-setup budget (~7s): five
+  // attempts with the per-wait cap of 2s sleep 0.5 + 1 + 2 + 2 = 5.5s in total.
+  it("spends at most 5.5s of back-off before giving up", async () => {
+    vi.useFakeTimers()
+    const { client, repoReads } = makeClient({ repoLagAttempts: Infinity })
+
+    const outcome = createAssignmentRepo({
+      client,
+      owner: ORG,
+      name: REPO,
+      fallbackBranch: "main",
+    }).then(
+      () => "resolved",
+      (err: unknown) => err,
+    )
+
+    await vi.advanceTimersByTimeAsync(5_400)
+    expect(repoReads()).toBe(4)
+    await vi.advanceTimersByTimeAsync(200)
+    expect(repoReads()).toBe(5)
+    expect(await outcome).toBeInstanceOf(GitHubAPIError)
+  })
 })

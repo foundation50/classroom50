@@ -99,7 +99,13 @@ export function useReuseAssignment({
     mutationFn: (input: CopyAssignmentInput) =>
       copyAssignmentWithConflictRetry(client, input),
     onSuccess: (result) => {
-      seedAssignments(queryClient, org, targetClassroom, result.assignments)
+      seedAssignments(
+        queryClient,
+        org,
+        targetClassroom,
+        result.assignments,
+        result,
+      )
       // A template-grant failure doesn't fail the copy, and the forks notice
       // is not a failure at all; both are worth reading before the modal goes,
       // so either keeps it open. Otherwise close.

@@ -78,9 +78,9 @@ export type SetScoreOverrideInput = {
 }
 
 export type SetScoreOverrideResult = {
+  previousCommitSha: string
   newCommitSha: string
-  // The scores.json that was committed, so the hook can seed the read cache
-  // instead of refetching a file GitHub may still serve stale (#1004).
+  // The scores.json as committed; the hook seeds the read cache from it.
   scores: ScoresFile
 }
 
@@ -268,6 +268,6 @@ export async function editScoreOverride(
       message,
     )
 
-    return { newCommitSha, scores }
+    return { previousCommitSha: head.headSha, newCommitSha, scores }
   })
 }

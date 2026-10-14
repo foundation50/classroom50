@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
-import { seedAssignments } from "@/github-core/queries"
+import { seedAssignments, type CommittedWrite } from "@/github-core/queries"
 import {
   copyAssignmentsWithConflictRetry,
   deleteAssignmentsWithConflictRetry,
@@ -14,6 +14,18 @@ import {
 } from "@/domain/assignments"
 
 // Write boundary for the assignments page's bulk bar.
+
+// A bulk action that found nothing to change commits nothing; its document is
+// the file at the head it read, so the seed is ordered as that commit.
+function committed(result: {
+  previousCommitSha: string
+  newCommitSha: string | null
+}): CommittedWrite {
+  return {
+    previousCommitSha: result.previousCommitSha,
+    newCommitSha: result.newCommitSha ?? result.previousCommitSha,
+  }
+}
 
 export function useBulkSetAssignmentLock(org: string, classroom: string) {
   const client = useGitHubClient()
@@ -34,7 +46,13 @@ export function useBulkSetAssignmentLock(org: string, classroom: string) {
         locked,
       }),
     onSuccess: (result) =>
-      seedAssignments(queryClient, org, classroom, result.assignments),
+      seedAssignments(
+        queryClient,
+        org,
+        classroom,
+        result.assignments,
+        committed(result),
+      ),
   })
 }
 
@@ -47,7 +65,13 @@ export function useBulkDeleteAssignments(org: string, classroom: string) {
     mutationFn: ({ slugs }) =>
       deleteAssignmentsWithConflictRetry(client, { org, classroom, slugs }),
     onSuccess: (result) =>
-      seedAssignments(queryClient, org, classroom, result.assignments),
+      seedAssignments(
+        queryClient,
+        org,
+        classroom,
+        result.assignments,
+        committed(result),
+      ),
   })
 }
 
@@ -71,6 +95,12 @@ export function useBulkReuseAssignments(org: string) {
         canGrantTemplateAccess,
       }),
     onSuccess: (result, { targetClassroom }) =>
-      seedAssignments(queryClient, org, targetClassroom, result.assignments),
+      seedAssignments(
+        queryClient,
+        org,
+        targetClassroom,
+        result.assignments,
+        committed(result),
+      ),
   })
 }

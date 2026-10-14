@@ -11,9 +11,8 @@ import {
 
 // Set or clear a teacher score override for one repo owner, writing the
 // classroom's scores.json in the config repo (the web's only scores write).
-// Seeds the scores.json read with the committed file so the submissions page
-// reflects it at once; a refetch could race GitHub's eventual contents API and
-// show the override snapping back (#1004). The domain helper wraps the
+// Seeds the scores.json read with the committed file (see seedJsonFile) so the
+// submissions page reflects it at once. The domain helper wraps the
 // read-modify-write in withGitConflictRetry, so a race with the collect run
 // retries transparently.
 export function useSetScoreOverride(opts?: {
@@ -37,6 +36,7 @@ export function useSetScoreOverride(opts?: {
         queryClient,
         githubKeys.scoresFile(input.org, input.classroom),
         result.scores,
+        result,
       )
       onWrite?.(result, input)
     },

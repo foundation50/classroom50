@@ -10,9 +10,8 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Lock or unlock an assignment. The hook owns the assignments.json cache
 // reconcile (unmount-safe — the badge/state must update even if the teacher
-// navigates away): the committed file is SEEDED rather than refetched, since a
-// refetch can race GitHub's eventual contents API and show the lock snapping
-// back for 10 minutes (#1004). The domain function does the template
+// navigates away), seeding the committed file rather than refetching (see
+// seedJsonFile). The domain function does the template
 // grant/revoke itself, so no template-grant flag is threaded here. UI (toasts,
 // the non-fatal templateAccessWarning banner) stays at the call site — see
 // ./README.md.
@@ -35,7 +34,7 @@ export function useSetAssignmentLock(
     meta: { keepTabOpen: true },
     mutationFn: (input) => setAssignmentLockWithConflictRetry(client, input),
     onSuccess: (result, input) => {
-      seedAssignments(queryClient, org, classroom, result.assignments)
+      seedAssignments(queryClient, org, classroom, result.assignments, result)
       onWrite?.(result, input)
     },
   })
