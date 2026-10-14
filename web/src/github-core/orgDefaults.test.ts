@@ -130,8 +130,8 @@ describe("repairOrgDefaults", () => {
     expect(result.unenforced).toHaveLength(0)
     // One combined PATCH, no per-field.
     expect(patchBodies).toHaveLength(1)
-    // 12 in scope, minus the 2 derived repo-creation booleans.
-    expect(Object.keys(patchBodies[0]).length).toBe(10)
+    // 11 in scope, minus the 2 derived repo-creation booleans.
+    expect(Object.keys(patchBodies[0]).length).toBe(9)
   })
 
   // Regression (the 422 that broke "Fix it"): on Team/Free the granular
@@ -162,6 +162,19 @@ describe("repairOrgDefaults", () => {
     expect(patchBodies[0].members_can_create_public_repositories).toBe(false)
     expect(patchBodies[0].members_can_create_private_repositories).toBe(true)
   })
+
+  // Discussion #1098: the org's own setting. A count assertion alone would
+  // pass a same-size swap, so pin the absence by name, as the CLI test does.
+  it.each(["team", "enterprise"])(
+    "never sends readers_can_create_discussions on %s",
+    async (plan) => {
+      const { client, patchBodies } = makeClient({ readback: enforced(plan) })
+      await repairOrgDefaults(client, "acme", plan)
+      expect(patchBodies[0]).not.toHaveProperty(
+        "readers_can_create_discussions",
+      )
+    },
+  )
 
   // The grouped sub-PATCH must not reintroduce the 422 it exists to recover from.
   it("sends only the master switch in the team fallback", async () => {
@@ -205,8 +218,8 @@ describe("repairOrgDefaults", () => {
     })
     const result = await repairOrgDefaults(client, "acme", "team")
     // 1 combined + per-field fallback: the 2 in-scope repo-creation fields are
-    // grouped into 1 sub-PATCH, the other 9 go individually = 10; total 11.
-    expect(getPatchCount()).toBe(11)
+    // grouped into 1 sub-PATCH, the other 8 go individually = 9; total 10.
+    expect(getPatchCount()).toBe(10)
     expect(result.ok).toBe(false)
     expect(result.unenforced.map((s) => s.field)).toContain(
       "members_can_delete_repositories",

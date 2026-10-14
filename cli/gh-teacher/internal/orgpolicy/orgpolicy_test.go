@@ -156,6 +156,41 @@ func TestMemberDefaultSettings_TeamCreationEnabled(t *testing.T) {
 	}
 }
 
+// Discussion #1098: a teacher's read-only discussion-board repo needs students
+// to open discussions. The toggle isn't a repo-admin power, so the lockdown
+// leaves it alone on every plan. Parity with the web mirror's test.
+func TestMemberDefaultSettings_LeavesReaderDiscussionsAlone(t *testing.T) {
+	for _, plan := range []string{"enterprise", "team", "free", ""} {
+		for _, s := range MemberDefaultSettings(plan) {
+			if s.Field == "readers_can_create_discussions" {
+				t.Errorf("plan %q must not enforce readers_can_create_discussions", plan)
+			}
+		}
+	}
+}
+
+// The #1098 org itself: reader discussions turned back on. That is the org's
+// own business, so it must be neither a verdict nor a critical miss.
+func TestClassifyDefaults_IgnoresReaderDiscussions(t *testing.T) {
+	for _, plan := range []string{"enterprise", "team"} {
+		live := map[string]any{}
+		for _, s := range MemberDefaultSettings(plan) {
+			live[s.Field] = s.Value
+		}
+		live["readers_can_create_discussions"] = true
+
+		verdicts, criticalMissed := ClassifyDefaults(live, plan)
+		if criticalMissed {
+			t.Errorf("plan %q: readers_can_create_discussions=true must not be a critical miss", plan)
+		}
+		for _, v := range verdicts {
+			if v.Setting.Field == "readers_can_create_discussions" {
+				t.Errorf("plan %q: readers_can_create_discussions must not appear in the verdicts", plan)
+			}
+		}
+	}
+}
+
 func TestClassifyDefaults_PlanScopesEnterpriseFields(t *testing.T) {
 	// An enterprise-only field set to a non-locked value must be ignored
 	// on Team (out of scope), so the lockdown stays complete.

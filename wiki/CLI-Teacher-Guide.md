@@ -90,7 +90,9 @@ scripts.
 `init` applies a least-privilege lockdown of organization member privileges (the
 only member capabilities left on are private-repository creation, so `gh student
 accept` works, public Pages creation, so the `classroom50` repository can
-publish, and team creation, for student-formed groups), enables GitHub Actions,
+publish, and team creation, for student-formed groups; discussion creation by
+read-access members is left at the organization's own setting, since it is not
+a repository-admin power), enables GitHub Actions,
 sets a $0 Actions budget cap when the org has none, creates the private
 `classroom50` repository, commits the workflow and script files, enables GitHub
 Pages (public, so students and the autograder can fetch published files),

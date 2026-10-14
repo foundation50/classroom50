@@ -171,6 +171,20 @@ settings, so the organization-level change Classroom 50 requests is ignored:
 owner can change the setting. Like the spending-cap check, this one is
 advisory. Classroom 50 keeps working without it.
 
+### Students can't create discussions in a read-only repository
+
+Classroom 50 used to turn off the organization setting **Allow users with read
+access to create discussions** as part of the member-privilege lockdown, and
+flagged it as drift when it was on. It no longer touches that setting, so you
+can enable it for a discussion-board repository your students only read. Under
+the organization's **Member privileges**, check **Allow users with read access
+to create discussions**.
+
+If the setting keeps turning itself off, a teacher is still running an older
+`gh teacher`: its `init` turns the setting back off on every run and its `audit`
+reports it as drift. Have every teacher run `gh extension upgrade gh-teacher`
+before re-running `init`.
+
 ### Setup loops between steps 1 and 2
 
 After you add the service token, the setup wizard returns to step 1 and never
