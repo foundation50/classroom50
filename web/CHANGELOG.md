@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.58.1](https://github.com/foundation50/classroom50/compare/web-v1.58.0...web-v1.58.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* stop disabling discussions for read-only members ([#1117](https://github.com/foundation50/classroom50/issues/1117)) ([e268b5c](https://github.com/foundation50/classroom50/commit/e268b5c475686f10e5e0f1269de6cfa5c20e59ef))
+
 ## [1.58.0](https://github.com/foundation50/classroom50/compare/web-v1.57.1...web-v1.58.0) (2026-10-12)
 
 
