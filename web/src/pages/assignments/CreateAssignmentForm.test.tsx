@@ -1319,6 +1319,20 @@ describe("grading drives the autograding config", () => {
       screen.queryByText("assignments.form.repoSource.editHelp"),
     ).toBeNull()
   })
+
+  it("notes that students can read the whole template once a template source is picked", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm({
+      defaultValues: { repo_source: "none", add_readme: true },
+    })
+    expect(screen.queryByText("assignments.template.readAccessNote")).toBeNull()
+    await user.click(
+      container.querySelector<HTMLInputElement>("#repo_source-template")!,
+    )
+    expect(
+      screen.getByText("assignments.template.readAccessNote"),
+    ).not.toBeNull()
+  })
 })
 
 // The section IA (R1/R2): the sections render in order with a status badge
