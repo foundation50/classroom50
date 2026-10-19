@@ -1320,19 +1320,17 @@ describe("grading drives the autograding config", () => {
     ).toBeNull()
   })
 
-  it("warns that students can read the whole template once a template source is picked", async () => {
+  it("notes that students can read the whole template once a template source is picked", async () => {
     const user = userEvent.setup()
     const { container } = renderForm({
       defaultValues: { repo_source: "none", add_readme: true },
     })
-    expect(
-      screen.queryByText("assignments.template.readAccessWarning"),
-    ).toBeNull()
+    expect(screen.queryByText("assignments.template.readAccessNote")).toBeNull()
     await user.click(
       container.querySelector<HTMLInputElement>("#repo_source-template")!,
     )
     expect(
-      screen.getByText("assignments.template.readAccessWarning"),
+      screen.getByText("assignments.template.readAccessNote"),
     ).not.toBeNull()
   })
 })
