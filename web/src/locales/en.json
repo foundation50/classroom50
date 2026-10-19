@@ -1717,6 +1717,7 @@
       "placeholder": "Search templates, or paste <owner>/<repo>",
       "help": "Optional. Students receive a copy of this repository. Search your organization's template repositories, or type <owner>/<repo> or paste a GitHub URL to use one from anywhere. Leave blank for a template-less assignment: students get an initialized repository with a README and the autograding files.",
       "checking": "Checking template access…",
+      "readAccessWarning": "Students can read the entire template repository, including every branch and its full commit history. Keep answer keys and solutions out of the template.",
       "fallbackOrg": "your org",
       "invalid": {
         "empty": "Enter a template repository.",

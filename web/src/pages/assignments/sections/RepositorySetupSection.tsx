@@ -152,6 +152,12 @@ export function RepositorySetupSection({
                       )}
                     </form.Field>
 
+                    {/* Private in-org templates get a team read grant on save, so
+                        students see every branch, not just the default (#884). */}
+                    <Alert tone="warning" role="status" className="text-sm">
+                      <span>{t("assignments.template.readAccessWarning")}</span>
+                    </Alert>
+
                     {/* Copy all template branches at generate (include_all_branches).
                         Only shown for a template source; default off. */}
                     <form.Field name="include_all_branches">
