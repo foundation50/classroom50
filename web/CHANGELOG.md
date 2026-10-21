@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.58.3](https://github.com/foundation50/classroom50/compare/web-v1.58.2...web-v1.58.3) (2026-10-21)
+
+
+### Bug Fixes
+
+* **web:** keep teaching staff out of the unassigned students list ([#1125](https://github.com/foundation50/classroom50/issues/1125)) ([a07f64c](https://github.com/foundation50/classroom50/commit/a07f64c7b6565d86a88a57b78ff63fb0f8e9bc78))
+
 ## [1.58.2](https://github.com/foundation50/classroom50/compare/web-v1.58.1...web-v1.58.2) (2026-10-19)
 
 
