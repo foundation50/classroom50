@@ -49,7 +49,6 @@ import {
   snapshotIsStale,
   statusSelectValue,
   submissionRosterStudents,
-  staffRolesByLogin,
   teamMissingForOwner,
   teamsWithoutRepos,
   assignmentRepoCandidateLogins,
@@ -154,22 +153,6 @@ describe("rowOnRoster / rosterScopedRows", () => {
   it("ignores blank roster usernames (never matches an empty login)", () => {
     const rows = [row({ owner: "", usernames: [""] })]
     expect(rosterScopedRows(rows, [student({ username: "" })])).toEqual([])
-  })
-})
-
-describe("staffRolesByLogin", () => {
-  it("maps enrolled staff logins (lowercased) to their staff roles only", () => {
-    const map = staffRolesByLogin([
-      teamRow({ username: "Alice", roles: ["student"] }),
-      teamRow({ username: "Prof", roles: ["teacher"] }),
-      teamRow({ username: "dual", roles: ["ta", "student"] }),
-      teamRow({ username: "gone", roles: ["hta"], state: "pending" }),
-      teamRow({ username: "", email: "x@example.com", roles: ["ta"] }),
-    ])
-    expect([...map.entries()]).toEqual([
-      ["prof", ["teacher"]],
-      ["dual", ["ta"]],
-    ])
   })
 })
 

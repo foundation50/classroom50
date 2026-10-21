@@ -20,7 +20,11 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import { toGroupPickerStudents, useGroupRoster } from "@/hooks/useGroupRoster"
+import {
+  partitionGroupPickerStudents,
+  toGroupPickerStudents,
+  useGroupRoster,
+} from "@/hooks/useGroupRoster"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useTeamsSnapshot from "@/hooks/useTeamsSnapshot"
@@ -80,15 +84,18 @@ export function GroupsManager({
     [snapshotTeams, membersBySlug],
   )
 
-  const { enrolled, rosterLogins, fullNameByLogin } = useGroupRoster(
-    org,
-    classroom,
-  )
-  // Students not on ANY of this assignment's teams — the add pickers' options
-  // and the unassigned panel's rows.
+  const roster = useGroupRoster(org, classroom)
+  const { rosterLogins, fullNameByLogin } = roster
+  // Roster members not on ANY of this assignment's teams: the add pickers'
+  // options. The unassigned panel gets only the students among them;
+  // partitionGroupPickerStudents says why (#1123).
   const availableStudents = useMemo(
-    () => toGroupPickerStudents(enrolled, assignedLogins, nameOrder),
-    [enrolled, assignedLogins, nameOrder],
+    () => toGroupPickerStudents(roster, assignedLogins, nameOrder),
+    [roster, assignedLogins, nameOrder],
+  )
+  const unassigned = useMemo(
+    () => partitionGroupPickerStudents(availableStudents),
+    [availableStudents],
   )
 
   // The classroom's OTHER team-mode assignments: the "Copy groups" sources.
@@ -400,7 +407,9 @@ export function GroupsManager({
       </section>
 
       <UnassignedStudentsPanel
-        students={availableStudents}
+        students={unassigned.students}
+        unlistedStaffCount={unassigned.staff.length}
+        hasGroups={teams.length > 0}
         groups={openGroups}
         pending={teamsQuery.isLoading || membersPending}
         busy={busy}

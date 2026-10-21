@@ -16,7 +16,7 @@ import type { Assignment, Student } from "@/types/classroom"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { BadgeTone } from "@/types/badgeTone"
 import type { SubmissionProvenance } from "@/types/submissionProvenance"
-import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
+import type { TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import { dueDeadlineInstant } from "@/util/formatDate"
@@ -107,23 +107,6 @@ export function submissionRosterStudents(
     if (acceptedStaffLogins.has(login) || groupRepoMembers.has(login)) {
       out.push(rowToStudent(row))
     }
-  }
-  return out
-}
-
-// Lowercased login -> the staff roles an enrolled member holds, for the row
-// badge that marks a teacher/head TA/TA testing an assignment. Student-only
-// members are absent, so a lookup miss means "plain student, no badge".
-export function staffRolesByLogin(
-  teamRows: TeamRosterRow[],
-): Map<string, ClassroomRole[]> {
-  const out = new Map<string, ClassroomRole[]>()
-  for (const row of teamRows) {
-    if (row.state !== "enrolled") continue
-    const login = row.username.trim().toLowerCase()
-    if (!login) continue
-    const staff = row.roles.filter((role) => role !== "student")
-    if (staff.length > 0) out.set(login, staff)
   }
   return out
 }

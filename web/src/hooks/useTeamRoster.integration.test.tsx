@@ -269,6 +269,7 @@ describe("useTeamRoster — hidden teams fall back to roster.csv for a non-owner
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.isError).toBe(false)
     expect(result.current.rosterSource).toBe("csv")
+    expect(result.current.studentTeamHidden).toBe(true)
     expect(result.current.studentRosterKnown).toBe(true)
     expect(result.current.roleCounts.student).toBe(2)
     // The visible TA team still wins its own identity: one row, from the team.
@@ -278,6 +279,30 @@ describe("useTeamRoster — hidden teams fall back to roster.csv for a non-owner
     // Drift terms read the raw team lists, so the fallback manufactures none.
     expect(result.current.csvMissingCount).toBe(0)
     expect(result.current.backfillNeededCount).toBe(0)
+  })
+
+  // A dual-role TA reads the student team live; only an uncreated staff team
+  // 404s. rosterSource still says "csv" (a team was hidden), but the student
+  // rows are the truth, which is what the Manage groups split needs to know.
+  it("keeps the student team live when only a staff team is hidden", async () => {
+    request.mockImplementation((url: string): Promise<unknown[]> => {
+      if (url.includes("/teams/") && url.includes("/members")) {
+        if (url.includes("-hta/members"))
+          return Promise.reject(apiError(404, url))
+        if (url.includes("-ta/members")) return Promise.resolve([])
+        if (url.includes("-teacher/members")) return Promise.resolve([])
+        return Promise.resolve([{ id: 1, login: "alice", avatar_url: "" }])
+      }
+      return Promise.resolve([])
+    })
+    const { result } = renderHook(
+      () => useTeamRoster("acme", "cs101", students),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.rosterSource).toBe("csv")
+    expect(result.current.studentTeamHidden).toBe(false)
+    expect(result.current.roleCounts.student).toBe(1)
   })
 
   it("marks the roster unknown when the CSV has no students either", async () => {

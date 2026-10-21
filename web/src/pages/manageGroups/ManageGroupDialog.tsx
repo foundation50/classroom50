@@ -27,6 +27,8 @@ import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
 import { toGroupPickerStudents, useGroupRoster } from "@/hooks/useGroupRoster"
 import type { GroupPickerStudent } from "@/hooks/useGroupRoster"
+import { RoleBadges } from "@/pages/students/RoleBadges"
+import { GroupMemberPickerOptions } from "./GroupMemberPickerOptions"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useAddGroupTeamMember from "@/hooks/mutations/useAddGroupTeamMember"
@@ -109,14 +111,13 @@ export function ManageGroupDialog({
   const slugs = useMemo(() => teams.map((entry) => entry.slug), [teams])
   const { logins: assignedLogins } = useGroupTeamMembers(org, slugs)
 
-  const { enrolled, rosterLogins, fullNameByLogin } = useGroupRoster(
-    org,
-    classroom,
-  )
-  // Students not on ANY of this assignment's teams — the add picker's options.
+  const roster = useGroupRoster(org, classroom)
+  const { rosterLogins, fullNameByLogin, staffRolesByLogin } = roster
+  // Roster members not on ANY of this assignment's teams — the add picker's
+  // options.
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () => toGroupPickerStudents(enrolled, assignedLogins, nameOrder),
-    [enrolled, assignedLogins, nameOrder],
+    () => toGroupPickerStudents(roster, assignedLogins, nameOrder),
+    [roster, assignedLogins, nameOrder],
   )
 
   const addMember = useAddGroupTeamMember({ org, classroom, assignment })
@@ -445,8 +446,10 @@ export function ManageGroupDialog({
 
             <ul className="divide-y divide-base-200 rounded-box border border-base-200">
               {members.map((member) => {
-                const fullName = fullNameByLogin.get(member.login.toLowerCase())
-                const pendingRemoval = removals.has(member.login.toLowerCase())
+                const login = member.login.toLowerCase()
+                const fullName = fullNameByLogin.get(login)
+                const staffRoles = staffRolesByLogin.get(login)
+                const pendingRemoval = removals.has(login)
                 return (
                   <li
                     key={member.login}
@@ -465,6 +468,7 @@ export function ManageGroupDialog({
                       login={member.login}
                       removed={pendingRemoval}
                     />
+                    {staffRoles && <RoleBadges roles={staffRoles} />}
                     {pendingRemoval ? (
                       <>
                         <span className="text-xs font-medium text-error/70">
@@ -500,7 +504,9 @@ export function ManageGroupDialog({
               })}
 
               {pendingAdds.map((username) => {
-                const fullName = fullNameByLogin.get(username.toLowerCase())
+                const login = username.toLowerCase()
+                const fullName = fullNameByLogin.get(login)
+                const staffRoles = staffRolesByLogin.get(login)
                 return (
                   <li
                     key={`add-${username}`}
@@ -508,6 +514,7 @@ export function ManageGroupDialog({
                   >
                     <PendingAddAvatar />
                     <MemberNameLines name={fullName} login={username} />
+                    {staffRoles && <RoleBadges roles={staffRoles} />}
                     <Badge tone="success" size="sm">
                       {t("manageGroups.manage.willBeAdded")}
                     </Badge>
@@ -558,11 +565,7 @@ export function ManageGroupDialog({
                   <option value="">
                     {t("manageGroups.addMemberPlaceholder")}
                   </option>
-                  {pickerStudents.map((student) => (
-                    <option key={student.key} value={student.username}>
-                      {student.label}
-                    </option>
-                  ))}
+                  <GroupMemberPickerOptions pool={pickerStudents} />
                 </Select>
                 <Button
                   variant="outline"
