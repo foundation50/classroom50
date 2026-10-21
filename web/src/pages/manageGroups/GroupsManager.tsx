@@ -20,7 +20,11 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import { toGroupPickerStudents, useGroupRoster } from "@/hooks/useGroupRoster"
+import {
+  partitionGroupPickerStudents,
+  toGroupPickerStudents,
+  useGroupRoster,
+} from "@/hooks/useGroupRoster"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useTeamsSnapshot from "@/hooks/useTeamsSnapshot"
@@ -80,15 +84,24 @@ export function GroupsManager({
     [snapshotTeams, membersBySlug],
   )
 
-  const { enrolled, rosterLogins, fullNameByLogin } = useGroupRoster(
-    org,
-    classroom,
-  )
-  // Students not on ANY of this assignment's teams — the add pickers' options
-  // and the unassigned panel's rows.
+  const { enrolled, rosterLogins, fullNameByLogin, staffSplitKnown } =
+    useGroupRoster(org, classroom)
+  // Roster members not on ANY of this assignment's teams: the add pickers'
+  // options. The unassigned panel gets only the students among them;
+  // partitionGroupPickerStudents says why (#1123).
   const availableStudents = useMemo(
-    () => toGroupPickerStudents(enrolled, assignedLogins, nameOrder),
-    [enrolled, assignedLogins, nameOrder],
+    () =>
+      toGroupPickerStudents(
+        enrolled,
+        assignedLogins,
+        nameOrder,
+        staffSplitKnown,
+      ),
+    [enrolled, assignedLogins, nameOrder, staffSplitKnown],
+  )
+  const unassigned = useMemo(
+    () => partitionGroupPickerStudents(availableStudents),
+    [availableStudents],
   )
 
   // The classroom's OTHER team-mode assignments: the "Copy groups" sources.
@@ -400,7 +413,8 @@ export function GroupsManager({
       </section>
 
       <UnassignedStudentsPanel
-        students={availableStudents}
+        students={unassigned.students}
+        unlistedStaffCount={unassigned.staff.length}
         groups={openGroups}
         pending={teamsQuery.isLoading || membersPending}
         busy={busy}

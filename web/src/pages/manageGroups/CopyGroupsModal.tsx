@@ -27,6 +27,7 @@ import {
 } from "@/domain/teams/copyGroupsPlan"
 import type { PlannedGroup } from "@/domain/teams/copyGroupsPlan"
 import { groupDefaultName } from "@/util/groupTeam"
+import { GroupMemberPickerOptions } from "./GroupMemberPickerOptions"
 
 // Another team-mode assignment of this classroom, offered as a copy source.
 export type CopySourceOption = {
@@ -549,14 +550,9 @@ export function CopyGroupsModal({
                                 <option value="">
                                   {t("manageGroups.addMemberPlaceholder")}
                                 </option>
-                                {pickerStudents.map((student) => (
-                                  <option
-                                    key={student.key}
-                                    value={student.username}
-                                  >
-                                    {student.label}
-                                  </option>
-                                ))}
+                                <GroupMemberPickerOptions
+                                  pool={pickerStudents}
+                                />
                               </Select>
                               <Button
                                 variant="outline"

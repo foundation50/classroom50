@@ -126,6 +126,31 @@ export function hasStudentEnrollment(
   return row.roles.includes("student")
 }
 
+// The staff roles a row holds, in rank order; empty for a plain student.
+export function staffRolesOf(
+  row: Pick<TeamRosterRow, "roles">,
+): ClassroomRole[] {
+  return sortRolesByRank(row.roles.filter((role) => role !== "student"))
+}
+
+// Lowercased login -> the staff roles an enrolled member holds, for the badge
+// that marks a teacher/head TA/TA among students (a submissions row, a group
+// member). Student-only members are absent, so a lookup miss means "plain
+// student, no badge".
+export function staffRolesByLogin(
+  teamRows: readonly TeamRosterRow[],
+): Map<string, ClassroomRole[]> {
+  const out = new Map<string, ClassroomRole[]>()
+  for (const row of teamRows) {
+    if (row.state !== "enrolled") continue
+    const login = row.username.trim().toLowerCase()
+    if (!login) continue
+    const staff = staffRolesOf(row)
+    if (staff.length > 0) out.set(login, staff)
+  }
+  return out
+}
+
 // Whether unenroll can actually target this row's roster entry. The shared
 // roster-row matcher identifies a row by username or github_id only (a shared
 // email must never widen a removal), so a row carrying NEITHER — a pending

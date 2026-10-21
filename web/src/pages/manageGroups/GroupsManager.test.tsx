@@ -5,7 +5,8 @@ import userEvent from "@testing-library/user-event"
 
 // Pins the create-group name field's Enter handling (#1003): Enter creates the
 // group, except for the Enter an IME uses to commit a candidate, which would
-// otherwise create a group with a half-composed name.
+// otherwise create a group with a half-composed name. Also pins the page-level
+// student/staff routing to the unassigned panel (#1123).
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -28,14 +29,37 @@ vi.mock("@/hooks/useGroupTeamMembers", () => ({
 vi.mock("@/hooks/useTeamsSnapshot", () => ({
   default: () => ({ data: undefined, isLoading: false }),
 }))
-vi.mock("@/hooks/useGroupRoster", () => ({
+// One student and one head TA, so the real picker helpers have a split to
+// make; only the data hook is stubbed. Hoisted because vi.mock factories run
+// when the module graph loads, before this file's own top-level statements.
+const roster = vi.hoisted(() => {
+  const rosterRow = (username: string, roles: string[]) => ({
+    key: username,
+    state: "enrolled",
+    roles,
+    username,
+    github_id: "1",
+    first_name: "",
+    last_name: "",
+    section: "",
+    email: "",
+    avatar_url: "",
+  })
+  return {
+    enrolled: [rosterRow("alice", ["student"]), rosterRow("hta", ["hta"])],
+    staffSplitKnown: true,
+  }
+})
+vi.mock("@/hooks/useGroupRoster", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useGroupRoster")>()),
   useGroupRoster: () => ({
-    enrolled: [],
-    rosterLogins: new Set(),
+    enrolled: roster.enrolled,
+    rosterLogins: new Set(["alice", "hta"]),
     fullNameByLogin: new Map(),
+    staffRolesByLogin: new Map([["hta", ["hta"]]]),
+    staffSplitKnown: roster.staffSplitKnown,
     isLoading: false,
   }),
-  toGroupPickerStudents: () => [],
 }))
 vi.mock("@/hooks/useGetClassAssignments", () => ({
   default: () => ({ data: undefined }),
@@ -64,11 +88,17 @@ vi.mock("./ManageGroupDialog", () => ({
   describeTeamWriteError: () => "error",
 }))
 vi.mock("./CopyGroupsModal", () => ({ CopyGroupsModal: () => null }))
+const panelSpy = vi.hoisted(() => vi.fn<(props: unknown) => null>(() => null))
 vi.mock("./UnassignedStudentsPanel", () => ({
-  UnassignedStudentsPanel: () => null,
+  UnassignedStudentsPanel: panelSpy,
 }))
 
 import { GroupsManager } from "./GroupsManager"
+import type { UnassignedStudentsPanel } from "./UnassignedStudentsPanel"
+
+type PanelProps = Parameters<typeof UnassignedStudentsPanel>[0]
+const lastPanelProps = (): PanelProps =>
+  panelSpy.mock.calls.at(-1)?.[0] as PanelProps
 
 // happy-dom lacks the native <dialog> showModal/close.
 beforeAll(() => {
@@ -84,9 +114,11 @@ beforeAll(() => {
 afterEach(() => {
   cleanup()
   createTeam.mockClear()
+  panelSpy.mockClear()
+  roster.staffSplitKnown = true
 })
 
-const openCreateDialog = async () => {
+const renderPage = () =>
   render(
     <GroupsManager
       org="acme"
@@ -95,6 +127,28 @@ const openCreateDialog = async () => {
       formation="teacher"
     />,
   )
+
+// A head TA on the roster used to be listed as an unassigned student (#1123).
+// The split lives in pure helpers; this pins the page actually using them.
+describe("GroupsManager unassigned students", () => {
+  it("hands the panel students only and counts the staff it left out", () => {
+    renderPage()
+    const props = lastPanelProps()
+    expect(props.students.map((s) => s.username)).toEqual(["alice"])
+    expect(props.unlistedStaffCount).toBe(1)
+  })
+
+  it("lists everyone when the roster can't tell staff from students", () => {
+    roster.staffSplitKnown = false
+    renderPage()
+    const props = lastPanelProps()
+    expect(props.students.map((s) => s.username)).toEqual(["alice", "hta"])
+    expect(props.unlistedStaffCount).toBe(0)
+  })
+})
+
+const openCreateDialog = async () => {
+  renderPage()
   const user = userEvent.setup()
   // The dialog footer reuses the label; the page-level trigger comes first.
   await user.click(screen.getAllByText("manageGroups.createButton")[0])

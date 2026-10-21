@@ -16,9 +16,9 @@ import type { Assignment, Student } from "@/types/classroom"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { BadgeTone } from "@/types/badgeTone"
 import type { SubmissionProvenance } from "@/types/submissionProvenance"
-import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
+import type { TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
-import { hasStudentEnrollment } from "@/util/classroomRoleUI"
+import { hasStudentEnrollment, staffRolesByLogin } from "@/util/classroomRoleUI"
 import { dueDeadlineInstant } from "@/util/formatDate"
 import {
   compareStudentsByName,
@@ -111,22 +111,9 @@ export function submissionRosterStudents(
   return out
 }
 
-// Lowercased login -> the staff roles an enrolled member holds, for the row
-// badge that marks a teacher/head TA/TA testing an assignment. Student-only
-// members are absent, so a lookup miss means "plain student, no badge".
-export function staffRolesByLogin(
-  teamRows: TeamRosterRow[],
-): Map<string, ClassroomRole[]> {
-  const out = new Map<string, ClassroomRole[]>()
-  for (const row of teamRows) {
-    if (row.state !== "enrolled") continue
-    const login = row.username.trim().toLowerCase()
-    if (!login) continue
-    const staff = row.roles.filter((role) => role !== "student")
-    if (staff.length > 0) out.set(login, staff)
-  }
-  return out
-}
+// Lives beside hasStudentEnrollment so the group-management surfaces badge
+// staff the same way the submissions rows do.
+export { staffRolesByLogin }
 
 // Fold live submission presence (submit/* releases read directly from student
 // repos) into the collected snapshot rows. `scores.json` stays the source of

@@ -19,15 +19,20 @@ export type UnassignedGroupOption = {
 
 // Roster students who are on none of this assignment's group teams, each with
 // a group picker + Add. The page owns the mutation (size/roster gates,
-// snapshot resync, shared error alert); this panel is presentation + choice.
+// snapshot resync, shared error alert) and the student/staff split; this
+// panel is presentation + choice.
 export function UnassignedStudentsPanel({
   students,
+  unlistedStaffCount = 0,
   groups,
   pending,
   busy,
   onAdd,
 }: {
   students: GroupPickerStudent[]
+  // Teaching staff on no group, kept out of the list above. Named in a note
+  // so a teacher looking for a TA knows where to add them instead.
+  unlistedStaffCount?: number
   groups: UnassignedGroupOption[]
   // Live team membership is still resolving, so "who is unassigned" is not
   // yet known — show a loading state instead of over-claiming.
@@ -56,6 +61,13 @@ export function UnassignedStudentsPanel({
         <p className="mt-1 text-sm text-base-content/70">
           {t("manageGroups.unassigned.hint")}
         </p>
+        {!pending && unlistedStaffCount > 0 && (
+          <p className="mt-1 text-sm text-base-content/70">
+            {t("manageGroups.unassigned.staffNote", {
+              count: unlistedStaffCount,
+            })}
+          </p>
+        )}
       </div>
 
       {pending ? (

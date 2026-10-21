@@ -2113,6 +2113,7 @@
     "addMemberAriaLabel": "Add a student to {{name}}",
     "addMemberPlaceholder": "Choose a student",
     "addMemberButton": "Add",
+    "staffPickerGroup": "Teaching staff",
     "groupFull": "Group is full ({{max}} members max).",
     "noMembers": "No members yet",
     "manage": {
@@ -2198,8 +2199,10 @@
     "unassigned": {
       "heading": "Unassigned students",
       "hint": "Students on the roster who aren't in a group yet. Choose a group with room, then add them.",
+      "staffNote_one": "{{count}} teaching staff member isn't in a group and isn't listed here. To let them test the assignment, add them from a group's Manage dialog.",
+      "staffNote_other": "{{count}} teaching staff members aren't in a group and aren't listed here. To let them test the assignment, add them from a group's Manage dialog.",
       "loading": "Loading students…",
-      "empty": "Everyone on the roster is in a group.",
+      "empty": "Every student on the roster is in a group.",
       "groupPlaceholder": "Choose a group",
       "selectAriaLabel": "Group for {{name}}",
       "addAriaLabel": "Add {{name}} to the selected group",

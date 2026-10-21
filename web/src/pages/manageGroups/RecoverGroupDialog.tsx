@@ -27,6 +27,8 @@ import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
 import { toGroupPickerStudents, useGroupRoster } from "@/hooks/useGroupRoster"
 import type { GroupPickerStudent } from "@/hooks/useGroupRoster"
+import { RoleBadges } from "@/pages/students/RoleBadges"
+import { GroupMemberPickerOptions } from "./GroupMemberPickerOptions"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useRecoverGroupTeam from "@/hooks/mutations/useRecoverGroupTeam"
@@ -88,7 +90,13 @@ export function RecoverGroupDialog({
   // for the "already on a group" exclusion — same plumbing as
   // ManageGroupDialog so both dialogs offer the same picker pool.
   const roster = useGroupRoster(org, classroom)
-  const { enrolled, rosterLogins, fullNameByLogin } = roster
+  const {
+    enrolled,
+    rosterLogins,
+    fullNameByLogin,
+    staffRolesByLogin,
+    staffSplitKnown,
+  } = roster
 
   const teamsQuery = useGroupTeams(org, classroom, assignment)
   const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data])
@@ -96,8 +104,14 @@ export function RecoverGroupDialog({
   const { logins: assignedLogins } = useGroupTeamMembers(org, slugs)
 
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () => toGroupPickerStudents(enrolled, assignedLogins, nameOrder),
-    [enrolled, assignedLogins, nameOrder],
+    () =>
+      toGroupPickerStudents(
+        enrolled,
+        assignedLogins,
+        nameOrder,
+        staffSplitKnown,
+      ),
+    [enrolled, assignedLogins, nameOrder, staffSplitKnown],
   )
 
   // Members suggested from the repo's commit history, once the roster is
@@ -363,6 +377,7 @@ export function RecoverGroupDialog({
             <ul className="divide-y divide-base-200 rounded-box border border-base-200">
               {suggestions.map((login) => {
                 const fullName = fullNameByLogin.get(login.toLowerCase())
+                const staffRoles = staffRolesByLogin.get(login.toLowerCase())
                 return (
                   <li key={login} className="px-4 py-2">
                     <label
@@ -377,6 +392,7 @@ export function RecoverGroupDialog({
                         onChange={() => toggleSuggestion(login)}
                       />
                       <MemberNameLines name={fullName} login={login} />
+                      {staffRoles && <RoleBadges roles={staffRoles} />}
                     </label>
                   </li>
                 )
@@ -384,6 +400,7 @@ export function RecoverGroupDialog({
 
               {additions.map((login) => {
                 const fullName = fullNameByLogin.get(login.toLowerCase())
+                const staffRoles = staffRolesByLogin.get(login.toLowerCase())
                 return (
                   <li
                     key={`add-${login}`}
@@ -391,6 +408,7 @@ export function RecoverGroupDialog({
                   >
                     <PendingAddAvatar />
                     <MemberNameLines name={fullName} login={login} />
+                    {staffRoles && <RoleBadges roles={staffRoles} />}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -442,11 +460,7 @@ export function RecoverGroupDialog({
                 <option value="">
                   {t("manageGroups.addMemberPlaceholder")}
                 </option>
-                {pickerStudents.map((student) => (
-                  <option key={student.key} value={student.username}>
-                    {student.label}
-                  </option>
-                ))}
+                <GroupMemberPickerOptions pool={pickerStudents} />
               </Select>
               <Button
                 variant="outline"

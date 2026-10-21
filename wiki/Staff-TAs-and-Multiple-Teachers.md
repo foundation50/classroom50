@@ -145,6 +145,11 @@ GitHub teams are the authority for enrollment and role; the `role` column in
   assignments table leaves it out of the **Accepted** and **Submitted** counts
   unless **Include teaching staff** is on. For more information, see
   [Collect the whole classroom](Web-Teacher-Guide#collect-the-whole-classroom).
+- **Manage groups** lists only students under **Unassigned students**. A
+  staff member who isn't also enrolled can still be added to a group from
+  the group's **Manage** dialog (under **Teaching staff** in the picker) and
+  shows a role badge in the member list. See
+  [Manage groups](Web-Teacher-Guide#manage-groups).
 - **Unenroll** drops only the student side (the roster row and student-team
   membership); the staff role stays.
 

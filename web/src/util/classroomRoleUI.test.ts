@@ -6,6 +6,7 @@ import {
   enrolledCountsByRole,
   hasStudentEnrollment,
   sortRolesByRank,
+  staffRolesOf,
 } from "./classroomRoleUI"
 import type {
   ClassroomRole,
@@ -40,6 +41,18 @@ describe("hasStudentEnrollment", () => {
   })
   it("is true for a student who is also staff (unenroll drops only the student side)", () => {
     expect(hasStudentEnrollment(row(["teacher", "student"]))).toBe(true)
+  })
+})
+
+describe("staffRolesOf", () => {
+  it("is empty for a plain student", () => {
+    expect(staffRolesOf(row(["student"]))).toEqual([])
+  })
+  it("drops the student role and keeps staff roles in rank order", () => {
+    expect(staffRolesOf(row(["student", "ta", "teacher"]))).toEqual([
+      "teacher",
+      "ta",
+    ])
   })
 })
 
