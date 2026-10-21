@@ -91,6 +91,11 @@ export type UseTeamRosterResult = {
   // as fresh as the last sync and any write that assumes a full team picture
   // (auto-sync, role clears) must stay off.
   rosterSource: "team" | "csv"
+  // Whether the student team itself was the unreadable one. Narrower than
+  // rosterSource, which also flips on an unreadable staff team: a consumer
+  // that only needs the student rows to be live (the Manage groups split)
+  // reads this instead.
+  studentTeamHidden: boolean
   // False when the student list is genuinely unknown: the student team was
   // unreadable AND roster.csv had no student rows. Distinct from a resolved
   // empty roster, which an owner sees for a brand-new classroom. Consumers
@@ -194,8 +199,9 @@ export function useTeamRoster(
     [students, hiddenRoles],
   )
   const rosterSource: "team" | "csv" = hiddenRoles.size > 0 ? "csv" : "team"
+  const studentTeamHidden = hiddenRoles.has("student")
   const studentRosterKnown =
-    !hiddenRoles.has("student") || (fallbackRows.student?.length ?? 0) > 0
+    !studentTeamHidden || (fallbackRows.student?.length ?? 0) > 0
 
   // Student pending invitations, TEAM-SCOPED (owner-only, like the staff teams).
   // GitHub lists a pending invite under a team only when that team was on the
@@ -431,6 +437,7 @@ export function useTeamRoster(
     backfillNeededLogins,
     orgMembersKnown,
     rosterSource,
+    studentTeamHidden,
     studentRosterKnown,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + teacher + hta + ta), not just the

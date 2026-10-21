@@ -25,8 +25,7 @@ export type GroupPickerStudent = {
   initials: string
   avatarUrl?: string
   // False only when the viewer can tell this person holds no student
-  // enrollment (teaching staff). The unassigned panel leaves them out while
-  // the pickers still offer them.
+  // enrollment; see partitionGroupPickerStudents.
   isStudent: boolean
 }
 
@@ -52,9 +51,9 @@ export type UseGroupRosterResult = {
 }
 
 // The enrolled-roster plumbing shared by every group-management surface
-// (groups page, manage/recover dialogs): one derivation of the enrolled rows,
-// the roster-login gate set, and the login -> full-name map. React Query
-// dedupes the underlying reads across hosts that mount several surfaces.
+// (groups page, manage/recover dialogs); UseGroupRosterResult documents each
+// output. React Query dedupes the underlying reads across hosts that mount
+// several surfaces.
 export function useGroupRoster(
   org: string,
   classroom: string,
@@ -82,40 +81,51 @@ export function useGroupRoster(
     return map
   }, [enrolled, nameOrder])
   const staffRoles = useMemo(() => staffRolesByLogin(enrolled), [enrolled])
-  return {
-    enrolled,
-    rosterLogins,
-    fullNameByLogin,
-    staffRolesByLogin: staffRoles,
-    staffSplitKnown: roster.rosterSource === "team",
-    isLoading: roster.isLoading,
-  }
+  const staffSplitKnown = !roster.studentTeamHidden
+  const isLoading = roster.isLoading
+  // Stable identity, so callers can memo on the result as one dependency.
+  return useMemo(
+    () => ({
+      enrolled,
+      rosterLogins,
+      fullNameByLogin,
+      staffRolesByLogin: staffRoles,
+      staffSplitKnown,
+      isLoading,
+    }),
+    [
+      enrolled,
+      rosterLogins,
+      fullNameByLogin,
+      staffRoles,
+      staffSplitKnown,
+      isLoading,
+    ],
+  )
 }
 
 // Roster members on none of the assignment's teams, shaped for the add
-// pickers and the unassigned panel. With `staffSplitKnown` false every member
-// counts as a student, so a viewer on the roster.csv fallback sees a complete
-// list rather than one narrowed by a role the file can't record. Pure; callers
-// memo on (enrolled, assignedLogins, nameOrder, staffSplitKnown).
+// pickers and the unassigned panel. Pure; callers memo on the inputs.
 export function toGroupPickerStudents(
-  enrolled: readonly TeamRosterRow[],
+  roster: Pick<UseGroupRosterResult, "enrolled" | "staffSplitKnown">,
   assignedLogins: ReadonlySet<string>,
   nameOrder: NameOrder = DEFAULT_NAME_ORDER,
-  staffSplitKnown = true,
 ): GroupPickerStudent[] {
-  return unassignedRosterStudents(enrolled, assignedLogins).map((row) => {
-    const name = formatName(row.first_name, row.last_name, nameOrder)
-    const initials = initialsFromParts(row.first_name, row.last_name)
-    return {
-      key: row.key,
-      username: row.username,
-      name,
-      initials,
-      avatarUrl: row.avatar_url || undefined,
-      label: name ? `${name} (${row.username})` : row.username,
-      isStudent: !staffSplitKnown || hasStudentEnrollment(row),
-    }
-  })
+  return unassignedRosterStudents(roster.enrolled, assignedLogins).map(
+    (row) => {
+      const name = formatName(row.first_name, row.last_name, nameOrder)
+      const initials = initialsFromParts(row.first_name, row.last_name)
+      return {
+        key: row.key,
+        username: row.username,
+        name,
+        initials,
+        avatarUrl: row.avatar_url || undefined,
+        label: name ? `${name} (${row.username})` : row.username,
+        isStudent: !roster.staffSplitKnown || hasStudentEnrollment(row),
+      }
+    },
+  )
 }
 
 // Split a picker pool into students and staff-only members. The unassigned

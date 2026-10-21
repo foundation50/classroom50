@@ -6,9 +6,9 @@ import {
 } from "@/hooks/useGroupRoster"
 
 // The <option>s of a group add-member picker: students first, then teaching
-// staff under their own group label so a TA placed in a group (to test the
-// assignment) is a deliberate pick, never mistaken for a student. Shared by
-// the manage, copy, and recreate dialogs so the three pickers can't drift.
+// staff under their own group label, so placing a TA in a group is a
+// deliberate pick. Shared by the manage, copy, and recreate dialogs so the
+// three pickers can't drift.
 export function GroupMemberPickerOptions({
   pool,
 }: {

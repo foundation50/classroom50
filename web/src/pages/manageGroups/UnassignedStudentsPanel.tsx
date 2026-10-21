@@ -24,6 +24,7 @@ export type UnassignedGroupOption = {
 export function UnassignedStudentsPanel({
   students,
   unlistedStaffCount = 0,
+  hasGroups = false,
   groups,
   pending,
   busy,
@@ -33,6 +34,10 @@ export function UnassignedStudentsPanel({
   // Teaching staff on no group, kept out of the list above. Named in a note
   // so a teacher looking for a TA knows where to add them instead.
   unlistedStaffCount?: number
+  // Whether the assignment has any group at all (full ones included, unlike
+  // `groups`). The staff note points at a group's Manage dialog, so it waits
+  // until one exists.
+  hasGroups?: boolean
   groups: UnassignedGroupOption[]
   // Live team membership is still resolving, so "who is unassigned" is not
   // yet known — show a loading state instead of over-claiming.
@@ -61,7 +66,7 @@ export function UnassignedStudentsPanel({
         <p className="mt-1 text-sm text-base-content/70">
           {t("manageGroups.unassigned.hint")}
         </p>
-        {!pending && unlistedStaffCount > 0 && (
+        {!pending && unlistedStaffCount > 0 && hasGroups && (
           <p className="mt-1 text-sm text-base-content/70">
             {t("manageGroups.unassigned.staffNote", {
               count: unlistedStaffCount,

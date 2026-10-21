@@ -6,6 +6,7 @@ import {
   enrolledCountsByRole,
   hasStudentEnrollment,
   sortRolesByRank,
+  staffRolesByLogin,
   staffRolesOf,
 } from "./classroomRoleUI"
 import type {
@@ -52,6 +53,28 @@ describe("staffRolesOf", () => {
     expect(staffRolesOf(row(["student", "ta", "teacher"]))).toEqual([
       "teacher",
       "ta",
+    ])
+  })
+})
+
+describe("staffRolesByLogin", () => {
+  const named = (
+    username: string,
+    roles: ClassroomRole[],
+    state: TeamRosterRowState = "enrolled",
+  ): TeamRosterRow => ({ ...row(roles, state), username })
+
+  it("maps enrolled staff logins (lowercased) to their staff roles only", () => {
+    const map = staffRolesByLogin([
+      named("Alice", ["student"]),
+      named("Prof", ["teacher"]),
+      named("dual", ["ta", "student"]),
+      named("gone", ["hta"], "pending"),
+      named("", ["ta"]),
+    ])
+    expect([...map.entries()]).toEqual([
+      ["prof", ["teacher"]],
+      ["dual", ["ta"]],
     ])
   })
 })

@@ -90,13 +90,7 @@ export function RecoverGroupDialog({
   // for the "already on a group" exclusion — same plumbing as
   // ManageGroupDialog so both dialogs offer the same picker pool.
   const roster = useGroupRoster(org, classroom)
-  const {
-    enrolled,
-    rosterLogins,
-    fullNameByLogin,
-    staffRolesByLogin,
-    staffSplitKnown,
-  } = roster
+  const { rosterLogins, fullNameByLogin, staffRolesByLogin } = roster
 
   const teamsQuery = useGroupTeams(org, classroom, assignment)
   const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data])
@@ -104,14 +98,8 @@ export function RecoverGroupDialog({
   const { logins: assignedLogins } = useGroupTeamMembers(org, slugs)
 
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () =>
-      toGroupPickerStudents(
-        enrolled,
-        assignedLogins,
-        nameOrder,
-        staffSplitKnown,
-      ),
-    [enrolled, assignedLogins, nameOrder, staffSplitKnown],
+    () => toGroupPickerStudents(roster, assignedLogins, nameOrder),
+    [roster, assignedLogins, nameOrder],
   )
 
   // Members suggested from the repo's commit history, once the roster is

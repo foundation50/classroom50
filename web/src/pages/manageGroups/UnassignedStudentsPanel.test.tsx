@@ -15,31 +15,30 @@ vi.mock("react-i18next", async (importOriginal) => {
 
 import type { GroupPickerStudent } from "@/hooks/useGroupRoster"
 import { UnassignedStudentsPanel } from "./UnassignedStudentsPanel"
-import { GroupMemberPickerOptions } from "./GroupMemberPickerOptions"
 
 afterEach(() => {
   cleanup()
 })
 
-const entry = (
-  username: string,
-  over: Partial<GroupPickerStudent> = {},
-): GroupPickerStudent => ({
+const entry = (username: string): GroupPickerStudent => ({
   key: username,
   username,
   label: username,
   name: "",
   initials: "",
   isStudent: true,
-  ...over,
 })
 
 const panelProps = {
   groups: [{ slug: "g1", label: "Group 1" }],
+  hasGroups: true,
   pending: false,
   busy: false,
   onAdd: () => {},
 }
+
+const staffNote = (count: number) =>
+  screen.queryByText(`manageGroups.unassigned.staffNote:${count}`)
 
 // A head TA on the roster used to show up as an "unassigned student" (#1123).
 // The page now hands the panel students only; the panel names the staff it
@@ -66,7 +65,7 @@ describe("UnassignedStudentsPanel", () => {
         unlistedStaffCount={2}
       />,
     )
-    expect(screen.getByText("manageGroups.unassigned.staffNote:2")).toBeTruthy()
+    expect(staffNote(2)).toBeTruthy()
   })
 
   it("keeps the empty state when only staff are unassigned", () => {
@@ -78,32 +77,33 @@ describe("UnassignedStudentsPanel", () => {
       />,
     )
     expect(screen.getByText("manageGroups.unassigned.empty")).toBeTruthy()
-    expect(screen.getByText("manageGroups.unassigned.staffNote:1")).toBeTruthy()
-  })
-})
-
-describe("GroupMemberPickerOptions", () => {
-  it("lists students first and staff under their own group", () => {
-    render(
-      <select aria-label="pick">
-        <GroupMemberPickerOptions
-          pool={[entry("prof", { isStudent: false }), entry("alice")]}
-        />
-      </select>,
-    )
-    const select = screen.getByLabelText("pick") as HTMLSelectElement
-    expect([...select.options].map((o) => o.value)).toEqual(["alice", "prof"])
-    const group = select.querySelector("optgroup")
-    expect(group?.getAttribute("label")).toBe("manageGroups.staffPickerGroup")
-    expect(group?.querySelector("option")?.value).toBe("prof")
+    expect(staffNote(1)).toBeTruthy()
   })
 
-  it("renders no staff group when the pool has no staff", () => {
+  // The note sends the teacher to a group's Manage dialog, which is a dead end
+  // on a fresh assignment with no groups yet.
+  it("holds the staff note until a group exists", () => {
     render(
-      <select aria-label="pick">
-        <GroupMemberPickerOptions pool={[entry("alice")]} />
-      </select>,
+      <UnassignedStudentsPanel
+        {...panelProps}
+        hasGroups={false}
+        groups={[]}
+        students={[]}
+        unlistedStaffCount={1}
+      />,
     )
-    expect(screen.getByLabelText("pick").querySelector("optgroup")).toBeNull()
+    expect(staffNote(1)).toBeNull()
+  })
+
+  it("holds the staff note while membership is still loading", () => {
+    render(
+      <UnassignedStudentsPanel
+        {...panelProps}
+        pending
+        students={[]}
+        unlistedStaffCount={1}
+      />,
+    )
+    expect(staffNote(1)).toBeNull()
   })
 })

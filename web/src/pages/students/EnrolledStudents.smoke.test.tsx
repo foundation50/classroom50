@@ -144,6 +144,7 @@ const emptyRoster = {
   backfillNeededLogins: [],
   orgMembersKnown: true,
   rosterSource: "team",
+  studentTeamHidden: false,
   studentRosterKnown: true,
   orgMembers: [],
   refetch: vi.fn(),

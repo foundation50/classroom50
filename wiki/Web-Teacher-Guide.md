@@ -867,7 +867,8 @@ never joins a group isn't a gap to fix; the panel notes how many it left out.
 To let a staff member test the assignment, add them from a group's **Manage**
 dialog, where the member picker lists them under **Teaching staff**, and their
 row shows a role badge once they're in. When the page is viewed by a head TA
-or TA whose student list comes from the roster file (see
+or TA who can't read the student team, so the student list comes from the
+roster file (see
 [What TAs can and can't see](Staff-TAs-and-Multiple-Teachers#what-tas-can-and-cant-see)),
 the file records one role per person, so the panel lists every unassigned
 roster member rather than guess who is staff.

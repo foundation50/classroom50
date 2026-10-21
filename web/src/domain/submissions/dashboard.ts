@@ -18,7 +18,7 @@ import type { BadgeTone } from "@/types/badgeTone"
 import type { SubmissionProvenance } from "@/types/submissionProvenance"
 import type { TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
-import { hasStudentEnrollment, staffRolesByLogin } from "@/util/classroomRoleUI"
+import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import { dueDeadlineInstant } from "@/util/formatDate"
 import {
   compareStudentsByName,
@@ -110,10 +110,6 @@ export function submissionRosterStudents(
   }
   return out
 }
-
-// Lives beside hasStudentEnrollment so the group-management surfaces badge
-// staff the same way the submissions rows do.
-export { staffRolesByLogin }
 
 // Fold live submission presence (submit/* releases read directly from student
 // repos) into the collected snapshot rows. `scores.json` stays the source of

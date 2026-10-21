@@ -84,20 +84,14 @@ export function GroupsManager({
     [snapshotTeams, membersBySlug],
   )
 
-  const { enrolled, rosterLogins, fullNameByLogin, staffSplitKnown } =
-    useGroupRoster(org, classroom)
+  const roster = useGroupRoster(org, classroom)
+  const { rosterLogins, fullNameByLogin } = roster
   // Roster members not on ANY of this assignment's teams: the add pickers'
   // options. The unassigned panel gets only the students among them;
   // partitionGroupPickerStudents says why (#1123).
   const availableStudents = useMemo(
-    () =>
-      toGroupPickerStudents(
-        enrolled,
-        assignedLogins,
-        nameOrder,
-        staffSplitKnown,
-      ),
-    [enrolled, assignedLogins, nameOrder, staffSplitKnown],
+    () => toGroupPickerStudents(roster, assignedLogins, nameOrder),
+    [roster, assignedLogins, nameOrder],
   )
   const unassigned = useMemo(
     () => partitionGroupPickerStudents(availableStudents),
@@ -415,6 +409,7 @@ export function GroupsManager({
       <UnassignedStudentsPanel
         students={unassigned.students}
         unlistedStaffCount={unassigned.staff.length}
+        hasGroups={teams.length > 0}
         groups={openGroups}
         pending={teamsQuery.isLoading || membersPending}
         busy={busy}

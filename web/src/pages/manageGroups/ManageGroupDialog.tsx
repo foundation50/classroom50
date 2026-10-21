@@ -111,24 +111,13 @@ export function ManageGroupDialog({
   const slugs = useMemo(() => teams.map((entry) => entry.slug), [teams])
   const { logins: assignedLogins } = useGroupTeamMembers(org, slugs)
 
-  const {
-    enrolled,
-    rosterLogins,
-    fullNameByLogin,
-    staffRolesByLogin,
-    staffSplitKnown,
-  } = useGroupRoster(org, classroom)
+  const roster = useGroupRoster(org, classroom)
+  const { rosterLogins, fullNameByLogin, staffRolesByLogin } = roster
   // Roster members not on ANY of this assignment's teams — the add picker's
   // options.
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () =>
-      toGroupPickerStudents(
-        enrolled,
-        assignedLogins,
-        nameOrder,
-        staffSplitKnown,
-      ),
-    [enrolled, assignedLogins, nameOrder, staffSplitKnown],
+    () => toGroupPickerStudents(roster, assignedLogins, nameOrder),
+    [roster, assignedLogins, nameOrder],
   )
 
   const addMember = useAddGroupTeamMember({ org, classroom, assignment })

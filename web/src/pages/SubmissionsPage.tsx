@@ -92,7 +92,6 @@ import {
   showsNonSubmitters,
   snapshotIsStale,
   sortNameMode,
-  staffRolesByLogin,
   studentInSection,
   submissionRosterStudents,
   teamsWithoutRepos,
@@ -102,6 +101,7 @@ import {
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/domain/submissions/dashboard"
+import { staffRolesByLogin } from "@/util/classroomRoleUI"
 import useGetScores from "@/hooks/useGetScores"
 import useLiveSubmissions from "@/hooks/useLiveSubmissions"
 import useDetectedSubmissions from "@/hooks/useDetectedSubmissions"
