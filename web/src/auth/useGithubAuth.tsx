@@ -26,7 +26,12 @@ import {
   fetchGithubUserWithScopes,
   GitHubUserFetchError,
 } from "./github-user-api"
-import { isDefinitiveGitHubStatus } from "@/github-core/errors"
+import {
+  isDefinitiveGitHubStatus,
+  MAX_QUERY_RATE_LIMIT_DELAY_MS,
+  rateLimitWaitMs,
+  retryDelayForGitHubError,
+} from "@/github-core/errors"
 import router from "@/router"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
@@ -105,24 +110,23 @@ function formatError(
 }
 
 // Cold-reload teardown gate: a stored token is only torn down when /user
-// validation returns a definitive 401 (revoked/expired). A 403 is usually
-// rate-limiting and a 5xx/network blip is transient — expiring on either would
-// wipe a valid token (GitHubUserFetchError carries no headers to tell them
-// apart), so both are preserved.
+// validation returns a definitive 401 (revoked/expired). A 403 (often a rate
+// limit, see isRateLimited) and a 5xx/network blip are preserved: expiring on
+// either would wipe a valid token.
 export function shouldExpireOnUserError(error: unknown): boolean {
   return error instanceof GitHubUserFetchError && error.status === 401
 }
 
 // A /user validation error that should self-heal on refetch/reconnect: a network
 // failure (no status — a TypeError from fetch, incl. a captive portal) or a
-// non-definitive GitHub status (5xx / 429). A definitive GitHub status
-// (401/403/404 per isDefinitiveGitHubStatus) is NOT transient — retrying can't
-// change it — so it must not hold at "loading" forever. `undefined`/`null` (no
-// error) is not transient.
+// non-definitive GitHub status (5xx / 429, or a rate-limited 403). A definitive
+// GitHub status (401/403/404 per isDefinitiveGitHubStatus) is NOT transient —
+// retrying can't change it — so it must not hold at "loading" forever.
+// `undefined`/`null` (no error) is not transient.
 export function isTransientUserError(error: unknown): boolean {
   if (!error) return false
   if (error instanceof GitHubUserFetchError) {
-    return !isDefinitiveGitHubStatus(error.status)
+    return error.isRateLimited || !isDefinitiveGitHubStatus(error.status)
   }
   // A non-GitHubUserFetchError reaching here is a fetch/network failure.
   return true
@@ -249,6 +253,11 @@ function sleep(ms: number, signal: AbortSignal) {
   })
 }
 
+// Consecutive failed poll REQUESTS (network blip, proxy 5xx) a device flow
+// rides out before giving up. RFC 8628 expects the client to keep polling; one
+// dropped fetch mid-flow must not throw away a code the user is busy approving.
+export const DEVICE_POLL_MAX_CONSECUTIVE_FAILURES = 3
+
 // Holds all auth state. Instantiate only once, in GitHubAuthProvider; other
 // consumers use the useGithubAuth() context hook below.
 function useGithubAuthState() {
@@ -309,19 +318,23 @@ function useGithubAuthState() {
     enabled: Boolean(token),
     staleTime: 60 * 60 * 1000,
     // A definitive status (401 revoked, 403 SSO/blocked, 404) resolves
-    // immediately — retrying can't change it. Transient failures (5xx/network)
-    // self-heal with a bounded retry so a momentary blip doesn't eject a
-    // signed-in user. Shares the policy with the GitHub-client reads (see
-    // retryTransientGitHubError / isDefinitiveGitHubStatus).
+    // immediately — retrying can't change it. Transient failures (5xx/network,
+    // a rate-limited 403) self-heal with a bounded retry so a momentary blip
+    // doesn't eject a signed-in user, and a throttle that outlasts the retry
+    // window surfaces now rather than after two guaranteed failures. Shares the
+    // policy and the Retry-After-aware delay with the GitHub-client reads (see
+    // retryTransientGitHubError / retryDelayForGitHubError).
     retry: (failureCount, error) => {
-      if (
-        error instanceof GitHubUserFetchError &&
-        isDefinitiveGitHubStatus(error.status)
-      ) {
+      if (!isTransientUserError(error)) {
+        return false
+      }
+      const wait = rateLimitWaitMs(error)
+      if (wait !== null && wait > MAX_QUERY_RATE_LIMIT_DELAY_MS) {
         return false
       }
       return failureCount < 2
     },
+    retryDelay: retryDelayForGitHubError,
   })
 
   // Auth-flow mutations — a deliberate exception to the hooks/mutations/
@@ -685,6 +698,7 @@ function useGithubAuthState() {
 
       let intervalSeconds = input.initialIntervalSeconds
       let attempts = 0
+      let consecutiveFailures = 0
 
       while (!controller.signal.aborted) {
         if (Date.now() > input.expiresAt) {
@@ -727,9 +741,20 @@ function useGithubAuthState() {
           })
         } catch (err) {
           if (controller.signal.aborted) return
-          failDeviceFlow(formatError(t, err))
-          return
+          // A failed request says nothing about the authorization itself, so
+          // keep polling at the same interval and only fail once the failures
+          // look persistent. Any GitHub verdict below resets the count.
+          consecutiveFailures += 1
+          if (consecutiveFailures >= DEVICE_POLL_MAX_CONSECUTIVE_FAILURES) {
+            failDeviceFlow(formatError(t, err))
+            return
+          }
+          log.debug("device poll: request failed, retrying", {
+            consecutiveFailures,
+          })
+          continue
         }
+        consecutiveFailures = 0
 
         if (data.error === "authorization_pending") continue
 

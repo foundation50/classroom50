@@ -184,6 +184,9 @@
     "actionWithCount": "{{label}} ({{count}})",
     "checkingOrgAccess": "Checking your access to this organization…",
     "resolvingRole": "Checking your role…",
+    "rateLimitWait_one": "GitHub is limiting requests from this session. Retrying in {{count}} second.",
+    "rateLimitWait_other": "GitHub is limiting requests from this session. Retrying in {{count}} seconds.",
+    "rateLimitRetrying": "GitHub is limiting requests from this session. Retrying now…",
     "goToDashboard": "Go to dashboard",
     "close": "Close",
     "cancel": "Cancel",
@@ -2890,6 +2893,7 @@
       "access": "Setting your repository access",
       "setup": "Setting up autograding",
       "setupWaiting": "Setting up autograding (GitHub is still initializing your repository, which can take up to a minute)",
+      "repoProvisioningElsewhere": "Waiting for the setup already running for {{org}}/{{repo}} in another tab",
       "feedback": "Opening feedback pull request",
       "team": "Finding your group"
     },

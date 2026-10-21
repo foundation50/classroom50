@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router"
 
 import { Spinner } from "@/components/Spinner"
+import { RateLimitWaitNotice } from "@/components/RateLimitWaitNotice"
 import { useTranslation } from "react-i18next"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
@@ -50,8 +51,11 @@ function OrgLayout() {
   if (loadingMembership || loadingRepo) {
     return (
       <div className="min-h-screen grid place-items-center">
-        {/* Contextual label (Primer: name what is loading when known). */}
-        <Spinner size="lg" label={t("common.checkingOrgAccess")} />
+        <div className="flex flex-col items-center gap-3">
+          {/* Contextual label (Primer: name what is loading when known). */}
+          <Spinner size="lg" label={t("common.checkingOrgAccess")} />
+          <RateLimitWaitNotice />
+        </div>
       </div>
     )
   }

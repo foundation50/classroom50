@@ -12,6 +12,7 @@ import {
   type AuthStatusInput,
 } from "./useGithubAuth"
 import { GitHubUserFetchError } from "./github-user-api"
+import { rateLimitWaitMs, retryDelayForGitHubError } from "@/github-core/errors"
 
 // The PR's headline invariant: a revoked token (401) tears the session down on
 // cold reload, but a rate-limit (403) or transient/network error must NOT wipe
@@ -327,6 +328,64 @@ describe("isTransientUserError", () => {
 
   it("does NOT treat a definitive 403 (SSO/blocked) as transient", () => {
     expect(isTransientUserError(new GitHubUserFetchError(403))).toBe(false)
+  })
+
+  it("treats a rate-limited 403 as transient (a throttle, not an auth verdict)", () => {
+    const throttled = {
+      limit: 5000,
+      remaining: 0,
+      used: 5000,
+      reset: null,
+      resource: "core",
+      retryAfter: null,
+    }
+    expect(isTransientUserError(new GitHubUserFetchError(403, throttled))).toBe(
+      true,
+    )
+    expect(
+      isTransientUserError(
+        new GitHubUserFetchError(403, {
+          ...throttled,
+          remaining: 10,
+          retryAfter: 30,
+        }),
+      ),
+    ).toBe(true)
+    // Headers present but quota left: a real 403, still definitive.
+    expect(
+      isTransientUserError(
+        new GitHubUserFetchError(403, { ...throttled, remaining: 4999 }),
+      ),
+    ).toBe(false)
+  })
+
+  // The /user probe uses the shared Retry-After-aware delay, so a throttled
+  // cold reload waits the throttle out instead of burning both retries at
+  // 1s/2s and landing on the stuck-session screen.
+  it("gets the Retry-After wait from retryDelayForGitHubError", () => {
+    const throttled = new GitHubUserFetchError(403, {
+      limit: 5000,
+      remaining: 0,
+      used: 5000,
+      reset: null,
+      resource: "core",
+      retryAfter: 7,
+    })
+    expect(retryDelayForGitHubError(0, throttled)).toBe(7_000)
+    expect(rateLimitWaitMs(throttled)).toBe(7_000)
+    // A 401 carrying throttle headers (GitHub sends them on every response) is
+    // still the definitive teardown verdict, never a throttle.
+    const revoked = new GitHubUserFetchError(401, {
+      limit: 5000,
+      remaining: 0,
+      used: 5000,
+      reset: null,
+      resource: "core",
+      retryAfter: 7,
+    })
+    expect(isTransientUserError(revoked)).toBe(false)
+    expect(shouldExpireOnUserError(revoked)).toBe(true)
+    expect(rateLimitWaitMs(revoked)).toBe(null)
   })
 
   it("does NOT treat a definitive 404 as transient", () => {

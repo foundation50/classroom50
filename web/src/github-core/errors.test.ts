@@ -2,12 +2,26 @@ import { describe, expect, it } from "vitest"
 
 import {
   GitHubAPIError,
+  MAX_QUERY_RATE_LIMIT_DELAY_MS,
   githubValidationReasons,
+  isDefinitiveGitHubError,
   isDefinitiveGitHubStatus,
   parseSsoAuthorizationUrl,
+  rateLimitWaitMs,
+  retryDelayForGitHubError,
   retryTransientGitHubError,
   tolerateGitHubError,
+  type GitHubRateLimit,
 } from "./errors"
+
+const noRateLimit: GitHubRateLimit = {
+  limit: null,
+  remaining: null,
+  used: null,
+  reset: null,
+  resource: null,
+  retryAfter: null,
+}
 
 const apiError = (status: number, ssoHeader?: string | null) =>
   new GitHubAPIError({
@@ -15,15 +29,20 @@ const apiError = (status: number, ssoHeader?: string | null) =>
     url: "https://api.github.com/x",
     message: `HTTP ${status}`,
     body: null,
-    rateLimit: {
-      limit: null,
-      remaining: null,
-      used: null,
-      reset: null,
-      resource: null,
-      retryAfter: null,
-    },
+    rateLimit: noRateLimit,
     ssoHeader,
+  })
+
+const rateLimitedError = (
+  status: number,
+  rateLimit: Partial<GitHubRateLimit>,
+) =>
+  new GitHubAPIError({
+    status,
+    url: "https://api.github.com/x",
+    message: `HTTP ${status}`,
+    body: null,
+    rateLimit: { ...noRateLimit, ...rateLimit },
   })
 
 describe("isDefinitiveGitHubStatus", () => {
@@ -57,6 +76,149 @@ describe("retryTransientGitHubError", () => {
   it("retries non-GitHubAPIError (network) failures within the bound", () => {
     expect(retryTransientGitHubError(0, new Error("network"))).toBe(true)
     expect(retryTransientGitHubError(2, new Error("network"))).toBe(false)
+  })
+
+  it("treats a rate-limited 403 as transient, not as a blocked verdict", () => {
+    // GitHub's throttle answers 403 with remaining:0 or Retry-After; retrying
+    // after the wait CAN change the outcome, unlike a real 403.
+    expect(
+      retryTransientGitHubError(0, rateLimitedError(403, { remaining: 0 })),
+    ).toBe(true)
+    expect(
+      retryTransientGitHubError(0, rateLimitedError(403, { retryAfter: 30 })),
+    ).toBe(true)
+    expect(
+      retryTransientGitHubError(2, rateLimitedError(403, { remaining: 0 })),
+    ).toBe(false)
+    // A 403 with quota left is still definitive.
+    expect(
+      retryTransientGitHubError(0, rateLimitedError(403, { remaining: 42 })),
+    ).toBe(false)
+  })
+
+  // The delay is capped at MAX_QUERY_RATE_LIMIT_DELAY_MS, so a retry for a limit
+  // GitHub says lasts longer would run inside the throttle and fail again.
+  it("does not retry a rate limit that outlasts the retry window", () => {
+    expect(
+      retryTransientGitHubError(0, rateLimitedError(429, { retryAfter: 3600 })),
+    ).toBe(false)
+    const now = Date.now()
+    const resetInTenMinutes = Math.floor(now / 1000) + 600
+    expect(
+      retryTransientGitHubError(
+        0,
+        rateLimitedError(403, { remaining: 0, reset: resetInTenMinutes }),
+      ),
+    ).toBe(false)
+    // At or under the cap it retries as before.
+    expect(
+      retryTransientGitHubError(0, rateLimitedError(429, { retryAfter: 60 })),
+    ).toBe(true)
+  })
+
+  it("accepts any error carrying the rate-limit shape, not only GitHubAPIError", () => {
+    // The auth layer's GitHubUserFetchError is matched structurally.
+    const duck = Object.assign(new Error("HTTP 403"), {
+      isRateLimited: true,
+      rateLimit: { ...noRateLimit, remaining: 0, retryAfter: 3600 },
+    })
+    expect(retryTransientGitHubError(0, duck)).toBe(false)
+  })
+})
+
+describe("isDefinitiveGitHubError", () => {
+  it("is a 401 / 403 / 404 GitHubAPIError that is not rate limited", () => {
+    expect(isDefinitiveGitHubError(apiError(401))).toBe(true)
+    expect(isDefinitiveGitHubError(apiError(403))).toBe(true)
+    expect(isDefinitiveGitHubError(apiError(404))).toBe(true)
+    expect(
+      isDefinitiveGitHubError(rateLimitedError(403, { remaining: 0 })),
+    ).toBe(false)
+    expect(isDefinitiveGitHubError(apiError(500))).toBe(false)
+    expect(isDefinitiveGitHubError(new Error("network"))).toBe(false)
+    expect(isDefinitiveGitHubError(null)).toBe(false)
+  })
+})
+
+describe("rateLimitWaitMs", () => {
+  it("prefers Retry-After, then the reset instant, else null", () => {
+    const now = 1_700_000_000_000
+    expect(
+      rateLimitWaitMs(rateLimitedError(429, { retryAfter: 7, reset: 1 }), now),
+    ).toBe(7_000)
+    expect(
+      rateLimitWaitMs(
+        rateLimitedError(403, { remaining: 0, reset: now / 1000 + 10 }),
+        now,
+      ),
+    ).toBe(10_000)
+    expect(rateLimitWaitMs(rateLimitedError(403, { remaining: 0 }), now)).toBe(
+      null,
+    )
+    expect(rateLimitWaitMs(apiError(500), now)).toBe(null)
+    expect(rateLimitWaitMs(new Error("network"), now)).toBe(null)
+  })
+})
+
+describe("retryDelayForGitHubError", () => {
+  it("waits out Retry-After on a rate limit, capped", () => {
+    expect(
+      retryDelayForGitHubError(0, rateLimitedError(429, { retryAfter: 7 })),
+    ).toBe(7_000)
+    expect(
+      retryDelayForGitHubError(
+        0,
+        rateLimitedError(403, { remaining: 0, retryAfter: 7 }),
+      ),
+    ).toBe(7_000)
+    // The retry predicate declines such a wait; the cap is a safety net.
+    expect(
+      retryDelayForGitHubError(0, rateLimitedError(429, { retryAfter: 3600 })),
+    ).toBe(MAX_QUERY_RATE_LIMIT_DELAY_MS)
+  })
+
+  it("honours the headers on a structurally rate-limited error", () => {
+    const duck = Object.assign(new Error("HTTP 403"), {
+      isRateLimited: true,
+      rateLimit: { ...noRateLimit, remaining: 0, retryAfter: 7 },
+    })
+    expect(retryDelayForGitHubError(0, duck)).toBe(7_000)
+    // Without the flag the shape alone does not count.
+    const notLimited = Object.assign(new Error("HTTP 403"), {
+      isRateLimited: false,
+      rateLimit: { ...noRateLimit, retryAfter: 7 },
+    })
+    expect(retryDelayForGitHubError(0, notLimited)).toBe(1_000)
+  })
+
+  it("falls back to the X-RateLimit-Reset instant when Retry-After is absent", () => {
+    const now = 1_700_000_000_000
+    const resetInTenSeconds = Math.floor(now / 1000) + 10
+    expect(
+      retryDelayForGitHubError(
+        0,
+        rateLimitedError(403, { remaining: 0, reset: resetInTenSeconds }),
+        now,
+      ),
+    ).toBe(10_000)
+    // A reset already in the past: retry promptly, but never spin.
+    expect(
+      retryDelayForGitHubError(
+        0,
+        rateLimitedError(403, { remaining: 0, reset: resetInTenSeconds - 60 }),
+        now,
+      ),
+    ).toBe(1_000)
+  })
+
+  it("uses the library's exponential default for everything else", () => {
+    expect(retryDelayForGitHubError(0, apiError(500))).toBe(1_000)
+    expect(retryDelayForGitHubError(1, apiError(502))).toBe(2_000)
+    expect(retryDelayForGitHubError(2, new Error("network"))).toBe(4_000)
+    // A rate limit that carries neither header has nothing to honour.
+    expect(
+      retryDelayForGitHubError(1, rateLimitedError(403, { remaining: 0 })),
+    ).toBe(2_000)
   })
 })
 

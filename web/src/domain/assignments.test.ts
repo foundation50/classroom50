@@ -791,11 +791,16 @@ describe("editAssignment (preserved-entry integration)", () => {
   it("preserves migrated_from, applies the rename, and drops the cleared due", async () => {
     const { client, committedContent } = makeClient()
 
-    await editAssignment(client, editInput())
+    const result = await editAssignment(client, editInput())
 
     const written = JSON.parse(committedContent()) as {
       assignments: Assignment[]
     }
+    // What the hook seeds the read cache with is the file as committed, never
+    // the pre-write read (which would reproduce the #1004 snap-back).
+    expect(result.assignments).toEqual(written)
+    expect(result.previousCommitSha).toBe("refsha")
+    expect(result.newCommitSha).toBe("newcommit")
     const edited = written.assignments.find((a) => a.slug === SLUG)!
 
     // Unmanaged CLI field rides through the read-modify-write.
@@ -2501,6 +2506,8 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
       expect(written.assignments.find((a) => a.slug === "hw2")?.locked).toBe(
         true,
       )
+      // The seeded document is the committed file, built before the grant step.
+      expect(result.assignments).toEqual(written)
       expect(grants()).toEqual([])
     })
 
@@ -2850,8 +2857,10 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
   function makeClient(repo: unknown): {
     client: GitHubClient
     grants: () => string[]
+    committed: () => string | undefined
   } {
     const grants: string[] = []
+    let committed: string | undefined
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
       assignments: [],
@@ -2879,7 +2888,11 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
           content: btoa(JSON.stringify(assignmentsFile)),
         }
       }
-      if (url.endsWith("/git/trees")) return { sha: "newtree" }
+      if (url.endsWith("/git/trees")) {
+        const body = (init as { body?: { tree: { content: string }[] } }).body
+        committed = body!.tree[0].content
+        return { sha: "newtree" }
+      }
       if (url.endsWith("/git/commits")) return { sha: "newcommit" }
       if (url.endsWith("/git/refs/heads/main")) return { object: { sha: "nc" } }
       if (url.includes("/repos/")) return repo
@@ -2891,6 +2904,7 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
     return {
       client: { request, requestRaw } as unknown as GitHubClient,
       grants: () => grants,
+      committed: () => committed,
     }
   }
 
@@ -2961,7 +2975,7 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
   }
 
   it("allows reusing an in-org private fork of a cross-org parent (#468 shape)", async () => {
-    const { client } = makeClient({
+    const { client, committed } = makeClient({
       name: "hw1-fork",
       full_name: `${ORG}/hw1-fork`,
       private: true,
@@ -2979,6 +2993,9 @@ describe("copyAssignmentToClassroom (reuse allows cross-org forks)", () => {
     })
 
     expect(result.newCommitSha).toBe("newcommit")
+    // The target's seeded document is the file as committed.
+    expect(result.assignments).toEqual(JSON.parse(committed()!))
+    expect(result.previousCommitSha).toBe("s")
   })
 
   it("allows reusing an in-org private fork with an unknown (absent) parent", async () => {
@@ -5492,6 +5509,8 @@ describe("setAssignmentLock", () => {
     expect(result.locked).toBe(true)
     expect(result.templateAccessWarning).toBeUndefined()
     expect(committed()).toContain(`"locked": true`)
+    // The seeded document is the committed file, built before the reconcile.
+    expect(result.assignments).toEqual(JSON.parse(committed()!))
     // Only the student team (classroom50-cs50) — never a staff team.
     expect(revokes()).toEqual(["classroom50-cs50"])
   })
@@ -5701,6 +5720,7 @@ describe("setAssignmentClosed", () => {
     })
     expect(result.closed).toBe(true)
     expect(committed()).toContain(`"closed": true`)
+    expect(result.assignments).toEqual(JSON.parse(committed()!))
     expect(teamCalls()).toBe(0)
   })
 
@@ -5740,6 +5760,9 @@ describe("setAssignmentClosed", () => {
     // Already closed: the commit is skipped, so no tree content was captured.
     expect(committed()).toBeUndefined()
     expect(result.updatedRef).toBeUndefined()
+    // The no-op echoes the file at head so the seed is still truthful.
+    expect(result.assignments.assignments.map((a) => a.slug)).toContain(SLUG)
+    expect(result.newCommitSha).toBe(result.previousCommitSha)
   })
 })
 
