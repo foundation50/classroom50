@@ -1,7 +1,7 @@
 {
   "name": "classroom-alpha",
   "private": true,
-  "version": "1.58.2",
+  "version": "1.58.3",
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader native",
