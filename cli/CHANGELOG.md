@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.58.4](https://github.com/foundation50/classroom50/compare/cli-v1.58.3...cli-v1.58.4) (2026-10-24)
+
+
+### Bug Fixes
+
+* **cli:** skip empty release assets so the submission release still publishes ([#1131](https://github.com/foundation50/classroom50/issues/1131)) ([88b369e](https://github.com/foundation50/classroom50/commit/88b369e6112fb473a0197f64f4e9ef2aba445f22)), closes [#1130](https://github.com/foundation50/classroom50/issues/1130)
+
 ## [1.58.3](https://github.com/foundation50/classroom50/compare/cli-v1.58.2...cli-v1.58.3) (2026-10-21)
 
 
