@@ -23,6 +23,12 @@ name: Release Please
 # still uses CLI_RELEASE_PAT — but only inside cli-release.yaml, where the writes
 # to gh-teacher/gh-student actually happen. (Opening the Release PR requires
 # "Allow GitHub Actions to create and approve pull requests".)
+#
+# Re-runs are best-effort lockstep repair: after fixing whatever broke (e.g. an
+# expired CLI_RELEASE_PAT), re-run THIS run, not the child cli-release run. Each
+# downstream step checks what already shipped (CLI run succeeded? production
+# serves the web tag?) and only does the missing part, so a re-run is a no-op
+# once both artifacts are at the same version.
 
 on:
   push:
@@ -51,6 +57,9 @@ jobs:
       # report green on re-run (empty tag_name => everything skipped).
       web_tag: ${{ steps.tags.outputs.web_tag }}
       cli_tag: ${{ steps.tags.outputs.cli_tag }}
+      # 'true' only when production does not yet serve web_tag (see "Check
+      # what production already serves").
+      web_deploy: ${{ steps.web.outputs.deploy }}
     steps:
       - uses: actions/checkout@v7
 
@@ -119,12 +128,45 @@ jobs:
           echo "cli_tag=$cli_tag" >>"$GITHUB_OUTPUT"
           echo "Resolved web_tag='$web_tag' cli_tag='$cli_tag' (sha $GITHUB_SHA)"
 
+      # Make a re-run a no-op for web once production already serves this tag
+      # (the CLI publish failed after the deploy, or the tag was shipped by hand
+      # via web-deploy.yaml). Also refuse to roll production back when a re-run
+      # of an OLDER release run finds a newer version live. An unreadable site
+      # deploys, which is also the right call for a first-ever deploy.
+      - name: Check what production already serves
+        id: web
+        if: ${{ steps.tags.outputs.web_tag != '' }}
+        env:
+          WEB_TAG: ${{ steps.tags.outputs.web_tag }}
+        run: |
+          set -euo pipefail
+          want="${WEB_TAG#web-v}"
+          host="$(tr -d '[:space:]' < web/CNAME)"
+          # Cache-bust: Pages serves version.json with a 10-minute max-age.
+          live="$(curl -fsS --max-time 20 "https://${host}/version.json?nocache=$(date +%s)" \
+            | jq -r '.tagVersion // .version // empty' || true)"
+
+          deploy=true
+          if [ -z "$live" ]; then
+            echo "Could not read https://${host}/version.json; deploying $want."
+          elif [ "$live" = "$want" ]; then
+            deploy=false
+            echo "Production already serves $want; nothing to deploy."
+          elif [ "$(printf '%s\n%s\n' "$live" "$want" | sort -V | tail -n1)" = "$live" ]; then
+            deploy=false
+            echo "::warning::Production serves $live, which is newer than $want; not rolling back."
+          else
+            echo "Production serves $live; deploying $want."
+          fi
+          echo "deploy=$deploy" >>"$GITHUB_OUTPUT"
+
       # "Latest" on this repo tracks the web app (classroom50.org). release-please
       # marks every release it creates as latest (no make_latest option —
       # googleapis/release-please#2317), so pin it explicitly: web is latest, the
-      # cli-v* release never is.
+      # cli-v* release never is. Gated like the deploy so a re-run of an older
+      # release run can't move Latest backwards.
       - name: Pin the Latest release to web
-        if: ${{ steps.tags.outputs.web_tag != '' }}
+        if: ${{ steps.web.outputs.deploy == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WEB_TAG: ${{ steps.tags.outputs.web_tag }}
@@ -222,12 +264,13 @@ jobs:
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
   # Build + deploy the freshly tagged web release to production. Gated on a real
-  # web release (non-empty tag => Release PR was merged) so a plain push to main
-  # never deploys. Mirrors web-deploy.yaml's build so the tagged commit ships
-  # stamped with its version.
+  # web release that production does not serve yet (non-empty tag => Release PR
+  # was merged), so a plain push to main never deploys and a re-run after an
+  # out-of-band deploy is a no-op. Mirrors web-deploy.yaml's build so the tagged
+  # commit ships stamped with its version.
   deploy:
     needs: release-please
-    if: ${{ needs.release-please.outputs.web_tag != '' }}
+    if: ${{ needs.release-please.outputs.web_deploy == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
