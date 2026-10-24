@@ -245,6 +245,23 @@ def test_stage_release_assets_skips_missing_symlink_and_oversized_files(
     assert "::warning::" in capsys.readouterr().out
 
 
+def test_stage_release_assets_skips_empty_files(tmp_path, capsys):
+    # An empty asset makes gh drop the whole release (#1130).
+    workspace = _workspace(tmp_path)
+    _write_file(workspace, "test.txt", b"")
+    _write_file(workspace, "report.pdf", b"report")
+    destination = tmp_path / "staged"
+
+    accepted = runner.stage_release_assets(
+        workspace, destination, ["test.txt", "report.pdf"]
+    )
+
+    assert accepted == ["report.pdf"]
+    assert not (destination / "test.txt").exists()
+    out = capsys.readouterr().out
+    assert "::warning::release_assets: 'test.txt' skipped ('test.txt' is empty" in out
+
+
 def test_stage_release_assets_failed_copy_leaves_no_accepted_partial(
     tmp_path, monkeypatch
 ):

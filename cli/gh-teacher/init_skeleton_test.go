@@ -1091,7 +1091,10 @@ func TestAutogradeRunnerSelfHostedSkipsToolchains(t *testing.T) {
 	}
 }
 
-func TestSkeletonFiles_AutogradeRunnerSkipsReservedReleaseAssetBasenamesCaseInsensitive(t *testing.T) {
+// releaseShell returns the `run:` script of the step that publishes the
+// submission release.
+func releaseShell(t *testing.T) string {
+	t.Helper()
 	files, err := skeletonFiles("main")
 	if err != nil {
 		t.Fatalf("skeletonFiles: %v", err)
@@ -1109,74 +1112,105 @@ func TestSkeletonFiles_AutogradeRunnerSkipsReservedReleaseAssetBasenamesCaseInse
 	if !ok {
 		t.Fatal("autograde-runner.yaml grade job missing")
 	}
-	var releaseRun string
 	for _, step := range workflowSteps(grade) {
 		run, _ := step["run"].(string)
 		if strings.Contains(run, `gh release create "$TAG" result.json`) {
-			releaseRun = run
-			break
+			return run
 		}
 	}
-	if releaseRun == "" {
-		t.Fatal("autograde-runner.yaml Release shell missing")
+	t.Fatal("autograde-runner.yaml Release shell missing")
+	return ""
+}
+
+// runReleaseShell runs the publish step under bash with one staged asset and
+// a fake gh that logs its invocations.
+func runReleaseShell(t *testing.T, releaseRun, name string, contents []byte) (output, ghLog, stagedPath string) {
+	t.Helper()
+	tmp := t.TempDir()
+	binDir := filepath.Join(tmp, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatal(err)
 	}
+	ghLogPath := filepath.Join(tmp, "gh.log")
+	fakeGH := []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$GH_LOG\"\ncase \"$1\" in api) echo false ;; esac\n")
+	if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	runnerTemp := filepath.Join(tmp, "runner")
+	assetsDir := filepath.Join(runnerTemp, "classroom50-release-assets")
+	if err := os.MkdirAll(assetsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stagedPath = filepath.Join(assetsDir, name)
+	if err := os.WriteFile(stagedPath, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("bash", "-c", releaseRun)
+	cmd.Dir = tmp
+	cmd.Env = append(os.Environ(),
+		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GH_LOG="+ghLogPath,
+		"GITHUB_REPOSITORY=example/classroom-assignment-student",
+		"STAGED_RELEASE_BASENAMES="+name,
+		"STAGED_RELEASE_DIR="+assetsDir,
+		"RUNNER_TEMP="+runnerTemp,
+		"TAG=submit/test",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Release shell: %v\n%s", err, out)
+	}
+	log, err := os.ReadFile(ghLogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out), string(log), stagedPath
+}
+
+func TestSkeletonFiles_AutogradeRunnerSkipsReservedReleaseAssetBasenamesCaseInsensitive(t *testing.T) {
+	releaseRun := releaseShell(t)
 
 	for _, name := range []string{
 		"result.json", "RESULT.JSON", "ReSuLt.JsOn",
 		"release-body.md", "RELEASE-BODY.MD", "Release-Body.Md",
 	} {
 		t.Run(name, func(t *testing.T) {
-			tmp := t.TempDir()
-			binDir := filepath.Join(tmp, "bin")
-			if err := os.MkdirAll(binDir, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			ghLog := filepath.Join(tmp, "gh.log")
-			fakeGH := []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$GH_LOG\"\ncase \"$1\" in api) echo false ;; esac\n")
-			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
-				t.Fatal(err)
-			}
-
-			runnerTemp := filepath.Join(tmp, "runner")
-			assetsDir := filepath.Join(runnerTemp, "classroom50-release-assets")
-			if err := os.MkdirAll(assetsDir, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			stagedPath := filepath.Join(assetsDir, name)
-			if err := os.WriteFile(stagedPath, []byte("tampered"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-
-			cmd := exec.Command("bash", "-c", releaseRun)
-			cmd.Dir = tmp
-			cmd.Env = append(os.Environ(),
-				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
-				"GH_LOG="+ghLog,
-				"GITHUB_REPOSITORY=example/classroom-assignment-student",
-				"STAGED_RELEASE_BASENAMES="+name,
-				"STAGED_RELEASE_DIR="+assetsDir,
-				"RUNNER_TEMP="+runnerTemp,
-				"TAG=submit/test",
-			)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("Release shell: %v\n%s", err, output)
-			}
-			log, err := os.ReadFile(ghLog)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(log), stagedPath) {
+			output, log, stagedPath := runReleaseShell(t, releaseRun, name, []byte("tampered"))
+			if strings.Contains(log, stagedPath) {
 				t.Errorf("reserved staged asset reached gh release create:\n%s", log)
 			}
-			if !strings.Contains(string(log), "release create submit/test result.json") {
+			if !strings.Contains(log, "release create submit/test result.json") {
 				t.Errorf("core result.json release create did not run:\n%s", log)
 			}
 			wantWarning := "::warning::release_assets: reserved staged basename " + name + " (skipped)"
-			if !strings.Contains(string(output), wantWarning) {
+			if !strings.Contains(output, wantWarning) {
 				t.Errorf("Release shell output missing %q:\n%s", wantWarning, output)
 			}
 		})
+	}
+}
+
+// An empty asset makes gh drop the whole release, result.json included (#1130).
+func TestSkeletonFiles_AutogradeRunnerSkipsEmptyReleaseAssets(t *testing.T) {
+	releaseRun := releaseShell(t)
+
+	output, log, stagedPath := runReleaseShell(t, releaseRun, "test.txt", nil)
+	if strings.Contains(log, stagedPath) {
+		t.Errorf("empty staged asset reached gh release create:\n%s", log)
+	}
+	if !strings.Contains(log, "release create submit/test result.json") {
+		t.Errorf("core result.json release create did not run:\n%s", log)
+	}
+	wantWarning := "::warning::release_assets: staged test.txt is empty (skipped)"
+	if !strings.Contains(output, wantWarning) {
+		t.Errorf("Release shell output missing %q:\n%s", wantWarning, output)
+	}
+
+	_, log, stagedPath = runReleaseShell(t, releaseRun, "test.txt", []byte("ok"))
+	if !strings.Contains(log, stagedPath) {
+		t.Errorf("non-empty staged asset did not reach gh release create:\n%s", log)
 	}
 }
 

@@ -1144,6 +1144,15 @@ def stage_release_assets(
                 )
             finally:
                 os.close(source_fd)
+            # GitHub rejects a zero-length asset (HTTP 400), and gh then drops
+            # the whole release with it, result.json included (#1130). Check
+            # the bytes copied, not a pre-copy stat, to catch a mid-staging
+            # truncation.
+            if copied == 0:
+                raise ValueError(
+                    f"{configured_path!r} is empty; GitHub cannot attach an "
+                    f"empty file to a release"
+                )
             if _looks_like_result_document(target, copied):
                 raise ValueError(
                     f"{configured_path!r} is a {RESULT_SCHEMA_PREFIX}* document; "

@@ -1429,7 +1429,7 @@
       "allowedFiles": "Allowed files",
       "allowedFilesTip": "Ordered {{gitignore}}-style patterns, one per line, defining which files belong to a submission (last match wins, {{bang}} re-includes). For example, {{star}} then {{example}} allows only {{result}}. Blank allows every file.",
       "releaseAssets": "Submission release files",
-      "releaseAssetsTip": "One exact workspace-relative file path per line; paths are exact, not glob patterns, and may total at most 8 KiB of UTF-8 text. Files are collected after grading and attached on both passing and failing grades; missing files are skipped. Release filenames may use only ASCII letters, numbers, dots, underscores, and hyphens, and may not begin or end with a dot or contain consecutive periods.",
+      "releaseAssetsTip": "One exact workspace-relative file path per line; paths are exact, not glob patterns, and may total at most 8 KiB of UTF-8 text. Files are collected after grading and attached on both passing and failing grades; missing and empty files are skipped with a warning in the workflow log. Release filenames may use only ASCII letters, numbers, dots, underscores, and hyphens, and may not begin or end with a dot or contain consecutive periods.",
       "releaseAssetsPlaceholder": "report.pdf\nplots/chart.png",
       "releaseAssetCount_one": "{{count}} release file",
       "releaseAssetCount_other": "{{count}} release files",
