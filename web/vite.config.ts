@@ -428,6 +428,7 @@ export default defineConfig(({ mode, command }) => {
           test: {
             name: "node",
             environment: "node",
+            setupFiles: ["src/test/setup.ts"],
             include: [
               "src/**/*.{test,spec}.{ts,tsx}",
               "vite/**/*.{test,spec}.ts",
