@@ -1145,6 +1145,11 @@ jobs:
                 echo "::warning::release_assets: staged $NAME is missing or unsafe (skipped)"
                 continue
               fi
+              # An empty asset would make gh drop the whole release (#1130).
+              if [[ ! -s "$ASSET" ]]; then
+                echo "::warning::release_assets: staged $NAME is empty (skipped)"
+                continue
+              fi
               EXTRA_ASSETS+=("$ASSET")
             done
           fi

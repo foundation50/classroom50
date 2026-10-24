@@ -401,8 +401,8 @@ them) and uploads them under their basenames.
 **Limits:** at most 50 paths totaling at most 8 KiB; each basename must be
 unique, Release-safe (ASCII letters/digits/`.`/`_`/`-`, no leading/trailing
 dot, no `..`, not `result.json` or `release-body.md`), and relative. A separate
-100 MiB file-content budget applies at runtime. Missing, unsafe, oversized, or
-failed uploads warn without changing the score.
+100 MiB file-content budget applies at runtime. Missing, empty, unsafe,
+oversized, or failed uploads warn without changing the score.
 
 These files come from the student's working tree, so they are student content
 published under the workflow's identity. The runner refuses to attach a file
@@ -520,7 +520,7 @@ and leaves the Release unchanged.
 |---|---|
 | Invalid hand-edited `release_assets` config | Setup exits with a field-specific `::error::`; no Release update |
 | Autograder produces `status=error` | Grade posts `error`; no Release update |
-| A configured extra is missing/unsafe/over budget | Warning; core and other extras continue |
+| A configured extra is missing/empty/unsafe/over budget | Warning; core and other extras continue |
 | Core Release or `result.json` upload fails | Grade job fails; latest pointer doesn't move |
 | Some tests fail | `status=failure`; Release publishes; details in the log and Summary |
 | All tests pass | `status=success`; Release publishes |
