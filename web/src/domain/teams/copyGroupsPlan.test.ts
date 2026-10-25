@@ -110,6 +110,15 @@ describe("planIssues", () => {
 })
 
 describe("applyGroupsPlan", () => {
+  const SYNCED_WRITE = {
+    previousCommitSha: "HEAD",
+    newCommitSha: "NEWCOMMIT",
+    teamsFile: {
+      schema: "classroom50/teams/v1" as const,
+      assignments: { [ASSIGNMENT]: { teams: [] } },
+    },
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     let n = 0
@@ -118,7 +127,7 @@ describe("applyGroupsPlan", () => {
       return { slug: `team-${n}`, id: n, n }
     })
     mockedAdd.mockResolvedValue(undefined)
-    mockedSync.mockResolvedValue(undefined)
+    mockedSync.mockResolvedValue(SYNCED_WRITE)
   })
 
   const plan: PlannedGroup[] = [
@@ -159,6 +168,8 @@ describe("applyGroupsPlan", () => {
       { teamSlug: "team-2", username: "carol", currentMemberCount: 0 },
     ])
     expect(mockedSync).toHaveBeenCalledTimes(1)
+    // The hook seeds the teams.json cache with this instead of refetching.
+    expect(result.teamsWrite).toEqual(SYNCED_WRITE)
   })
 
   it("stops at the first failed create and reports created vs remaining", async () => {
@@ -205,6 +216,7 @@ describe("applyGroupsPlan", () => {
     expect(result.created).toEqual([])
     expect(result.createFailure?.remaining).toEqual(["src-1", "src-2"])
     expect(mockedSync).not.toHaveBeenCalled()
+    expect(result.teamsWrite).toBeUndefined()
   })
 
   it("tolerates a failed final sync (drift badge catches it)", async () => {
@@ -212,5 +224,7 @@ describe("applyGroupsPlan", () => {
     const result = await applyGroupsPlan(client, ORG, { ...APPLY_BASE, plan })
     expect(result.created).toHaveLength(2)
     expect(result.createFailure).toBeUndefined()
+    // No committed file to seed from; the hook falls back to a refetch.
+    expect(result.teamsWrite).toBeUndefined()
   })
 })
