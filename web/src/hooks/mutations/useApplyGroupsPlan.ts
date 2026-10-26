@@ -31,6 +31,7 @@ export function useApplyGroupsPlan(params: {
       creatorLogin: string
       maxGroupSize?: number
       rosterLogins?: ReadonlySet<string>
+      retiredCounters?: ReadonlySet<number>
       onProgress?: (progress: ApplyGroupsPlanProgress) => void
     }) =>
       applyGroupsPlan(client, org, {

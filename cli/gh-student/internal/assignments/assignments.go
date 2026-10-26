@@ -53,6 +53,12 @@ type Entry struct {
 	// Required for mode team, absent otherwise.
 	TeamFormation string `json:"team_formation,omitempty"`
 
+	// RetiredGroupCounters are the counters of group teams the teacher
+	// deleted. A deleted team's repo survives, so founding a team at one of
+	// these would point the new group at the old group's repo (#1128); the
+	// allocator treats them as taken.
+	RetiredGroupCounters []int `json:"retired_group_counters,omitempty"`
+
 	// StudentPermission is the accept-time role the student gets on their own
 	// repo (the assignment's optional student_permission). Empty means the mode
 	// default (push individual / admin group). See accept.go's founderPermission.

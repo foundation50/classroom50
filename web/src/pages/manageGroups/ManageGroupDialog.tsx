@@ -307,7 +307,11 @@ export function ManageGroupDialog({
     if (busy) return
     setActionError(null)
     try {
-      await deleteTeam.mutateAsync({ slug: team.slug, id: team.id })
+      await deleteTeam.mutateAsync({
+        slug: team.slug,
+        id: team.id,
+        n: team.n,
+      })
       setConfirmingDelete(false)
       // Fire-and-forget: the mutation outlives the dialog, and a failed sync
       // only leaves a stale snapshot row the drift badge surfaces.
