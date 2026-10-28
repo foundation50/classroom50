@@ -979,16 +979,33 @@ export function applyStatusSelection(
   }
 }
 
-// Case-insensitive match of a query against a row's identities: each credited
-// username plus its roster name in either order (so searching a real name works
-// though scores.json only carries logins, whichever way the user reads names).
+// Whether a group's owner segment (`group-<n>`) or its recorded team name
+// contains the lowercased query. The ONE group-name match for every row kind
+// (submitted row, unsubmitted repo, repo-less team), so a group the table labels
+// by its team name is found by that name wherever it appears (#1138).
+function groupMatchesQuery(
+  owner: string,
+  q: string,
+  groupDisplayNames?: ReadonlyMap<string, string>,
+): boolean {
+  const key = owner.toLowerCase()
+  if (key.includes(q)) return true
+  return groupDisplayNames?.get(key)?.toLowerCase().includes(q) ?? false
+}
+
+// Case-insensitive match of a query against a row's identities: the owner
+// segment, the group's team name when known, and each credited username plus
+// its roster name in either order (so searching a real name works though
+// scores.json only carries logins, whichever way the user reads names).
 export function rowMatchesQuery(
   row: SubmissionRow,
   query: string,
   students: Student[],
+  groupDisplayNames?: ReadonlyMap<string, string>,
 ): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
+  if (groupMatchesQuery(row.owner, q, groupDisplayNames)) return true
   return row.usernames.some((username) => {
     if (username.toLowerCase().includes(q)) return true
     const student = resolveStudent(username, students)
@@ -1029,6 +1046,7 @@ export function filterAndSortRows(
     students,
     sectionByUsername,
     thresholdFraction,
+    groupDisplayNames,
   }: {
     query: string
     filters: SubmissionFilters
@@ -1036,10 +1054,11 @@ export function filterAndSortRows(
     students: Student[]
     sectionByUsername: Map<string, string>
     thresholdFraction: number | null
+    groupDisplayNames?: ReadonlyMap<string, string>
   },
 ): SubmissionRow[] {
   const filtered = rows.filter((row) => {
-    if (!rowMatchesQuery(row, query, students)) return false
+    if (!rowMatchesQuery(row, query, students, groupDisplayNames)) return false
 
     // A submitted row always has a repo, so it's accepted by definition.
     if (filters.accepted === "not-accepted") return false
@@ -1622,7 +1641,8 @@ export type DisplayListInputs = {
 // that implies a submission (a late/on-time/submitted or passing filter) hides
 // every no-submission item; "not submitted" hides every row; the accepted
 // axis splits the non-submitters. Group repos and repo-less teams match the
-// search by owner segment or display name and carry no section.
+// search by owner segment, team name, or (legacy) founder name and carry no
+// section.
 export function filterDisplayList({
   rows,
   nonSubmitters,
@@ -1663,6 +1683,7 @@ export function filterDisplayList({
     students,
     sectionByUsername,
     thresholdFraction,
+    groupDisplayNames,
   })
   if (!showsNonSubmitters(filters)) {
     return {
@@ -1698,7 +1719,8 @@ export function filterDisplayList({
       ? groupRepos.filter((repo) => {
           if (!groupInSection(repo.owner)) return false
           if (!q) return true
-          if (repo.owner.toLowerCase().includes(q)) return true
+          if (groupMatchesQuery(repo.owner, q, groupDisplayNames)) return true
+          // Legacy groups are owned by their founder's login.
           const founder = resolveStudent(repo.owner, students)
           return nameSearchFields(founder.first_name, founder.last_name).some(
             (name) => name.toLowerCase().includes(q),
@@ -1710,9 +1732,7 @@ export function filterDisplayList({
           const owner = groupOwnerSegment(team.n)
           if (!groupInSection(owner)) return false
           if (!q) return true
-          if (owner.includes(q)) return true
-          const name = groupDisplayNames?.get(owner)?.toLowerCase() ?? ""
-          return name.includes(q)
+          return groupMatchesQuery(owner, q, groupDisplayNames)
         })
       : teamsWithoutRepos,
   }
