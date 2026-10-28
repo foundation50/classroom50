@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.58.5](https://github.com/foundation50/classroom50/compare/web-v1.58.4...web-v1.58.5) (2026-10-28)
+
+
+### Bug Fixes
+
+* **web:** match group assignment search against the team name ([#1139](https://github.com/foundation50/classroom50/issues/1139)) ([e3f6be8](https://github.com/foundation50/classroom50/commit/e3f6be82ed641480b3e588a61ebe2a7d350ab913)), closes [#1138](https://github.com/foundation50/classroom50/issues/1138)
+
 ## [1.58.4](https://github.com/foundation50/classroom50/compare/web-v1.58.3...web-v1.58.4) (2026-10-24)
 
 
