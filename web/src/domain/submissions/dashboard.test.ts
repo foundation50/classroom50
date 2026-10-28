@@ -382,6 +382,18 @@ describe("rowMatchesQuery", () => {
   it("does not match an unrelated query", () => {
     expect(rowMatchesQuery(row(), "zzz", students)).toBe(false)
   })
+
+  it("matches a team row by its owner segment or recorded team name", () => {
+    // The table labels a team row by its team name, so the TA searches for
+    // what they see (#1138). Members alone carry no trace of the name.
+    const team = row({ owner: "group-7", usernames: ["alice"] })
+    const names = new Map([["group-7", "tsneem10"]])
+    expect(rowMatchesQuery(team, "tsn", students, names)).toBe(true)
+    expect(rowMatchesQuery(team, "TSNEEM", students, names)).toBe(true)
+    expect(rowMatchesQuery(team, "group-7", students, names)).toBe(true)
+    expect(rowMatchesQuery(team, "tsn", students)).toBe(false)
+    expect(rowMatchesQuery(team, "zzz", students, names)).toBe(false)
+  })
 })
 
 describe("filterAndSortRows", () => {
@@ -2596,6 +2608,42 @@ describe("filterDisplayList", () => {
     const byTeamName = filterDisplayList({ ...base, query: "night" })
     expect(byTeamName.teamsWithoutRepos.map((t) => t.n)).toEqual([2])
     expect(byTeamName.groupRepos).toEqual([])
+  })
+
+  it("finds a team by its name whether it submitted, only has a repo, or has neither", () => {
+    // Team mode: owners are `group-<n>` counters, so only the team-name map
+    // can connect the query to the row the table labels "tsneem10" (#1138).
+    const teamRows = [
+      row({ owner: "group-1", usernames: ["alice"], score: 9 }),
+      row({ owner: "group-2", usernames: ["bob"], score: 5 }),
+    ]
+    const teamRepos = [{ owner: "group-3", repoName: "cs101-hw1-group-3" }]
+    const bare: GroupTeamRef[] = [
+      { n: 4, id: 4, slug: "cs101-hw1-group-4", name: "tsneem10 B" },
+    ]
+    const args = {
+      ...base,
+      rows: teamRows,
+      groupRepos: teamRepos,
+      teamsWithoutRepos: bare,
+      groupDisplayNames: new Map([
+        ["group-1", "tsneem10"],
+        ["group-2", "night owls"],
+        ["group-3", "tsneem10 A"],
+        ["group-4", "tsneem10 B"],
+      ]),
+    }
+    const out = filterDisplayList({ ...args, query: "tsn" })
+    expect(owners(out)).toEqual(["group-1"])
+    expect(out.groupRepos.map((r) => r.owner)).toEqual(["group-3"])
+    expect(out.teamsWithoutRepos.map((t) => t.n)).toEqual([4])
+    // Members still match, and the counter segment does too.
+    expect(owners(filterDisplayList({ ...args, query: "bob" }))).toEqual([
+      "group-2",
+    ])
+    expect(owners(filterDisplayList({ ...args, query: "group-2" }))).toEqual([
+      "group-2",
+    ])
   })
 
   it("pages the spine and the table over the same owners on every axis", () => {
