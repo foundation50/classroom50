@@ -283,6 +283,24 @@ describe("createGroupTeam counter allocation", () => {
     expect(created).toEqual([`${prefix}3`])
   })
 
+  it("never re-allocates a retired counter, even with no team holding it (#1128)", async () => {
+    const prefix = await groupTeamAssignmentPrefix(CLASSROOM, ASSIGNMENT)
+    // Team 1 was deleted (its repo survives) and team 2 is live: the next
+    // group must be 3, and the seed alone gets there (no 422 could, since
+    // the TEAM name for counter 1 is free).
+    const { client, created } = makeClient({ visibleSlugs: [`${prefix}2`] })
+    const result = await createGroupTeam(client, ORG, {
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      creatorLogin: "alice",
+      founderLogin: "alice",
+      formation: "student",
+      retiredCounters: new Set([1]),
+    })
+    expect(result.n).toBe(3)
+    expect(created).toEqual([`${prefix}3`])
+  })
+
   it("student formation keeps the founding creator (no membership writes)", async () => {
     const { client, memberships } = makeClient({ visibleSlugs: [] })
     await createGroupTeam(client, ORG, {

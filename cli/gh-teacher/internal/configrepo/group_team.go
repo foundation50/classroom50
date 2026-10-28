@@ -160,13 +160,16 @@ func listOrgGroupTeams(client githubapi.Client, org, prefix string) ([]groupTeam
 // visible teams — even when the teacher creates or repairs a team. A
 // teacher-formed assignment's teams stay `secret`.
 //
-// Counter allocation: the visible teams pick the lowest free n as a starting
-// guess, then the create's 422 is the authority — a name collision means
-// another founder won that counter (even one whose secret team this caller
-// can't see), so retry with n+1, bounded by groupTeamCounterCap. NEVER a
-// visibility probe: a secret team is invisible to non-members, so a listing
-// can't prove a counter free.
-func CreateGroupTeam(client githubapi.Client, org, classroom, assignment, displayName string, maintainers []string, formation string) (slug string, id int64, n int, err error) {
+// Counter allocation: the visible teams plus the entry's retired counters
+// pick the lowest free n as a starting guess, then the create's 422 is the
+// authority — a name collision means another founder won that counter (even
+// one whose secret team this caller can't see), so retry with n+1, bounded by
+// groupTeamCounterCap. NEVER a visibility probe: a secret team is invisible to
+// non-members, so a listing can't prove a counter free. `retired` are the
+// entry's retired_group_counters: a deleted team's repo survives, so its
+// counter must never be re-allocated, and no 422 would catch that (the TEAM
+// name is free) (#1128).
+func CreateGroupTeam(client githubapi.Client, org, classroom, assignment, displayName string, maintainers []string, formation string, retired []int) (slug string, id int64, n int, err error) {
 	description, err := MarshalGroupDescription(classroom, assignment, displayName)
 	if err != nil {
 		return "", 0, 0, err
@@ -178,6 +181,9 @@ func CreateGroupTeam(client githubapi.Client, org, classroom, assignment, displa
 
 	prefix := contract.GroupTeamAssignmentPrefix(classroom, assignment)
 	taken := map[int]bool{}
+	for _, c := range retired {
+		taken[c] = true
+	}
 	existing, err := listOrgGroupTeams(client, org, prefix)
 	if err != nil {
 		return "", 0, 0, err

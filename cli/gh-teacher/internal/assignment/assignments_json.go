@@ -216,39 +216,43 @@ type AssignmentsJSON struct {
 // policy can block a member's public create, in which case accept retries as
 // private and tells the student the teacher can flip it later.
 type AssignmentEntry struct {
-	Slug               string           `json:"slug"`
-	Name               string           `json:"name"`
-	Description        string           `json:"description,omitempty"`
-	Template           *TemplateRef     `json:"template,omitempty"`
-	Due                string           `json:"due,omitempty"`
-	DueMeta            *DueMeta         `json:"due_meta,omitempty"`
-	AvailableFrom      string           `json:"available_from,omitempty"`
-	AvailableFromMeta  *DueMeta         `json:"available_from_meta,omitempty"`
-	Mode               string           `json:"mode"`
-	Autograder         string           `json:"autograder"`
-	MaxGroupSize       int              `json:"max_group_size,omitempty"`
-	TeamFormation      string           `json:"team_formation,omitempty"`
-	Runtime            *RuntimeRef      `json:"runtime,omitempty"`
-	Tests              []TestSpec       `json:"tests,omitempty"`
-	TestDefaults       *TestDefaults    `json:"test_defaults,omitempty"`
-	FeedbackPR         bool             `json:"feedback_pr,omitempty"`
-	EmptyRepo          bool             `json:"empty_repo,omitempty"`
-	NoAutograder       bool             `json:"no_autograder,omitempty"`
-	InitShim           bool             `json:"init_shim,omitempty"`
-	IncludeAllBranches bool             `json:"include_all_branches,omitempty"`
-	Locked             bool             `json:"locked,omitempty"`
-	Closed             bool             `json:"closed,omitempty"`
-	AllowedFiles       []string         `json:"allowed_files,omitempty"`
-	ReleaseAssets      []string         `json:"release_assets,omitempty"`
-	PassThreshold      *int             `json:"pass_threshold,omitempty"`
-	Grading            *Grading         `json:"grading,omitempty"`
-	StudentPermission  string           `json:"student_permission,omitempty"`
-	SubmissionMode     string           `json:"submission_mode,omitempty"`
-	SubmissionTags     []string         `json:"submission_tags,omitempty"`
-	RepoVisibility     string           `json:"repo_visibility,omitempty"`
-	RepoFeatures       *RepoFeatures    `json:"repo_features,omitempty"`
-	Pages              *PagesConfig     `json:"pages,omitempty"`
-	MigratedFrom       *MigratedFromRef `json:"migrated_from,omitempty"`
+	Slug              string       `json:"slug"`
+	Name              string       `json:"name"`
+	Description       string       `json:"description,omitempty"`
+	Template          *TemplateRef `json:"template,omitempty"`
+	Due               string       `json:"due,omitempty"`
+	DueMeta           *DueMeta     `json:"due_meta,omitempty"`
+	AvailableFrom     string       `json:"available_from,omitempty"`
+	AvailableFromMeta *DueMeta     `json:"available_from_meta,omitempty"`
+	Mode              string       `json:"mode"`
+	Autograder        string       `json:"autograder"`
+	MaxGroupSize      int          `json:"max_group_size,omitempty"`
+	TeamFormation     string       `json:"team_formation,omitempty"`
+	// RetiredGroupCounters are the counters of group teams deleted through
+	// Classroom 50. A deleted team's repo survives, so allocators never hand
+	// a listed counter out again (#1128). Append-only; team mode only.
+	RetiredGroupCounters []int            `json:"retired_group_counters,omitempty"`
+	Runtime              *RuntimeRef      `json:"runtime,omitempty"`
+	Tests                []TestSpec       `json:"tests,omitempty"`
+	TestDefaults         *TestDefaults    `json:"test_defaults,omitempty"`
+	FeedbackPR           bool             `json:"feedback_pr,omitempty"`
+	EmptyRepo            bool             `json:"empty_repo,omitempty"`
+	NoAutograder         bool             `json:"no_autograder,omitempty"`
+	InitShim             bool             `json:"init_shim,omitempty"`
+	IncludeAllBranches   bool             `json:"include_all_branches,omitempty"`
+	Locked               bool             `json:"locked,omitempty"`
+	Closed               bool             `json:"closed,omitempty"`
+	AllowedFiles         []string         `json:"allowed_files,omitempty"`
+	ReleaseAssets        []string         `json:"release_assets,omitempty"`
+	PassThreshold        *int             `json:"pass_threshold,omitempty"`
+	Grading              *Grading         `json:"grading,omitempty"`
+	StudentPermission    string           `json:"student_permission,omitempty"`
+	SubmissionMode       string           `json:"submission_mode,omitempty"`
+	SubmissionTags       []string         `json:"submission_tags,omitempty"`
+	RepoVisibility       string           `json:"repo_visibility,omitempty"`
+	RepoFeatures         *RepoFeatures    `json:"repo_features,omitempty"`
+	Pages                *PagesConfig     `json:"pages,omitempty"`
+	MigratedFrom         *MigratedFromRef `json:"migrated_from,omitempty"`
 
 	// RenamedFrom is the assignment's PREVIOUS slug, recorded by the one-shot
 	// slug rename (offered only to remediate an over-budget composed repo
@@ -271,8 +275,8 @@ type AssignmentEntry struct {
 var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
-	"team_formation": {},
-	"runtime":        {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
+	"team_formation": {}, "retired_group_counters": {},
+	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"test_defaults": {},
 	"locked":        {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
@@ -434,6 +438,35 @@ func ValidateMaxGroupSize(n int) error {
 		return fmt.Errorf("max_group_size %d out of range (0 = unset/individual, or 2..%d for group mode)", n, MaxGroupSizeCap)
 	}
 	return nil
+}
+
+// ValidateRetiredGroupCounters enforces the schema's shape for
+// retired_group_counters: every counter >= 1, no duplicates. Order is not
+// enforced on read (a hand edit may shuffle it); writers sort.
+func ValidateRetiredGroupCounters(counters []int) error {
+	seen := map[int]bool{}
+	for _, n := range counters {
+		if n < 1 {
+			return fmt.Errorf("retired_group_counters: %d is not a valid group counter (must be >= 1)", n)
+		}
+		if seen[n] {
+			return fmt.Errorf("retired_group_counters: duplicate counter %d", n)
+		}
+		seen[n] = true
+	}
+	return nil
+}
+
+// RetireGroupCounter records n in the entry's retired_group_counters: sorted,
+// deduped, append-only (an already-listed counter stays listed once).
+func RetireGroupCounter(entry *AssignmentEntry, n int) {
+	for _, existing := range entry.RetiredGroupCounters {
+		if existing == n {
+			return
+		}
+	}
+	entry.RetiredGroupCounters = append(entry.RetiredGroupCounters, n)
+	sort.Ints(entry.RetiredGroupCounters)
 }
 
 // PassThreshold is an opt-in advisory passing bar: the integer percentage of
@@ -1074,6 +1107,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidateMaxGroupSize(entry.MaxGroupSize); err != nil {
 		return err
 	}
+	if err := ValidateRetiredGroupCounters(entry.RetiredGroupCounters); err != nil {
+		return err
+	}
 	// Group and team must carry a usable limit (>= 2); individual must carry
 	// none. team_formation is required for team mode and forbidden otherwise.
 	switch entry.Mode {
@@ -1335,6 +1371,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateMaxGroupSize(entry.MaxGroupSize); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateRetiredGroupCounters(entry.RetiredGroupCounters); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	switch entry.Mode {

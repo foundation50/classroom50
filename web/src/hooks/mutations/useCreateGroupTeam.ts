@@ -24,6 +24,8 @@ export function useCreateGroupTeam(params: {
       creatorLogin: string
       founderLogin?: string
       formation: TeamFormation
+      // The entry's retired_group_counters (see createGroupTeam).
+      retiredCounters?: Iterable<number>
     }) =>
       createGroupTeam(client, org, {
         classroom,

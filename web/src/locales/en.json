@@ -2160,7 +2160,7 @@
     },
     "deleteTitle": "Delete group",
     "deleteConfirm": "Delete group",
-    "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted.",
+    "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted, and its group number is never given to a new group.",
     "recover": {
       "title": "Recreate {{name}}",
       "intro": "This group's GitHub team no longer exists, but its repository is still there. Grading can't credit the group's members until the team is recreated. Choose the members, then recreate the group.",
@@ -2942,7 +2942,9 @@
       "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup.",
       "teamTeacherAssigns": "You're not in a group for this assignment yet. Your teacher assigns the groups. Ask your teacher to add you to a group, then open this link again.",
       "teamRequired": "You're not in a group for this assignment yet. Create a group, or ask a teammate to add you, then try again.",
-      "teamSelfCreated": "Your teacher assigns the groups for this assignment, and group {{n}} wasn't created by your teacher. Ask your teacher to add you to one of their groups, then open this link again."
+      "teamSelfCreated": "Your teacher assigns the groups for this assignment, and group {{n}} wasn't created by your teacher. Ask your teacher to add you to one of their groups, then open this link again.",
+      "teamRepoTaken": "A repository named {{org}}/{{repo}} already exists, but it doesn't belong to your group. It was probably left behind by a group that was deleted. Ask your teacher for help: they can rename or delete that repository, or delete your group so you can create a new one.",
+      "repoExistsInaccessible": "A repository named {{org}}/{{repo}} already exists, but your account can't open it. Ask your teacher to check who it belongs to, then open this link again."
     },
     "progress": {
       "error": "Setup failed. Review the steps.",

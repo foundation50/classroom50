@@ -63,6 +63,7 @@ export function CopyGroupsModal({
   rosterLogins,
   creatorLogin,
   sourceOptions,
+  retiredCounters,
 }: {
   open: boolean
   onClose: () => void
@@ -82,6 +83,8 @@ export function CopyGroupsModal({
   rosterLogins: ReadonlySet<string>
   creatorLogin: string
   sourceOptions: CopySourceOption[]
+  // The current entry's retired_group_counters, never re-allocated.
+  retiredCounters: ReadonlySet<number>
 }) {
   const { t } = useTranslation()
 
@@ -216,6 +219,7 @@ export function CopyGroupsModal({
         creatorLogin,
         maxGroupSize,
         rosterLogins,
+        retiredCounters,
         onProgress: setProgress,
       })
 

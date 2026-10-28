@@ -66,6 +66,7 @@ import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import { useGroupTeamMembers } from "@/hooks/useGroupTeamMembers"
 import { groupTeamUrl } from "@/domain/teams/groupTeams"
+import { retiredGroupCounters } from "@/domain/teams/groupCounters"
 import { groupDisplayName } from "@/util/groupTeam"
 import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
@@ -444,6 +445,7 @@ const CreateGroupCard = ({
   assignment,
   assignmentName,
   maxGroupSize,
+  retiredCounters,
   username,
   user,
   onRecheck,
@@ -454,6 +456,9 @@ const CreateGroupCard = ({
   assignment: string
   assignmentName?: string
   maxGroupSize?: number
+  // The published entry's retired_group_counters: counters of deleted groups
+  // whose repos may survive, so a new group must skip them (#1128).
+  retiredCounters?: number[]
   username?: string
   user: GitHubUser | null
   // Re-runs the viewer's own-team resolution — the "I was approved on GitHub,
@@ -614,6 +619,9 @@ const CreateGroupCard = ({
                 creatorLogin: username ?? "",
                 founderLogin: username ?? "",
                 formation: "student",
+                retiredCounters: retiredGroupCounters({
+                  retired_group_counters: retiredCounters,
+                }),
               })
             }
           >
@@ -1283,6 +1291,7 @@ const AcceptAssignmentPage = () => {
           assignment={assignment ?? ""}
           assignmentName={assignmentData.name}
           maxGroupSize={assignmentData.max_group_size}
+          retiredCounters={assignmentData.retired_group_counters}
           username={username}
           user={user}
           onRecheck={() => void refetchMyTeam()}
