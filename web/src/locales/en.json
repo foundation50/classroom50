@@ -1235,6 +1235,10 @@
       "slugEditHelp": "The slug is part of the assignment's repository names and can't be changed after creation.",
       "description": "Description",
       "descriptionPlaceholder": "Describe the assignment objectives",
+      "descriptionHelp": "Markdown is supported, including tables and LaTeX math. Wrap inline math in single dollar signs and display math in double dollar signs, as on GitHub.",
+      "descriptionPreview": "Preview",
+      "descriptionPreviewLabel": "Description preview",
+      "descriptionPreviewEmpty": "Nothing to preview yet.",
       "dueDate": "Due date ({{tz}})",
       "setDueDate": "Set a due date",
       "setDueDateTip": "Off means the assignment has no due date. Turn on to pick a date and time; students see it as the due date.",
@@ -4043,6 +4047,9 @@
     }
   },
   "components": {
+    "markdown": {
+      "footnotes": "Footnotes"
+    },
     "avatar": {
       "viewDetails": "View student details"
     },
