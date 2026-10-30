@@ -412,5 +412,20 @@ describe("DetailsSection — team-creation gate", () => {
         screen.getByText("assignments.form.descriptionPreviewEmpty"),
       ).toBeTruthy()
     })
+
+    it("renders math in the preview once the KaTeX chunk resolves", async () => {
+      const { container } = renderDetails({ org: "acme" })
+      const textarea =
+        container.querySelector<HTMLTextAreaElement>("#description")!
+      fireEvent.change(textarea, { target: { value: "Area $\\pi r^2$" } })
+      fireEvent.click(screen.getByRole("button", { name: previewKey }))
+
+      const region = screen.getByRole("region", { name: regionKey })
+      // The plain renderer shows the source as a code chip until the lazy
+      // chunk lands, so the preview is never blank.
+      expect(region.textContent).toContain("\\pi r^2")
+      await waitFor(() => expect(region.querySelector(".katex")).not.toBeNull())
+      expect(region.querySelector(".katex-error")).toBeNull()
+    })
   })
 })

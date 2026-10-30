@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 
-import { containsMath, normalizeGitHubMath } from "@/util/markdownMath"
+import { normalizeGitHubMath } from "@/util/markdownMath"
 import { isSafeHttpUrl } from "@/util/url"
 
 import { cx } from "./cx"
@@ -30,12 +30,34 @@ export type MarkdownProps = {
   className?: string
 }
 
-const MathMarkdown = lazy(() => import("./MarkdownMath"))
+type RendererProps = { options: ReactMarkdownOptions; content: string }
+
+function PlainMarkdown({ options, content }: RendererProps) {
+  return <ReactMarkdown {...options}>{content}</ReactMarkdown>
+}
+
+// A tab left open across a deploy asks for a chunk hash that no longer
+// exists. Falling back to the plain renderer keeps the description readable
+// (math as a code chip) instead of surfacing the route's error page.
+const MathMarkdown = lazy(() =>
+  import("./MarkdownMath").catch(() => ({ default: PlainMarkdown })),
+)
+
+// remark-gfm's footnote reference and back-reference links point within the
+// document; `user-content-` is remark-rehype's clobber prefix on those ids.
+const isFootnoteAnchor = (href: string | undefined) =>
+  href?.startsWith("#user-content-fn") ?? false
 
 const components: Components = {
-  // Only forward href/children; react-markdown also passes a `node` (hast
+  // Only forward named props; react-markdown also passes a `node` (hast
   // Element) that must not spread onto the <a> as an invalid DOM attribute.
-  a: ({ href, children }) =>
+  a: ({
+    href,
+    children,
+    id,
+    "aria-label": ariaLabel,
+    "aria-describedby": ariaDescribedBy,
+  }) =>
     isSafeHttpUrl(href) ? (
       <a
         href={href}
@@ -45,11 +67,27 @@ const components: Components = {
       >
         {children}
       </a>
+    ) : isFootnoteAnchor(href) ? (
+      <a
+        href={href}
+        id={id}
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        className="link link-primary"
+      >
+        {children}
+      </a>
     ) : (
       <span>{children}</span>
     ),
   h1: ({ children }) => <h1 className="text-xl font-semibold">{children}</h1>,
-  h2: ({ children }) => <h2 className="text-base font-semibold">{children}</h2>,
+  // The footnote section heading arrives as `sr-only` with an id the
+  // references point at; both have to survive for screen readers.
+  h2: ({ children, id, className }) => (
+    <h2 id={id} className={cx("text-base font-semibold", className)}>
+      {children}
+    </h2>
+  ),
   h3: ({ children }) => <h3 className="text-sm font-semibold">{children}</h3>,
   ul: ({ children, className }) => (
     // remark-gfm marks task lists with `contains-task-list`; those drop the
@@ -111,15 +149,24 @@ const components: Components = {
 
 export function Markdown({ content, className }: MarkdownProps) {
   const { t } = useTranslation()
-  const normalized = normalizeGitHubMath(content)
+  const { text, hasMath } = normalizeGitHubMath(content)
   const options: ReactMarkdownOptions = {
     components,
     remarkPlugins: [remarkGfm, remarkMath],
-    // remark-gfm's footnote section heading is visually hidden but read by
-    // screen readers, so it has to be translated like any other label.
-    remarkRehypeOptions: { footnoteLabel: t("components.markdown.footnotes") },
+    // remark-gfm's footnote labels are read by screen readers (the section
+    // heading is visually hidden), so they are translated like any label.
+    remarkRehypeOptions: {
+      footnoteLabel: t("components.markdown.footnotes"),
+      footnoteBackLabel: (referenceIndex, rereferenceIndex) =>
+        t("components.markdown.backToReference", {
+          reference:
+            rereferenceIndex > 1
+              ? `${referenceIndex + 1}-${rereferenceIndex}`
+              : String(referenceIndex + 1),
+        }),
+    },
   }
-  const plain = <ReactMarkdown {...options}>{normalized}</ReactMarkdown>
+  const plain = <PlainMarkdown options={options} content={text} />
   return (
     <div
       className={cx(
@@ -127,9 +174,9 @@ export function Markdown({ content, className }: MarkdownProps) {
         className,
       )}
     >
-      {containsMath(normalized) ? (
+      {hasMath ? (
         <Suspense fallback={plain}>
-          <MathMarkdown options={options} content={normalized} />
+          <MathMarkdown options={options} content={text} />
         </Suspense>
       ) : (
         plain

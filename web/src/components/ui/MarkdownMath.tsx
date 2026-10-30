@@ -1,17 +1,17 @@
 import ReactMarkdown, { type Options } from "react-markdown"
-import rehypeKatex from "rehype-katex"
+import rehypeKatex, { type Options as KatexOptions } from "rehype-katex"
 
 import "katex/dist/katex.min.css"
 
-// The math-enabled renderer behind Markdown.tsx's lazy import. Split out so
-// KaTeX (JS, CSS, and fonts) is fetched only for descriptions that use it.
+// The math-enabled renderer behind Markdown.tsx's lazy import; see that file
+// for why KaTeX is split out.
 //
 // KaTeX's defaults already keep teacher text inert: `trust` is off, so \href,
 // \url, \includegraphics and raw HTML macros render as errors instead of
-// elements. The two caps stop a pathological expression from freezing the tab
-// or growing a glyph to the size of the page.
-const katexOptions = {
-  throwOnError: false,
+// elements, and rehype-katex itself catches parse errors and re-renders the
+// source as a `.katex-error` chip. The two caps stop a pathological
+// expression from freezing the tab or growing a glyph to the size of the page.
+const katexOptions: KatexOptions = {
   strict: "ignore",
   maxSize: 500,
   maxExpand: 1000,

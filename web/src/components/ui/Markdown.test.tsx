@@ -1,10 +1,33 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, afterEach } from "vitest"
-import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import { describe, expect, it, afterEach, beforeEach, vi } from "vitest"
+import { act, render, screen, cleanup, waitFor } from "@testing-library/react"
 
-import { Markdown } from "./Markdown"
+import type { Markdown as MarkdownComponent } from "./Markdown"
 
+// Observe the lazy chunk import itself: the DOM cannot tell the Suspense
+// fallback from the real renderer on math-free text, so "did KaTeX load" has
+// to be measured here. `failMathChunk` simulates a stale chunk hash after a
+// deploy. React caches a lazy import per module instance, so every test gets
+// a fresh Markdown module.
+let mathChunkLoaded = false
+let failMathChunk = false
+let Markdown: typeof MarkdownComponent
+beforeEach(async () => {
+  mathChunkLoaded = false
+  failMathChunk = false
+  vi.resetModules()
+  vi.doMock("./MarkdownMath", async (importOriginal) => {
+    mathChunkLoaded = true
+    if (failMathChunk) {
+      throw new Error("Failed to fetch dynamically imported module")
+    }
+    return importOriginal()
+  })
+  ;({ Markdown } = await import("./Markdown"))
+})
 afterEach(cleanup)
+
+const flushImports = () => act(async () => {})
 
 describe("Markdown", () => {
   it("drops embedded raw HTML instead of rendering it (no rehype-raw)", () => {
@@ -135,9 +158,115 @@ $$`}
     expect(container.textContent).toContain("\\frac{")
   })
 
-  it("does not load the math renderer for plain text", () => {
-    const { container } = render(<Markdown content="Just **bold** words" />)
+  it("renders a literal dollar inside math, in both of GitHub's forms", async () => {
+    const { container } = render(
+      <Markdown
+        content={"Backtick $`\\text{$}`$ and plain $\\sqrt{\\$4}$ forms"}
+      />,
+    )
+    await waitFor(() =>
+      expect(container.querySelectorAll(".katex")).toHaveLength(2),
+    )
+    expect(container.querySelector(".katex-error")).toBeNull()
+    expect(container.querySelector(".katex-display")).toBeNull()
+    // Nothing of either expression leaked out as prose: only the text nodes
+    // that are direct children of the paragraph count, not KaTeX's output.
+    const prose = Array.from(container.querySelectorAll("p"))
+      .flatMap((p) => Array.from(p.childNodes))
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent ?? "")
+      .join("")
+    expect(prose).toBe("Backtick  and plain  forms")
+  })
+
+  it("copies indented code blocks through without adding escapes", () => {
+    const { container } = render(
+      <Markdown content={"Run:\n\n    echo $5 and $10\n    ls $HOME"} />,
+    )
+    expect(container.querySelector("pre")?.textContent).toBe(
+      "echo $5 and $10\nls $HOME\n",
+    )
+  })
+
+  it("keeps a dollar inside an autolink URL", () => {
+    render(<Markdown content="see <https://example.com/?a=$5&b=6>" />)
+    expect(screen.getByRole("link").getAttribute("href")).toBe(
+      "https://example.com/?a=$5&b=6",
+    )
+  })
+
+  it("caps glyph size and macro expansion for pathological input", async () => {
+    const { container } = render(
+      <Markdown
+        content={String.raw`$\rule{5000em}{1em}$ and $\def\x{\x\x}\x$`}
+      />,
+    )
+    await waitFor(() =>
+      expect(container.querySelector(".katex-error")).not.toBeNull(),
+    )
+    // maxSize clamps the 5000em rule to 500em; without it KaTeX emits 5000em.
+    const rule = container.querySelector<HTMLElement>(".rule")
+    expect(rule?.style.borderRightWidth).toBe("500em")
+    // maxExpand turns the infinite \def loop into an error chip.
+    expect(container.querySelector(".katex-error")?.textContent).toContain(
+      "\\def",
+    )
+  })
+
+  it("renders footnotes as in-page links with a hidden, labelled heading", async () => {
+    const { container } = render(
+      <Markdown content={"text[^1]\n\n[^1]: the note"} />,
+    )
+    const ref = container.querySelector("sup a")
+    expect(ref?.getAttribute("href")).toBe("#user-content-fn-1")
+    expect(ref?.getAttribute("id")).toBe("user-content-fnref-1")
+    expect(ref?.getAttribute("aria-describedby")).toBe("footnote-label")
+    expect(ref?.getAttribute("target")).toBeNull()
+
+    const heading = container.querySelector("h2")
+    expect(heading?.id).toBe("footnote-label")
+    expect(heading?.className).toContain("sr-only")
+    expect(heading?.textContent).toBe("components.markdown.footnotes")
+
+    const back = container.querySelector('a[href="#user-content-fnref-1"]')
+    expect(back).not.toBeNull()
+    expect(back?.getAttribute("aria-label")).toBe(
+      "components.markdown.backToReference",
+    )
+    await flushImports()
+    expect(mathChunkLoaded).toBe(false)
+  })
+
+  it("does not load the math renderer for text without math", async () => {
+    const { container } = render(
+      <Markdown
+        content={
+          "Just **bold** words, `echo $HOME`, and\n\n```sh\necho $5\n```"
+        }
+      />,
+    )
     expect(container.querySelector("strong")?.textContent).toBe("bold")
+    await flushImports()
+    expect(mathChunkLoaded).toBe(false)
     expect(container.querySelector(".katex")).toBeNull()
+  })
+
+  it("loads the math renderer once the text has math", async () => {
+    const { container } = render(<Markdown content="so $x^2$ is math" />)
+    await waitFor(() =>
+      expect(container.querySelector(".katex")).not.toBeNull(),
+    )
+    expect(mathChunkLoaded).toBe(true)
+  })
+
+  it("falls back to the plain renderer when the math chunk fails to load", async () => {
+    failMathChunk = true
+    const { container } = render(<Markdown content="so $x^2$ is math" />)
+    await flushImports()
+    expect(mathChunkLoaded).toBe(true)
+    expect(container.querySelector(".katex")).toBeNull()
+    // The source stays readable as a code chip instead of an error page.
+    expect(container.querySelector("code")?.textContent).toBe("x^2")
+    expect(container.textContent).toContain("is math")
   })
 })
