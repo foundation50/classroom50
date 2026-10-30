@@ -1,14 +1,17 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { nextAvailableSlug, slugify } from "@/util/slug"
 import { assignmentSlugBudget } from "@/util/repoNameBudget"
 import {
   Alert,
   Badge,
+  Button,
   cx,
   fieldLabelClass,
   FormField,
   HelpTooltip,
   Input,
+  Markdown,
   Radio,
   Textarea,
 } from "@/components/ui"
@@ -75,6 +78,9 @@ export function DetailsSection({
   // The auto-fill's collision set: existing slugs plus reserved pre-rename
   // slugs, mirroring the Go NextAvailableSlug (which folds both).
   const unavailableSlugs = [...(takenSlugs ?? []), ...(reservedSlugs ?? [])]
+  // Preview renders the description exactly as students will see it, so a
+  // teacher can check tables and math without leaving the form.
+  const [previewDescription, setPreviewDescription] = useState(false)
 
   return (
     <SectionCard title={t("assignments.form.detailsSection")} onReset={onReset}>
@@ -225,16 +231,47 @@ export function DetailsSection({
                 </span>
               </>
             }
+            hint={t("assignments.form.descriptionHelp")}
+            labelExtra={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="ms-auto"
+                aria-pressed={previewDescription}
+                onClick={() => setPreviewDescription((on) => !on)}
+              >
+                {t("assignments.form.descriptionPreview")}
+              </Button>
+            }
           >
-            {({ id }) => (
-              <Textarea
-                id={id}
-                name={field.name}
-                placeholder={t("assignments.form.descriptionPlaceholder")}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
+            {({ id, describedById }) => (
+              <>
+                <Textarea
+                  id={id}
+                  name={field.name}
+                  aria-describedby={describedById}
+                  placeholder={t("assignments.form.descriptionPlaceholder")}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                  hidden={previewDescription}
+                />
+                {previewDescription ? (
+                  <div
+                    role="region"
+                    aria-label={t("assignments.form.descriptionPreviewLabel")}
+                    className="min-h-24 rounded-field border border-base-300 bg-base-100 p-3"
+                  >
+                    {field.state.value.trim() ? (
+                      <Markdown content={field.state.value} />
+                    ) : (
+                      <p className="text-sm text-base-content/60">
+                        {t("assignments.form.descriptionPreviewEmpty")}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </>
             )}
           </FormField>
         )}

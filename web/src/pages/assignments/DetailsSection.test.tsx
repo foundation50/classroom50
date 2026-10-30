@@ -373,4 +373,59 @@ describe("DetailsSection — team-creation gate", () => {
     expect(modeRadio(container, "individual").disabled).toBe(true)
     expect(screen.queryByLabelText(tooltipKey)).toBeNull()
   })
+
+  // The description's Preview toggle renders the same Markdown component the
+  // student pages use, so what the teacher checks is what students get.
+  describe("description preview", () => {
+    const previewKey = "assignments.form.descriptionPreview"
+    const regionKey = "assignments.form.descriptionPreviewLabel"
+
+    it("swaps the textarea for a rendered preview and back", async () => {
+      const { container } = renderDetails({ org: "acme" })
+      const textarea =
+        container.querySelector<HTMLTextAreaElement>("#description")!
+      fireEvent.change(textarea, {
+        target: { value: "# Heading\n\n| a |\n|---|\n| 1 |" },
+      })
+
+      const toggle = screen.getByRole("button", { name: previewKey })
+      expect(toggle.getAttribute("aria-pressed")).toBe("false")
+      fireEvent.click(toggle)
+
+      expect(toggle.getAttribute("aria-pressed")).toBe("true")
+      expect(textarea.hidden).toBe(true)
+      const region = screen.getByRole("region", { name: regionKey })
+      await waitFor(() =>
+        expect(region.querySelector("h1")?.textContent).toBe("Heading"),
+      )
+      expect(region.querySelector("table")).not.toBeNull()
+
+      fireEvent.click(toggle)
+      expect(textarea.hidden).toBe(false)
+      expect(screen.queryByRole("region", { name: regionKey })).toBeNull()
+    })
+
+    it("shows an empty state instead of a blank panel", () => {
+      renderDetails({ org: "acme" })
+      fireEvent.click(screen.getByRole("button", { name: previewKey }))
+      expect(
+        screen.getByText("assignments.form.descriptionPreviewEmpty"),
+      ).toBeTruthy()
+    })
+
+    it("renders math in the preview once the KaTeX chunk resolves", async () => {
+      const { container } = renderDetails({ org: "acme" })
+      const textarea =
+        container.querySelector<HTMLTextAreaElement>("#description")!
+      fireEvent.change(textarea, { target: { value: "Area $\\pi r^2$" } })
+      fireEvent.click(screen.getByRole("button", { name: previewKey }))
+
+      const region = screen.getByRole("region", { name: regionKey })
+      // The plain renderer shows the source as a code chip until the lazy
+      // chunk lands, so the preview is never blank.
+      expect(region.textContent).toContain("\\pi r^2")
+      await waitFor(() => expect(region.querySelector(".katex")).not.toBeNull())
+      expect(region.querySelector(".katex-error")).toBeNull()
+    })
+  })
 })
