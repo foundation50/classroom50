@@ -123,6 +123,8 @@ export type { LabeledControlProps } from "./LabeledControl"
 
 export { Markdown } from "./Markdown"
 export type { MarkdownProps } from "./Markdown"
+export { TabList, tabClass, tabId } from "./TabList"
+export type { TabItem, TabListProps } from "./TabList"
 
 export { EmphasisLtr } from "./EmphasisLtr"
 export type { EmphasisLtrProps } from "./EmphasisLtr"

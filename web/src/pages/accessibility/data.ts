@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
 import type { BadgeTone } from "@/types/badgeTone"
-import { cx } from "@/components/ui"
 import { type ConformanceLevel, type Criterion } from "@/util/a11y/vpatModel"
 import type {
   ContrastAuditJson,
@@ -107,15 +106,3 @@ export const VPAT_STATUS_ORDER: ConformanceLevel[] = [
   "notApplicable",
   "notEvaluated",
 ]
-
-// Shared boxed-tab recipe so the active tab reads unambiguously (solid primary
-// fill) and inactive tabs stay clickable-looking. One source for both the
-// principle tabs and the theme tabs.
-export function tabClass(active: boolean): string {
-  return cx(
-    "tab cursor-pointer gap-1.5",
-    active
-      ? "tab-active rounded-box !bg-primary font-semibold !text-primary-content"
-      : "text-base-content/60 hover:text-base-content",
-  )
-}

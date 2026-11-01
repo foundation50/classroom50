@@ -5,7 +5,6 @@ import { assignmentSlugBudget } from "@/util/repoNameBudget"
 import {
   Alert,
   Badge,
-  Button,
   cx,
   fieldLabelClass,
   FormField,
@@ -13,6 +12,8 @@ import {
   Input,
   Markdown,
   Radio,
+  TabList,
+  tabId,
   Textarea,
 } from "@/components/ui"
 import {
@@ -78,9 +79,12 @@ export function DetailsSection({
   // The auto-fill's collision set: existing slugs plus reserved pre-rename
   // slugs, mirroring the Go NextAvailableSlug (which folds both).
   const unavailableSlugs = [...(takenSlugs ?? []), ...(reservedSlugs ?? [])]
-  // Preview renders the description exactly as students will see it, so a
-  // teacher can check tables and math without leaving the form.
-  const [previewDescription, setPreviewDescription] = useState(false)
+  // Write/Preview tabs over the description, as on GitHub: the preview is the
+  // same Markdown component students see, so a teacher can check tables and
+  // math without leaving the form.
+  const [descriptionTab, setDescriptionTab] = useState<"write" | "preview">(
+    "write",
+  )
 
   return (
     <SectionCard title={t("assignments.form.detailsSection")} onReset={onReset}>
@@ -232,47 +236,59 @@ export function DetailsSection({
               </>
             }
             hint={t("assignments.form.descriptionHelp")}
-            labelExtra={
-              <Button
-                variant="ghost"
-                size="xs"
-                className="ms-auto"
-                aria-pressed={previewDescription}
-                onClick={() => setPreviewDescription((on) => !on)}
-              >
-                {t("assignments.form.descriptionPreview")}
-              </Button>
-            }
           >
-            {({ id, describedById }) => (
-              <>
-                <Textarea
-                  id={id}
-                  name={field.name}
-                  aria-describedby={describedById}
-                  placeholder={t("assignments.form.descriptionPlaceholder")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  hidden={previewDescription}
-                />
-                {previewDescription ? (
+            {({ id, describedById }) => {
+              const panelId = `${id}-panel`
+              return (
+                <div className="flex flex-col gap-2">
+                  <TabList
+                    id={id}
+                    size="sm"
+                    panelId={panelId}
+                    aria-label={t("assignments.form.descriptionEditor")}
+                    active={descriptionTab}
+                    onChange={setDescriptionTab}
+                    tabs={[
+                      {
+                        key: "write",
+                        label: t("assignments.form.descriptionWrite"),
+                      },
+                      {
+                        key: "preview",
+                        label: t("assignments.form.descriptionPreview"),
+                      },
+                    ]}
+                  />
                   <div
-                    role="region"
-                    aria-label={t("assignments.form.descriptionPreviewLabel")}
-                    className="min-h-24 rounded-field border border-base-300 bg-base-100 p-3"
+                    role="tabpanel"
+                    id={panelId}
+                    aria-labelledby={tabId(id, descriptionTab)}
                   >
-                    {field.state.value.trim() ? (
-                      <Markdown content={field.state.value} />
-                    ) : (
-                      <p className="text-sm text-base-content/60">
-                        {t("assignments.form.descriptionPreviewEmpty")}
-                      </p>
-                    )}
+                    <Textarea
+                      id={id}
+                      name={field.name}
+                      aria-describedby={describedById}
+                      placeholder={t("assignments.form.descriptionPlaceholder")}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                      hidden={descriptionTab === "preview"}
+                    />
+                    {descriptionTab === "preview" ? (
+                      <div className="min-h-24 rounded-field border border-base-300 bg-base-100 p-3">
+                        {field.state.value.trim() ? (
+                          <Markdown content={field.state.value} />
+                        ) : (
+                          <p className="text-sm text-base-content/60">
+                            {t("assignments.form.descriptionPreviewEmpty")}
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </>
-            )}
+                </div>
+              )
+            }}
           </FormField>
         )}
       </form.Field>

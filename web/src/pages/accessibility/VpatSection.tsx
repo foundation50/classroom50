@@ -7,8 +7,15 @@ import {
   IssueDraftIcon,
 } from "@/components/ui/icons"
 
-import { Alert, Badge, Card, Toolbar, cx } from "@/components/ui"
-import { useRovingTabList } from "@/hooks/useRovingTabList"
+import {
+  Alert,
+  Badge,
+  Card,
+  TabList,
+  Toolbar,
+  cx,
+  tabId,
+} from "@/components/ui"
 import {
   CONFORMANCE_TONE,
   hasGenericRemark,
@@ -22,7 +29,6 @@ import {
   TONE_DOT_CLASS,
   VPAT_SINCE_KEY,
   VPAT_STATUS_ORDER,
-  tabClass,
   useVpatReport,
 } from "./data"
 import { matchesQuery } from "@/util/textMatch"
@@ -56,10 +62,7 @@ function VpatConformanceTable({
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<VpatTab>("all")
   const tabsId = useId()
-  const tabProps = useRovingTabList(
-    TAB_ORDER.length,
-    TAB_ORDER.indexOf(activeTab),
-  )
+  const panelId = `${tabsId}-panel`
 
   // Counts per tab reflect the current search/filter so a tab shows how many
   // rows it holds (and an emptied tab reads 0 rather than looking broken).
@@ -87,44 +90,36 @@ function VpatConformanceTable({
   return (
     <Card shadow={false}>
       <Card.Body className="gap-4 p-4">
-        <div
-          role="tablist"
+        <TabList
+          id={tabsId}
+          panelId={panelId}
           aria-label={t("accessibility.vpat.principleTabsAria")}
-          className="tabs-boxed tabs w-fit"
-        >
-          {TAB_ORDER.map((tab, index) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              id={`${tabsId}-tab-${tab}`}
-              aria-selected={tab === activeTab}
-              aria-controls={`${tabsId}-panel`}
-              className={tabClass(tab === activeTab)}
-              onClick={() => setActiveTab(tab)}
-              {...tabProps(index)}
-            >
-              {tab === "all"
-                ? t("accessibility.vpat.tabAll")
-                : t(`accessibility.vpat.principle.${tab}`)}
-              <span
-                className={cx(
-                  "text-xs tabular-nums",
-                  tab === activeTab
-                    ? "text-primary-content/70"
-                    : "text-base-content/50",
-                )}
-              >
-                {countByTab[tab]}
-              </span>
-            </button>
-          ))}
-        </div>
+          active={activeTab}
+          onChange={setActiveTab}
+          tabs={TAB_ORDER.map((tab) => ({
+            key: tab,
+            label: (active: boolean) => (
+              <>
+                {tab === "all"
+                  ? t("accessibility.vpat.tabAll")
+                  : t(`accessibility.vpat.principle.${tab}`)}
+                <span
+                  className={cx(
+                    "text-xs tabular-nums",
+                    active ? "text-primary-content/70" : "text-base-content/50",
+                  )}
+                >
+                  {countByTab[tab]}
+                </span>
+              </>
+            ),
+          }))}
+        />
 
         <div
           role="tabpanel"
-          id={`${tabsId}-panel`}
-          aria-labelledby={`${tabsId}-tab-${activeTab}`}
+          id={panelId}
+          aria-labelledby={tabId(tabsId, activeTab)}
         >
           {rows.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
