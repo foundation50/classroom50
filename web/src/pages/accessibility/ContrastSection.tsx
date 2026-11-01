@@ -3,12 +3,18 @@ import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import { InfoIcon } from "@/components/ui/icons"
 
-import { Alert, Badge, Card, Modal, Tooltip } from "@/components/ui"
-import { useRovingTabList } from "@/hooks/useRovingTabList"
+import {
+  Alert,
+  Badge,
+  Card,
+  Modal,
+  TabList,
+  Tooltip,
+  tabId,
+} from "@/components/ui"
 
 import {
   STATUS_TONE,
-  tabClass,
   useContrastAudit,
   type Row,
   type AuditTheme,
@@ -222,10 +228,7 @@ export function ContrastSection() {
   const activeTheme = pickedTheme ?? audit?.themes[0]?.theme ?? null
   const shownTheme = audit?.themes.find((th) => th.theme === activeTheme)
   const tabsId = useId()
-  const tabProps = useRovingTabList(
-    audit?.themes.length ?? 0,
-    audit?.themes.findIndex((th) => th.theme === activeTheme) ?? 0,
-  )
+  const panelId = `${tabsId}-panel`
   const marginCount = audit?.summary.marginMisses ?? 0
 
   return (
@@ -260,30 +263,25 @@ export function ContrastSection() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div role="tablist" className="tabs-boxed tabs w-fit">
-              {audit.themes.map((th, index) => (
-                <button
-                  key={th.theme}
-                  type="button"
-                  role="tab"
-                  id={`${tabsId}-tab-${th.theme}`}
-                  aria-selected={th.theme === activeTheme}
-                  aria-controls={`${tabsId}-panel`}
-                  className={tabClass(th.theme === activeTheme)}
-                  onClick={() => setPickedTheme(th.theme)}
-                  {...tabProps(index)}
-                >
-                  {th.label}
-                </button>
-              ))}
-            </div>
+            {activeTheme && (
+              <TabList
+                id={tabsId}
+                panelId={panelId}
+                active={activeTheme}
+                onChange={setPickedTheme}
+                tabs={audit.themes.map((th) => ({
+                  key: th.theme,
+                  label: th.label,
+                }))}
+              />
+            )}
           </div>
 
           {shownTheme && (
             <div
               role="tabpanel"
-              id={`${tabsId}-panel`}
-              aria-labelledby={`${tabsId}-tab-${shownTheme.theme}`}
+              id={panelId}
+              aria-labelledby={tabId(tabsId, shownTheme.theme)}
             >
               <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
             </div>

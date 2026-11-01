@@ -373,4 +373,81 @@ describe("DetailsSection — team-creation gate", () => {
     expect(modeRadio(container, "individual").disabled).toBe(true)
     expect(screen.queryByLabelText(tooltipKey)).toBeNull()
   })
+
+  // The description has Write/Preview tabs like GitHub's editor; the preview
+  // renders the same Markdown component the student pages use, so what the
+  // teacher checks is what students get.
+  describe("description Write/Preview tabs", () => {
+    const writeKey = "assignments.form.descriptionWrite"
+    const previewKey = "assignments.form.descriptionPreview"
+    const editorKey = "assignments.form.descriptionEditor"
+
+    it("starts on Write with the textarea as the tab panel", () => {
+      const { container } = renderDetails({ org: "acme" })
+      const tablist = screen.getByRole("tablist", { name: editorKey })
+      const write = screen.getByRole("tab", { name: writeKey })
+      const preview = screen.getByRole("tab", { name: previewKey })
+      expect(tablist.contains(write)).toBe(true)
+      expect(write.getAttribute("aria-selected")).toBe("true")
+      expect(preview.getAttribute("aria-selected")).toBe("false")
+
+      const panel = screen.getByRole("tabpanel")
+      expect(panel.getAttribute("aria-labelledby")).toBe(write.id)
+      expect(write.getAttribute("aria-controls")).toBe(panel.id)
+      const textarea =
+        container.querySelector<HTMLTextAreaElement>("#description")!
+      expect(panel.contains(textarea)).toBe(true)
+      expect(textarea.hidden).toBe(false)
+    })
+
+    it("swaps the textarea for a rendered preview and back", async () => {
+      const { container } = renderDetails({ org: "acme" })
+      const textarea =
+        container.querySelector<HTMLTextAreaElement>("#description")!
+      fireEvent.change(textarea, {
+        target: { value: "# Heading\n\n| a |\n|---|\n| 1 |" },
+      })
+
+      const preview = screen.getByRole("tab", { name: previewKey })
+      fireEvent.click(preview)
+
+      expect(preview.getAttribute("aria-selected")).toBe("true")
+      expect(textarea.hidden).toBe(true)
+      const panel = screen.getByRole("tabpanel")
+      expect(panel.getAttribute("aria-labelledby")).toBe(preview.id)
+      await waitFor(() =>
+        expect(panel.querySelector("h1")?.textContent).toBe("Heading"),
+      )
+      expect(panel.querySelector("table")).not.toBeNull()
+
+      fireEvent.click(screen.getByRole("tab", { name: writeKey }))
+      expect(textarea.hidden).toBe(false)
+      expect(panel.querySelector("h1")).toBeNull()
+      // Switching tabs never loses what the teacher typed.
+      expect(textarea.value).toBe("# Heading\n\n| a |\n|---|\n| 1 |")
+    })
+
+    it("shows an empty state instead of a blank panel", () => {
+      renderDetails({ org: "acme" })
+      fireEvent.click(screen.getByRole("tab", { name: previewKey }))
+      expect(
+        screen.getByText("assignments.form.descriptionPreviewEmpty"),
+      ).toBeTruthy()
+    })
+
+    it("renders math in the preview once the KaTeX chunk resolves", async () => {
+      const { container } = renderDetails({ org: "acme" })
+      const textarea =
+        container.querySelector<HTMLTextAreaElement>("#description")!
+      fireEvent.change(textarea, { target: { value: "Area $\\pi r^2$" } })
+      fireEvent.click(screen.getByRole("tab", { name: previewKey }))
+
+      const panel = screen.getByRole("tabpanel")
+      // The plain renderer shows the source as a code chip until the lazy
+      // chunk lands, so the preview is never blank.
+      expect(panel.textContent).toContain("\\pi r^2")
+      await waitFor(() => expect(panel.querySelector(".katex")).not.toBeNull())
+      expect(panel.querySelector(".katex-error")).toBeNull()
+    })
+  })
 })
