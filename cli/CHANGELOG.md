@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.59.0](https://github.com/foundation50/classroom50/compare/cli-v1.58.5...cli-v1.59.0) (2026-11-01)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
 ## [1.58.5](https://github.com/foundation50/classroom50/compare/cli-v1.58.4...cli-v1.58.5) (2026-10-28)
 
 
