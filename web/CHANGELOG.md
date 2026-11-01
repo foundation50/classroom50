@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.59.0](https://github.com/foundation50/classroom50/compare/web-v1.58.5...web-v1.59.0) (2026-11-01)
+
+
+### Features
+
+* **web:** render LaTeX math and GitHub Flavored Markdown in descriptions ([#1143](https://github.com/foundation50/classroom50/issues/1143)) ([b3e1538](https://github.com/foundation50/classroom50/commit/b3e1538a731db7b255151171fed91f5d23c4c190))
+
 ## [1.58.5](https://github.com/foundation50/classroom50/compare/web-v1.58.4...web-v1.58.5) (2026-10-28)
 
 
