@@ -120,6 +120,11 @@
         "override": {
           "type": "boolean",
           "description": "Teacher flag. `true` => the entry is preserved verbatim and never refreshed by collection. `false` => an explicit 'keep refreshing' marker that survives replacement."
+        },
+        "collected_at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\dZ$",
+          "description": "Optional. The wall-clock UTC instant the collection run that last wrote this entry started reading, so the next run can credit a release whose result.json asset predates it from this entry instead of downloading it again (a re-published asset carries newer timestamps and is re-read). Collector bookkeeping, never shown; absent on entries written before the field existed and on `override: true` entries, which collection leaves alone."
         }
       }
     },

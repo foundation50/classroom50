@@ -10,8 +10,9 @@ name: Collect Scores
 # the autograde flow is collected like a student; staff who never
 # accepted have no repo, hence no releases, hence no entry. It pages
 # through each expected `<classroom>-<assignment>-<username>` repo's
-# `submit/*` releases and downloads `result.json` from each. Single-writer
-# by design: no concurrent ingest, no per-student dispatch event, no broad
+# `submit/*` releases (several repos at a time) and downloads `result.json`
+# from each release scores.json does not already hold. Single-writer by
+# design: no concurrent ingest, no per-student dispatch event, no broad
 # cross-repo write secret.
 
 # The run list shows only the workflow name by default, so a scoped collect
