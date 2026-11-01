@@ -33,6 +33,43 @@ vi.mock("@/components/modals/BulkReuseAssignmentsModal", () => ({
     </div>
   ),
 }))
+// Stands in for the close/reopen modal, reporting the props the bar derives:
+// which assignments the fan-out covers, whose repos it would touch, and which
+// of the selection it leaves alone.
+vi.mock("@/components/modals/BulkCloseSubmissionModal", () => ({
+  BulkCloseSubmissionModal: ({
+    open,
+    mode,
+    targets,
+    skipped,
+  }: {
+    open: boolean
+    mode: "close" | "reopen"
+    targets: { slug: string; owners: string[] }[]
+    skipped: string[]
+  }) =>
+    open ? (
+      <div data-testid="close-modal" data-mode={mode}>
+        <span data-testid="close-targets">
+          {targets
+            .map((one) => `${one.slug}(${one.owners.join("|")})`)
+            .join(",")}
+        </span>
+        <span data-testid="close-skipped">{skipped.join(",")}</span>
+      </div>
+    ) : null,
+}))
+// Both reads come from the page's cache in the app; here they are the fixture
+// the accepted-owner rule runs over.
+vi.mock("@/hooks/useGetMyOrgRepos", () => ({
+  default: () => ({ data: orgRepos, isPending: reposPending, isError: false }),
+}))
+vi.mock("@/hooks/useGetStudents", () => ({
+  default: () => ({ students, isLoading: false, isError: studentsError }),
+}))
+vi.mock("@/hooks/useStaffCapabilities", () => ({
+  useStaffCapabilities: () => ({ isOwner }),
+}))
 // Typed by signature so the recorded argument stays indexable.
 type LockArgs = { slugs: string[]; locked: boolean }
 const { notify } = vi.hoisted(() => ({
@@ -40,9 +77,14 @@ const { notify } = vi.hoisted(() => ({
 }))
 const lockMutate = vi.fn<(args: LockArgs) => Promise<unknown>>()
 const deleteMutate = vi.fn<(args: { slugs: string[] }) => Promise<unknown>>()
+const closedMutate = vi.fn<(args: { slugs: string[] }) => Promise<unknown>>()
 vi.mock("@/hooks/mutations/useBulkAssignmentActions", () => ({
   useBulkSetAssignmentLock: () => ({
     mutateAsync: lockMutate,
+    isPending: false,
+  }),
+  useBulkSetAssignmentClosed: () => ({
+    mutateAsync: closedMutate,
     isPending: false,
   }),
   useBulkDeleteAssignments: () => ({
@@ -52,16 +94,36 @@ vi.mock("@/hooks/mutations/useBulkAssignmentActions", () => ({
 }))
 
 import { AssignmentsBulkBar } from "./AssignmentsBulkBar"
-import type { Assignment } from "@/types/classroom"
+import type { Assignment, Student } from "@/types/classroom"
+import type { GitHubRepo } from "@/github-core/types"
 
-const assignment = (slug: string, locked = false) =>
-  ({ slug, name: slug, locked }) as Assignment
+const assignment = (
+  slug: string,
+  locked = false,
+  extra: Partial<Assignment> = {},
+) => ({ slug, name: slug, locked, mode: "individual", ...extra }) as Assignment
 const ALL = [
   assignment("hw1"),
   assignment("hw2"),
   assignment("hw3", true),
   assignment("hw4"),
+  assignment("hw5", false, { closed: true }),
+  assignment("team1", false, { mode: "team" }),
+  assignment("bare", false, { empty_repo: true }),
 ]
+
+// The org repo list the accepted-owner rule reads: ana accepted hw1 and hw5,
+// bo only hw1. `cs50-hw1-cara` belongs to nobody on the roster.
+const orgRepos = [
+  "cs50-hw1-ana",
+  "cs50-hw1-bo",
+  "cs50-hw5-ana",
+  "cs50-hw1-cara",
+].map((name) => ({ name }) as GitHubRepo)
+const students = [{ username: "ana" }, { username: "bo" }] as Student[]
+let isOwner = true
+let reposPending = false
+let studentsError = false
 
 // The menu item and the confirm dialog's button share a label, so menu
 // lookups are scoped to the menu.
@@ -81,6 +143,12 @@ const renderBar = (props: { selected: string[] }) =>
   )
 
 beforeEach(() => {
+  isOwner = true
+  reposPending = false
+  studentsError = false
+  closedMutate
+    .mockReset()
+    .mockResolvedValue({ changed: [], missing: [], newCommitSha: null })
   deleteMutate
     .mockReset()
     .mockResolvedValue({ deleted: ["hw1"], missing: [], newCommitSha: "sha" })
@@ -156,6 +224,114 @@ describe("AssignmentsBulkBar lock state", () => {
       "assignments.bulk.unlockNoneLocked",
     )
     expect(lockButton().disabled).toBe(false)
+  })
+})
+
+// Close/reopen is the one action here with a per-repo fan-out behind it, so
+// the bar decides what it may cover before the modal opens.
+describe("AssignmentsBulkBar close submission", () => {
+  const closeButton = () =>
+    menuItem("assignments.bulk.closeSubmission.menuLabel")
+  const reopenButton = () =>
+    menuItem("assignments.bulk.closeSubmission.reopenMenuLabel")
+
+  it("passes the accepted owners of each covered assignment to the modal", () => {
+    renderBar({ selected: ["hw1", "hw5"] })
+
+    fireEvent.click(closeButton())
+
+    expect(screen.getByTestId("close-modal").getAttribute("data-mode")).toBe(
+      "close",
+    )
+    // cara has a repo but is not on the roster, so she is not an owner.
+    expect(screen.getByTestId("close-targets").textContent).toBe(
+      "hw1(ana|bo),hw5(ana)",
+    )
+  })
+
+  it("leaves group, team and empty-repo assignments alone and names them", () => {
+    renderBar({ selected: ["hw1", "team1", "bare"] })
+
+    fireEvent.click(closeButton())
+
+    expect(screen.getByTestId("close-targets").textContent).toBe("hw1(ana|bo)")
+    expect(screen.getByTestId("close-skipped").textContent).toBe("team1,bare")
+  })
+
+  it("disables Close when every covered assignment is already closed", () => {
+    renderBar({ selected: ["hw5"] })
+
+    expect(closeButton().disabled).toBe(true)
+    expect(closeButton().getAttribute("title")).toBe(
+      "assignments.bulk.closeSubmission.allClosed",
+    )
+    expect(reopenButton().disabled).toBe(false)
+  })
+
+  it("disables Reopen when nothing covered is closed", () => {
+    renderBar({ selected: ["hw1", "hw2"] })
+
+    expect(reopenButton().disabled).toBe(true)
+    expect(reopenButton().getAttribute("title")).toBe(
+      "assignments.bulk.closeSubmission.noneClosed",
+    )
+    expect(closeButton().disabled).toBe(false)
+  })
+
+  it("disables both when the selection has nothing it can cover", () => {
+    renderBar({ selected: ["team1", "bare"] })
+
+    expect(closeButton().disabled).toBe(true)
+    expect(closeButton().getAttribute("title")).toBe(
+      "assignments.bulk.closeSubmission.noneEligible",
+    )
+    expect(reopenButton().disabled).toBe(true)
+  })
+
+  // Reopen restores write. Fanning out over an assignment that was never
+  // closed would re-grant push on repos a teacher downgraded per student.
+  it("reopens only the assignments that are actually closed", () => {
+    renderBar({ selected: ["hw1", "hw5"] })
+
+    fireEvent.click(reopenButton())
+
+    expect(screen.getByTestId("close-modal").getAttribute("data-mode")).toBe(
+      "reopen",
+    )
+    expect(screen.getByTestId("close-targets").textContent).toBe("hw5(ana)")
+  })
+
+  // Owners resolve from the org repo list and the roster; without them every
+  // assignment looks unaccepted and the run would commit the flag while every
+  // student kept write.
+  it("waits while the repository list is still loading", () => {
+    reposPending = true
+    renderBar({ selected: ["hw1"] })
+
+    expect(closeButton().disabled).toBe(true)
+    expect(closeButton().getAttribute("title")).toBe(
+      "assignments.bulk.closeSubmission.ownersUnknown",
+    )
+  })
+
+  it("waits when the roster read failed", () => {
+    studentsError = true
+    renderBar({ selected: ["hw1", "hw5"] })
+
+    expect(closeButton().disabled).toBe(true)
+    expect(reopenButton().disabled).toBe(true)
+  })
+
+  // The per-repo write needs repo admin; a non-owner would 403 on every repo.
+  it("hides both entries from a viewer who is not an org owner", () => {
+    isOwner = false
+    renderBar({ selected: ["hw1"] })
+
+    expect(
+      within(screen.getByRole("menu")).queryByText(
+        "assignments.bulk.closeSubmission.menuLabel",
+      ),
+    ).toBeNull()
   })
 })
 
