@@ -788,17 +788,95 @@ the newer run, which published its change too. Updating the organization's
 workflow files (the update banner) stops this happening, since the current
 `publish-pages.yaml` lets publishes queue instead of cancelling each other.
 
+### "Publishing … to the student site: failed" with `Failed to create deployment (status: 422)`
+
+The red banner appears after you create or edit an assignment or classroom,
+the build step passed, and the run's **deploy** step reports:
+
+```text
+Creating Pages deployment failed
+HttpError: Validation Failed
+Error: Failed to create deployment (status: 422) with build version <sha>.
+```
+
+The banner shows a plain "failed" row with **View run** and doesn't name a
+cause. **Your change is saved** in the `classroom50` repository, but nothing
+reaches students until a publish succeeds, and **Retry** fails the same way.
+Every publish since the first failure has failed too, so the student site is
+missing every change made since then.
+
+GitHub returns this error when the organization's plan doesn't allow a GitHub
+Pages site on a private repository. The `classroom50` repository is private,
+so it needs GitHub Team or Enterprise; see
+[Prerequisites and GitHub Education](Prerequisites-and-GitHub-Education). Check
+the organization's **Settings**, then **Billing**, for one of two situations:
+
+- **The organization isn't on GitHub Team.** A GitHub Team trial ends after
+  30 days, and an organization upgraded through GitHub Education drops back to
+  Free when the teacher's benefit expires or re-verification is pending.
+  Restore the plan first; the steps below don't work on GitHub Free.
+- **The organization is on GitHub Team, but the site stayed off.** When the
+  plan dropped, even briefly, GitHub disabled the Pages site on the private
+  repository, and restoring the plan doesn't turn the site back on. The
+  repository's **Settings**, then **Pages**, shows a yellow banner, "Your
+  organization's billing plan does not support private pages", in place of
+  the usual controls, and `https://YOUR-ORGANIZATION.github.io/classroom50/`
+  returns 404 even if publishing used to work.
+
+> [!WARNING]
+> GitHub's banner suggests changing the repository's visibility to public.
+> Don't: the `classroom50` repository holds the roster, with student names
+> and email addresses. Keep it private and fix the plan instead.
+
+Organization owners recover the site in four steps. Replace
+`YOUR-ORGANIZATION` with the organization's name.
+
+1. Confirm the organization is on GitHub Team or Enterprise.
+2. Remove the disabled site, so GitHub forgets its "not supported" state:
+
+   ```sh
+   gh api -X DELETE repos/YOUR-ORGANIZATION/classroom50/pages
+   ```
+
+3. Turn the site back on with GitHub Actions as its source. In the web app,
+   open the organization's settings and click **Re-run setup**; from a
+   terminal, run `gh teacher init YOUR-ORGANIZATION`. Either recreates the
+   site and re-applies the **Pages creation** policy the plan change may have
+   reset. (Choosing **GitHub Actions** as the source under the repository's
+   **Settings**, then **Pages**, works too, but skips the policy check.)
+4. Publish again: click **Retry** on the failed row, or open the **Actions**
+   tab of `YOUR-ORGANIZATION/classroom50`, select **Publish Pages**, and click
+   **Run workflow**.
+
+The site is back when
+`https://YOUR-ORGANIZATION.github.io/classroom50/classrooms-index.json` returns
+JSON in your browser. Students who saw
+["Couldn't load the classroom's assignments"](#couldnt-load-the-classrooms-assignments-on-the-accept-page)
+can reload their invite link.
+
+If the `DELETE` call returns 404, or the yellow banner stays after step 3,
+GitHub still has the site flagged on its side: contact
+[GitHub Support](https://support.github.com) with the organization name and
+the error above.
+
 ### "Couldn't load the classroom's assignments" on the accept page
 
 The accept page shows this error card, listing the URLs it tried, when the
 classroom's published assignment data couldn't be fetched from the student's
-browser. The assignment itself is usually fine. Two common causes:
+browser. The assignment itself is usually fine. Three common causes:
 
-1. **The organization's GitHub Pages site uses a custom domain.** GitHub then
+1. **The classroom's site isn't published.** The student's browser can't
+   tell a missing site from a blocked one, so the card's wording blames the
+   network. Open the first URL on the card yourself: a 404 means the
+   **Publish Pages** workflow in `YOUR-ORGANIZATION/classroom50` has been
+   failing. Check its latest run under the **Actions** tab, and see
+   ["Publishing … to the student site: failed" with `Failed to create deployment (status: 422)`](#publishing--to-the-student-site-failed-with-failed-to-create-deployment-status-422)
+   when the deploy step reports that error.
+2. **The organization's GitHub Pages site uses a custom domain.** GitHub then
    answers `github.io` requests with a redirect the browser rejects. Set the
    classroom's **Custom Pages domain** in the classroom's **Settings**; see
    [Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain).
-2. **A network problem or filter** on the student's side blocks the Pages
+3. **A network problem or filter** on the student's side blocks the Pages
    host. The card lists the exact URLs attempted, so a screenshot of it gives
    the teacher everything needed to check them against
    [Network and allowed domains](GitHub-Integration#network-and-allowed-domains).

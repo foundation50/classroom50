@@ -39,6 +39,17 @@ Verified teachers get GitHub Team free for their organizations:
    through your [GitHub Education](https://github.com/education/teachers)
    benefits.
 
+The benefit has to stay active for the whole term. GitHub re-verifies
+teachers periodically, and while a verification is expired or pending, the
+organizations you upgraded through it drop back to GitHub Free. On Free,
+GitHub disables the Pages site on the private `classroom50` repository, so
+publishing stops and students can't open assignments, and the site stays
+disabled after the plan comes back. Re-verify before the current verification
+expires. If a lapse does happen, restore the plan, then follow
+["Publishing … to the student site: failed" with `Failed to create deployment (status: 422)`](Troubleshooting#publishing--to-the-student-site-failed-with-failed-to-create-deployment-status-422)
+to turn the site back on. A 30-day GitHub Team trial ends the same way, so
+don't run a term on one.
+
 If your school already runs GitHub Enterprise, your organization may already
 be covered; see the next section.
 

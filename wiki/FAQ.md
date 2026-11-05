@@ -12,7 +12,10 @@ You need a GitHub organization on the **Team** or **Enterprise** plan.
 Verified educators get GitHub Team **free** through
 [GitHub Education](https://github.com/education/teachers), which unlocks
 everything Classroom 50 relies on (notably GitHub Pages from a private
-repository). Free/personal organizations can't host a classroom.
+repository). Free/personal organizations can't host a classroom. Keep the plan
+active for the whole term: if it lapses, publishing to students stops and
+needs an owner to turn the Pages site back on afterward. See
+[Prerequisites and GitHub Education](Prerequisites-and-GitHub-Education#getting-the-team-plan-free-through-github-education).
 
 ### How is Classroom 50 different from GitHub Classroom?
 

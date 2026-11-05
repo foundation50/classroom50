@@ -159,6 +159,13 @@ the `publish-pages.yaml` workflow to run once**: push to the default branch or
 trigger it from the **Actions** tab. The CLI prints the Pages URL
 (`https://YOUR-ORGANIZATION.github.io/classroom50/`) after `init`.
 
+The site depends on the organization staying on GitHub Team or Enterprise,
+because the `classroom50` repository is private. If the plan lapses, even
+briefly (a trial ends, or a GitHub Education benefit expires), GitHub disables
+the site and leaves it disabled after the plan is restored, so every publish
+fails with a 422 until an owner removes and recreates the site. See
+["Publishing … to the student site: failed" with `Failed to create deployment (status: 422)`](Troubleshooting#publishing--to-the-student-site-failed-with-failed-to-create-deployment-status-422).
+
 If the organization's Pages site uses a custom domain, GitHub answers
 `github.io` requests with a redirect that students' browsers reject. Set the
 classroom's **Custom Pages domain** in the web app so browsers fetch from the
