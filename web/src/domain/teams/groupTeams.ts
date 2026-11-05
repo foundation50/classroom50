@@ -149,9 +149,15 @@ const CREATE_ATTEMPTS = 50
 
 // Create one group team: a SECRET team named classroom50-group-<hash>-<n>
 // carrying the classroom50/group/v1 record, notifications disabled. The
-// counter is seeded from the caller-visible listing (lowest free n) and
-// settled by the 422-on-create retry — never a visibility probe (a secret
-// team is invisible to non-members, so a listing can't prove a counter free).
+// counter is seeded from the caller-visible listing (lowest free n) plus the
+// assignment's retired counters, and settled by the 422-on-create retry —
+// never a visibility probe (a secret team is invisible to non-members, so a
+// listing can't prove a counter free).
+//
+// `retiredCounters` are the entry's retired_group_counters: a deleted team's
+// repo survives the delete, so re-allocating its counter would point the new
+// group at the old group's repo (#1128). A 422 can't catch that (the TEAM
+// name is free), which is why the seed has to know.
 //
 // GitHub auto-adds the creator as a maintainer. Student formation passes
 // founderLogin === creatorLogin, so the founding student stays maintainer (and
@@ -172,6 +178,7 @@ export async function createGroupTeam(
     creatorLogin: string
     founderLogin?: string
     formation: TeamFormation
+    retiredCounters?: Iterable<number>
   },
 ): Promise<GroupTeamRef> {
   const {
@@ -181,10 +188,12 @@ export async function createGroupTeam(
     creatorLogin,
     founderLogin,
     formation,
+    retiredCounters,
   } = input
   const prefix = await groupTeamAssignmentPrefix(classroom, assignment)
   const visible = await listOrgTeams(client, org)
   const taken = takenCounters(visible, prefix)
+  for (const n of retiredCounters ?? []) taken.add(n)
   const description = marshalGroupDescription({
     classroom,
     assignment,
@@ -610,6 +619,28 @@ export async function attachRepoToGroupTeam(
     repo,
     permission: "push",
   })
+}
+
+// Whether the team is attached to <org>/<repo> (any team member may ask;
+// 404 = detached). The read half of attachRepoToGroupTeam: it lets an accept
+// prove an existing repo is this group's before adopting it.
+export async function groupTeamHasRepo(
+  client: GitHubClient,
+  org: string,
+  teamSlug: string,
+  repo: string,
+): Promise<boolean> {
+  try {
+    await client.request(
+      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+        teamSlug,
+      )}/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}`,
+    )
+    return true
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.isNotFound) return false
+    throw err
+  }
 }
 
 // Update a group team's DISPLAY name: re-derive the classroom50/group/v1

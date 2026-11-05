@@ -120,6 +120,8 @@ export async function applyGroupsPlan(
     creatorLogin: string
     maxGroupSize?: number
     rosterLogins?: ReadonlySet<string>
+    // The target entry's retired_group_counters (see createGroupTeam).
+    retiredCounters?: ReadonlySet<number>
     onProgress?: (progress: ApplyGroupsPlanProgress) => void
   },
 ): Promise<ApplyGroupsPlanResult> {
@@ -136,6 +138,7 @@ export async function applyGroupsPlan(
         displayName: group.name,
         creatorLogin,
         formation,
+        retiredCounters: input.retiredCounters,
       })
     } catch (err) {
       result.createFailure = {

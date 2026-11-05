@@ -40,10 +40,14 @@ import {
   type RepoAboutTopics,
 } from "./permissions"
 import type { RepoFeaturePatch } from "@/github-core/mutations"
-import { createAssignmentRepo } from "./repoCreation"
+import {
+  createAssignmentRepo,
+  type AcceptRepoCreationResult,
+} from "./repoCreation"
 import {
   findMyGroupTeam,
   attachRepoToGroupTeam,
+  groupTeamHasRepo,
 } from "@/domain/teams/groupTeams"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupRepoName } from "@/util/studentRepo"
@@ -58,6 +62,28 @@ import {
   type RepoFeatureApply,
 } from "./acceptSteps"
 import { acceptWithoutSetupCommit } from "./acceptWithoutSetupCommit"
+
+// Team mode: a repo already sitting at the group's name is the group's own
+// only when the viewer can push to it (a teammate's accept attached the team,
+// or the viewer's own half-finished accept left them creator-admin) or the
+// team is attached. Anything else is another group's repo, left behind by a
+// deleted team whose counter was re-allocated (#1128), and adopting it would
+// hand this group push on someone else's work. Fail closed.
+async function assertExistingRepoIsGroups(
+  client: GitHubClient,
+  org: string,
+  team: GroupTeamRef,
+  created: AcceptRepoCreationResult,
+): Promise<void> {
+  if (created.kind !== "already-accepted") return
+  const permissions = created.repo.permissions
+  if (permissions?.push || permissions?.admin) return
+  if (await groupTeamHasRepo(client, org, team.slug, created.repo.name)) return
+  throw new AcceptStepError({
+    key: "accept.errors.teamRepoTaken",
+    params: { org, repo: created.repo.name },
+  })
+}
 
 // Provision (or heal) a just-created student repo — land the control files,
 // (opt-in) open the Feedback PR, then grant the founder role last. Idempotent,
@@ -657,8 +683,8 @@ export async function acceptAssignment(params: {
       },
       onStepUpdate,
     },
-    () =>
-      createAssignmentRepo({
+    async () => {
+      const result = await createAssignmentRepo({
         client,
         templateOwner: sourceOwner,
         templateRepo: sourceRepo,
@@ -668,7 +694,12 @@ export async function acceptAssignment(params: {
         bare: isEmptyRepo,
         includeAllBranches: assignment.include_all_branches === true,
         publicVisibility: assignment.repo_visibility === "public",
-      }),
+      })
+      if (groupTeam) {
+        await assertExistingRepoIsGroups(client, org, groupTeam, result)
+      }
+      return result
+    },
   )
 
   // The org refused the public create and the repo was created private

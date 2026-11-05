@@ -115,6 +115,12 @@
           "maximum": 100,
           "description": "Advisory maximum group size. REQUIRED for `mode: group` and `mode: team` (>= 2) and MUST be omitted for `mode: individual`. This is a CONTRACT field, not a hard security ceiling. Legacy group mode: `gh student invite` enforces it as a best-effort guardrail (refusing to add a collaborator past the cap when run from inside the founder's own group repo), but the check is advisory and bypassable (e.g., adding collaborators via the GitHub UI). Team mode: every Classroom 50 client refuses to add a member past the cap at team-formation time, but a student-formed team's maintainer can still bypass it on GitHub directly — clients surface the oversize instead. Retained in the schema/assignments.json so clients such as the GUI can display and enforce it client-side."
         },
+        "retired_group_counters": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "uniqueItems": true,
+          "description": "Team mode only. The counters `n` of group teams deleted through Classroom 50 (the Groups page or `gh teacher team delete`). Deleting a group removes its GitHub team but keeps its repository `<classroom>-<assignment>-group-<n>`, so a later group allocated the same `n` would collide with (or worse, be attached to) the old group's repo (#1128). Every allocator therefore treats a listed counter as taken forever: a new group gets the lowest counter that is neither a live team nor listed here. Written append-only by the teacher tooling on delete; readers tolerate an absent or empty list, and a value is never removed (the repository may still exist). Published to Pages with the rest of the entry so student clients can read it; it carries no personal data."
+        },
         "runtime": { "$ref": "#/$defs/runtime" },
         "tests": {
           "type": "array",

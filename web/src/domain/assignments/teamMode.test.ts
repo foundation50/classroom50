@@ -284,6 +284,9 @@ describe("acceptAssignment team mode", () => {
             default_branch: "main",
             html_url: `https://github.com/${ORG}/${repoName}`,
             ssh_url: `git@github.com:${ORG}/${repoName}.git`,
+            // The team's own repo: a teammate's accept attached the team,
+            // which grants the viewer push (the #1128 gate's fast path).
+            permissions: { admin: false, push: true, pull: true },
           }
         }
         if (
