@@ -6,6 +6,10 @@ import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
 import { githubKeys } from "@/github-core/queries"
+import { CONFIG_REPO } from "@/util/configRepo"
+
+// The assignments.json the delete reports as committed (the row gone).
+const AFTER_DELETE = { schema: "classroom50/assignments/v1", assignments: [] }
 
 // Domain/github-core writes are mocked so each hook test asserts only the
 // hook's own responsibility: that it delegates to the right fn and (where it
@@ -22,8 +26,8 @@ const deleteInviteTeamForEmail = vi.fn<(...args: unknown[]) => Promise<void>>(
 const acceptAssignment = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
   Promise.resolve({ status: "created", repo: {}, cloneCommand: "" }),
 )
-const deleteAssignment = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
-  Promise.resolve(),
+const deleteAssignment = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
+  Promise.resolve({ newCommitSha: "sha-d", assignments: AFTER_DELETE }),
 )
 const unenrollStudent = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
   Promise.resolve({ removed: true }),
@@ -121,8 +125,21 @@ describe("useAcceptAssignment", () => {
 })
 
 describe("thin passthrough hooks delegate to their domain fn", () => {
-  it("useDeleteAssignment delegates the input", async () => {
+  it("useDeleteAssignment delegates the input and seeds assignments.json with the committed file", async () => {
     const queryClient = freshClient()
+    const assignmentsKey = githubKeys.jsonFile(
+      ORG,
+      CONFIG_REPO,
+      `${CLASSROOM}/assignments.json`,
+    )
+    // A pre-delete body in the cache; the seed must replace it, not refetch
+    // it (the contents API can still serve the deleted row for a few seconds).
+    queryClient.setQueryData(assignmentsKey, {
+      schema: "classroom50/assignments/v1",
+      assignments: [{ slug: "hw1" }],
+    })
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+    const cancel = vi.spyOn(queryClient, "cancelQueries")
     const { result } = renderHook(() => useDeleteAssignment(), {
       wrapper: wrapperWith(queryClient),
     })
@@ -130,6 +147,12 @@ describe("thin passthrough hooks delegate to their domain fn", () => {
     result.current.mutate(input)
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(deleteAssignment).toHaveBeenCalledWith(expect.anything(), input)
+
+    expect(queryClient.getQueryData(assignmentsKey)).toEqual(AFTER_DELETE)
+    expect(cancel).toHaveBeenCalledWith({ queryKey: assignmentsKey })
+    expect(invalidate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: assignmentsKey }),
+    )
   })
 
   it("useUnenrollStudent binds org/classroom and passes the student", async () => {

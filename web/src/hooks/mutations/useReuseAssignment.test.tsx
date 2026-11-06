@@ -19,6 +19,7 @@ vi.mock("@/context/githubOrgRole/useIsOrgOwner", () => ({
 }))
 
 import { useReuseAssignment } from "./useReuseAssignment"
+import { githubKeys } from "@/github-core/queries"
 import type { Assignment } from "@/types/classroom"
 
 const source = { slug: "hw1", name: "Homework 1" } as Assignment
@@ -44,11 +45,15 @@ function setup(over: Partial<Parameters<typeof useReuseAssignment>[0]> = {}) {
       }),
     { wrapper },
   )
-  return { ...hook, closeDialog }
+  return { ...hook, closeDialog, queryClient }
 }
 
+// The assignments.json the copy reports as committed; the hook seeds the
+// target classroom's read with it.
+const WRITTEN = { schema: "classroom50/assignments/v1", assignments: [] }
+
 beforeEach(() => {
-  copyAssignment.mockReset().mockResolvedValue({})
+  copyAssignment.mockReset().mockResolvedValue({ assignments: WRITTEN })
 })
 
 describe("useReuseAssignment", () => {
@@ -97,17 +102,23 @@ describe("useReuseAssignment", () => {
     expect(result.current.slugTouched).toBe(false)
   })
 
-  it("copies under the normalized slug and closes on a clean result", async () => {
-    const { result, closeDialog } = setup()
+  it("copies under the normalized slug, seeds the target's assignments.json, and closes on a clean result", async () => {
+    const { result, closeDialog, queryClient } = setup()
     act(() => result.current.onSlugChange("Homework One"))
     act(() => result.current.submit())
 
     await waitFor(() => expect(closeDialog).toHaveBeenCalled())
     expect(copyAssignment.mock.calls[0][1].targetSlug).toBe("homework-one")
+    expect(
+      queryClient.getQueryData(githubKeys.assignmentsFile("acme", "cs102")),
+    ).toEqual(WRITTEN)
   })
 
   it("keeps the dialog open with the grant warning", async () => {
-    copyAssignment.mockResolvedValue({ templateGrantWarning: "owner required" })
+    copyAssignment.mockResolvedValue({
+      assignments: WRITTEN,
+      templateGrantWarning: "owner required",
+    })
     const { result, closeDialog } = setup()
     act(() => result.current.submit())
 

@@ -4,7 +4,7 @@ import type {
   AssignmentPages,
   RepoPermission,
 } from "@/types/classroom"
-import { getUser } from "@/github-core/queries"
+import { getUser, withRetry } from "@/github-core/queries"
 import { studentRepoName } from "@/util/studentRepo"
 import type { PagesEnableReason } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
@@ -58,6 +58,73 @@ import {
   type RepoFeatureApply,
 } from "./acceptSteps"
 import { acceptWithoutSetupCommit } from "./acceptWithoutSetupCommit"
+
+// Both files the accept commit lands; a repo missing either never autogrades.
+async function acceptFilesLanded(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+): Promise<boolean> {
+  const [hasMetadata, hasWorkflow] = await Promise.all([
+    repoContentsPathExists(client, org, repo, ACCEPT_MARKER_PATH),
+    repoContentsPathExists(
+      client,
+      org,
+      repo,
+      ".github/workflows/autograde.yaml",
+    ),
+  ])
+  return hasMetadata && hasWorkflow
+}
+
+// How long after a repo's creation another accept may still be inside its
+// setup commit. Past this, missing files mean that accept died, not that it is
+// running.
+export const ACCEPT_SETUP_WINDOW_MS = 60_000
+
+export function isWithinAcceptSetupWindow(
+  createdAt: string | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (!createdAt) return false
+  const created = Date.parse(createdAt)
+  return Number.isFinite(created) && now - created < ACCEPT_SETUP_WINDOW_MS
+}
+
+class AcceptFilesPending extends Error {}
+
+// Poll for the other accept's files, covering the rest of its setup window.
+// Resolves false (repair) rather than throwing if they never appear.
+async function awaitAcceptFiles(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+): Promise<boolean> {
+  try {
+    await withRetry(
+      async () => {
+        if (!(await acceptFilesLanded(client, org, repo))) {
+          throw new AcceptFilesPending()
+        }
+      },
+      {
+        attempts: 8,
+        shouldRetry: (err) => err instanceof AcceptFilesPending,
+        waitMs: () => 2_000,
+        onRetry: (attempt) =>
+          log.debug("accept: waiting for a concurrent accept's files", {
+            org,
+            repo,
+            attempt: attempt + 1,
+          }),
+      },
+    )
+    return true
+  } catch (err) {
+    if (err instanceof AcceptFilesPending) return false
+    throw err
+  }
+}
 
 // Provision (or heal) a just-created student repo — land the control files,
 // (opt-in) open the Feedback PR, then grant the founder role last. Idempotent,
@@ -757,21 +824,23 @@ export async function acceptAssignment(params: {
     // commit, so a missing workflow means the prior accept failed mid-flow). If
     // either is missing, re-run the idempotent provisioning. (The no-commit
     // shapes returned above; every accept reaching here writes both files.)
-    const [hasMetadata, hasWorkflow] = await Promise.all([
-      repoContentsPathExists(
-        client,
-        org,
-        created.repo.name,
-        ACCEPT_MARKER_PATH,
-      ),
-      repoContentsPathExists(
-        client,
-        org,
-        created.repo.name,
-        ".github/workflows/autograde.yaml",
-      ),
-    ])
-    const provisioned = hasMetadata && hasWorkflow
+    let provisioned = await acceptFilesLanded(client, org, created.repo.name)
+
+    // A repo this young with the files missing is almost always another accept
+    // (a second tab, a double-click) still inside its setup commit, not a dead
+    // one. Repairing now would race that commit on the same branch, so wait
+    // for its files first and only repair if they never land.
+    if (!provisioned && isWithinAcceptSetupWindow(created.repo.created_at)) {
+      onStepUpdate?.({
+        id: "repo",
+        status: "running",
+        message: {
+          key: "accept.steps.repoProvisioningElsewhere",
+          params: { org, repo: created.repo.name },
+        },
+      })
+      provisioned = await awaitAcceptFiles(client, org, created.repo.name)
+    }
 
     if (provisioned) {
       onStepUpdate?.({

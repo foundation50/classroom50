@@ -1,5 +1,9 @@
 import type { GitHubUser } from "@/github-core/types"
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@/github-core/client"
+import {
+  readGitHubRateLimitHeaders,
+  type GitHubRateLimit,
+} from "@/github-core/errors"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 
@@ -7,13 +11,28 @@ const log = logger.scope(LOG_SCOPE_AUTH)
 
 // Carries the HTTP status so callers can branch on auth failures (401) without
 // string-matching the message — e.g., the session-expiry effect in useGithubAuth.
+// Also carries the rate-limit headers: a throttled /user comes back as a 403,
+// which must read as transient rather than a definitive auth verdict.
 export class GitHubUserFetchError extends Error {
   status: number
+  rateLimit: GitHubRateLimit | null
 
-  constructor(status: number) {
+  constructor(status: number, rateLimit: GitHubRateLimit | null = null) {
     super(`GitHub API: HTTP ${status}`)
     this.name = "GitHubUserFetchError"
     this.status = status
+    this.rateLimit = rateLimit
+  }
+
+  // Same rule as GitHubAPIError.isRateLimited: 429, or a 403 whose headers
+  // show the quota exhausted or a Retry-After.
+  get isRateLimited() {
+    return (
+      this.status === 429 ||
+      (this.status === 403 &&
+        this.rateLimit !== null &&
+        (this.rateLimit.remaining === 0 || this.rateLimit.retryAfter !== null))
+    )
   }
 }
 
@@ -33,7 +52,7 @@ export async function fetchGithubUser(token: string): Promise<GitHubUser> {
 
   if (!res.ok) {
     log.warn("GET /user failed", { status: res.status })
-    throw new GitHubUserFetchError(res.status)
+    throw new GitHubUserFetchError(res.status, readGitHubRateLimitHeaders(res))
   }
 
   return res.json()
@@ -57,7 +76,7 @@ export async function fetchGithubUserWithScopes(
 
   if (!res.ok) {
     log.warn("GET /user (PAT validation) failed", { status: res.status })
-    throw new GitHubUserFetchError(res.status)
+    throw new GitHubUserFetchError(res.status, readGitHubRateLimitHeaders(res))
   }
 
   return {

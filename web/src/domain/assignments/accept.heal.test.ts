@@ -67,10 +67,16 @@ function makeClient(opts: {
   markerPresent: boolean
   headParents: { sha: string }[]
   refLagAttempts?: number
+  // The existing repo's created_at; absent models an older GitHubRepo shape.
+  createdAt?: string
+  // Models a concurrent accept whose setup commit lands partway through the
+  // probe: the control files 404 for this many contents reads, then exist.
+  filesLandAfterContentsReads?: number
 }) {
   const treeBodies: TreeBody[] = []
   const requests: string[] = []
   let refReads = 0
+  let contentsReads = 0
   const request = vi.fn(
     async (
       url: string,
@@ -89,13 +95,17 @@ function makeClient(opts: {
         if (opts.repoExists) {
           throw apiError(422, "name already exists on this account")
         }
-        return repoObject()
+        return repoObject(opts.createdAt)
       }
       if (method === "GET" && url === `/repos/${ORG}/${REPO}`) {
-        return repoObject()
+        return repoObject(opts.createdAt)
       }
       if (method === "GET" && url.includes(`/repos/${ORG}/${REPO}/contents/`)) {
-        if (opts.markerPresent) return { type: "file" }
+        contentsReads++
+        const landed =
+          opts.filesLandAfterContentsReads !== undefined &&
+          contentsReads > opts.filesLandAfterContentsReads
+        if (opts.markerPresent || landed) return { type: "file" }
         throw apiError(404, "Not Found")
       }
       if (
@@ -155,7 +165,7 @@ function makeClient(opts: {
   }
 }
 
-function repoObject() {
+function repoObject(createdAt?: string) {
   return {
     name: REPO,
     full_name: `${ORG}/${REPO}`,
@@ -163,6 +173,7 @@ function repoObject() {
     html_url: `https://github.com/${ORG}/${REPO}`,
     ssh_url: `git@github.com:${ORG}/${REPO}.git`,
     private: true,
+    ...(createdAt ? { created_at: createdAt } : {}),
   }
 }
 
@@ -276,6 +287,119 @@ describe("acceptAssignment heal on an init_shim repo", () => {
     // ...but nothing is deleted, and the tree wasn't even inspected for it.
     expect(deletedPaths(treeBodies)).toEqual([])
     expect(requests.some((r) => r.includes("/git/trees/head-tree"))).toBe(false)
+  })
+})
+
+// A second accept (another tab, a double-click) that loses the create race
+// finds the repo with no control files while the winner is still inside its
+// setup commit. Repairing then would race that commit on the same branch, so
+// a young repo is waited on, and only an old one is repaired.
+describe("acceptAssignment on a repo another accept is still provisioning", () => {
+  const commits = (requests: string[]) =>
+    requests.filter(
+      (r) => r.startsWith("PATCH ") && r.endsWith("/git/refs/heads/main"),
+    )
+  // The create step's own labels precede these; only this branch's are listed.
+  const BRANCH_KEYS = new Set([
+    "accept.steps.repoProvisioningElsewhere",
+    "accept.stepDone.repoExists",
+    "accept.stepDone.repoIncomplete",
+  ])
+
+  it("waits for the winner's files instead of repairing, then reports already-accepted", async () => {
+    vi.useFakeTimers()
+    mocked.assignment = INIT_SHIM_ENTRY
+    const { client, requests, treeBodies } = makeClient({
+      repoExists: true,
+      markerPresent: false,
+      headParents: [],
+      createdAt: new Date(Date.now() - 5_000).toISOString(),
+      // First probe (2 reads) misses; the files are there on the next poll.
+      filesLandAfterContentsReads: 2,
+    })
+    const stepMessages: string[] = []
+
+    const pending = acceptAssignment({
+      client,
+      org: ORG,
+      classroom: CLASSROOM,
+      assignmentSlug: SLUG,
+      onStepUpdate: (u) => {
+        if (u.id === "repo" && u.message?.key && BRANCH_KEYS.has(u.message.key))
+          stepMessages.push(u.message.key)
+      },
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    const result = await pending
+
+    expect(result.status).toBe("already-accepted")
+    // Nothing was committed over the other accept's work.
+    expect(commits(requests)).toHaveLength(0)
+    expect(treeBodies).toEqual([])
+    expect(stepMessages).toEqual([
+      "accept.steps.repoProvisioningElsewhere",
+      "accept.stepDone.repoExists",
+    ])
+  })
+
+  it("falls back to repair when the files never land inside the window", async () => {
+    vi.useFakeTimers()
+    mocked.assignment = INIT_SHIM_ENTRY
+    const { client, requests } = makeClient({
+      repoExists: true,
+      markerPresent: false,
+      headParents: [],
+      createdAt: new Date(Date.now() - 5_000).toISOString(),
+    })
+    const stepMessages: string[] = []
+
+    const pending = acceptAssignment({
+      client,
+      org: ORG,
+      classroom: CLASSROOM,
+      assignmentSlug: SLUG,
+      onStepUpdate: (u) => {
+        if (u.id === "repo" && u.message?.key && BRANCH_KEYS.has(u.message.key))
+          stepMessages.push(u.message.key)
+      },
+    })
+    for (let i = 0; i < 10; i++) {
+      await vi.advanceTimersByTimeAsync(2_000)
+    }
+    const result = await pending
+
+    expect(result.status).toBe("already-accepted")
+    expect(commits(requests)).toHaveLength(1)
+    expect(stepMessages).toEqual([
+      "accept.steps.repoProvisioningElsewhere",
+      "accept.stepDone.repoIncomplete",
+    ])
+  })
+
+  it("repairs an old unprovisioned repo immediately", async () => {
+    mocked.assignment = INIT_SHIM_ENTRY
+    const { client, requests } = makeClient({
+      repoExists: true,
+      markerPresent: false,
+      headParents: [],
+      createdAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+    })
+    const stepMessages: string[] = []
+
+    const result = await acceptAssignment({
+      client,
+      org: ORG,
+      classroom: CLASSROOM,
+      assignmentSlug: SLUG,
+      onStepUpdate: (u) => {
+        if (u.id === "repo" && u.message?.key && BRANCH_KEYS.has(u.message.key))
+          stepMessages.push(u.message.key)
+      },
+    })
+
+    expect(result.status).toBe("already-accepted")
+    expect(commits(requests)).toHaveLength(1)
+    expect(stepMessages).toEqual(["accept.stepDone.repoIncomplete"])
   })
 })
 

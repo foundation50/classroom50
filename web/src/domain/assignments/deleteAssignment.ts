@@ -40,6 +40,7 @@ export async function deleteAssignment(
     previousCommitSha: ctx.headSha,
     baseTreeSha: ctx.baseTreeSha,
     ...written,
+    assignments: nextAssignments,
   }
 }
 

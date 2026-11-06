@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys, invalidateGroupTeams } from "@/github-core/queries"
+import { invalidateGroupTeams, seedTeamsFile } from "@/github-core/queries"
 import { deleteGroupTeam } from "@/domain/teams/groupTeams"
 import {
   removeTeamFromSnapshot,
   writeTeamsFile,
+  type TeamsFileWrite,
 } from "@/domain/teams/teamsFile"
 import { logger } from "@/lib/logger"
 
@@ -26,7 +27,10 @@ export function useDeleteGroupTeam(params: {
 
   return useMutation({
     meta: { keepTabOpen: true },
-    mutationFn: async (input: { slug: string; id: number }) => {
+    mutationFn: async (input: {
+      slug: string
+      id: number
+    }): Promise<TeamsFileWrite | undefined> => {
       await deleteGroupTeam(client, org, {
         slug: input.slug,
         id: input.id,
@@ -34,7 +38,7 @@ export function useDeleteGroupTeam(params: {
         assignment,
       })
       try {
-        await writeTeamsFile(client, {
+        return await writeTeamsFile(client, {
           org,
           classroom,
           message: `Update teams: ${classroom}/${assignment}`,
@@ -49,13 +53,12 @@ export function useDeleteGroupTeam(params: {
           slug: input.slug,
           err,
         })
+        return undefined
       }
     },
-    onSuccess: (_data, input) => {
+    onSuccess: (written, input) => {
       invalidateGroupTeams(queryClient, org, classroom, assignment, input.slug)
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.teamsFile(org, classroom),
-      })
+      seedTeamsFile(queryClient, org, classroom, written)
     },
   })
 }
