@@ -690,8 +690,9 @@ describe("buildTeamRoster — CSV-only rows do not render (team-driven)", () => 
 })
 
 describe("githubOrgRoleForRole / roleForGitHubOrgRole — classroom<->org role mapping", () => {
-  it("maps teacher to org OWNER (admin), student/ta to direct_member", () => {
-    expect(githubOrgRoleForRole("teacher")).toBe("admin")
+  it("keeps every classroom role an ordinary organization member", () => {
+    expect(githubOrgRoleForRole("teacher")).toBe("direct_member")
+    expect(githubOrgRoleForRole("hta")).toBe("direct_member")
     expect(githubOrgRoleForRole("ta")).toBe("direct_member")
     expect(githubOrgRoleForRole("student")).toBe("direct_member")
   })
@@ -705,9 +706,9 @@ describe("githubOrgRoleForRole / roleForGitHubOrgRole — classroom<->org role m
     expect(roleForGitHubOrgRole("member")).toBe("student")
   })
 
-  it("round-trips teacher (the security-sensitive owner grant)", () => {
+  it("does not infer teacher access from an ordinary organization invitation", () => {
     expect(roleForGitHubOrgRole(githubOrgRoleForRole("teacher"))).toBe(
-      "teacher",
+      "student",
     )
   })
 })
