@@ -2,7 +2,7 @@ module github.com/foundation50/gh-student
 
 go 1.26.7
 
-toolchain go1.26.9
+toolchain go1.26.11
 
 require (
 	github.com/cli/go-gh/v2 v2.17.0
@@ -26,11 +26,11 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/thlib/go-timezone-local v0.0.9 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/term v0.47.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/term v0.48.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 )
 
 replace github.com/foundation50/classroom50-cli-shared => ../shared
