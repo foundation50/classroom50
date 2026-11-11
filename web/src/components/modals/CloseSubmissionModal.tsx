@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { CalendarIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
@@ -157,7 +157,22 @@ export function CloseSubmissionModal({
             .map((o) => o.owner)
         : [],
     )
-    setHasNotApplied(closing && failed.some(isNotApplied))
+    const hasNotApplied = closing && failed.some(isNotApplied)
+    setHasNotApplied(hasNotApplied)
+    // The hint under the result explains kept roles once, so each such row
+    // keeps only its fact instead of repeating the shared full explanation.
+    const failedRows = hasNotApplied
+      ? failed.map((o) =>
+          isNotApplied(o)
+            ? {
+                ...o,
+                detail: t("submissions.closeSubmission.keptRole", {
+                  effective: o.effective ?? "unknown",
+                }),
+              }
+            : o,
+        )
+      : failed
     bulk.complete(
       {
         headline: t(headlineKey, { count: succeeded.length, total }),
@@ -168,7 +183,7 @@ export function CloseSubmissionModal({
             deferred: "submissions.closeSubmission.deferredSection",
             deferredDetail: "submissions.closeSubmission.deferredDetail",
           },
-          { failed, deferred },
+          { failed: failedRows, deferred },
           displayFor,
         ),
       },
@@ -304,7 +319,12 @@ export function CloseSubmissionModal({
                       {t("submissions.closeSubmission.notAppliedHint.team")}
                     </li>
                   </ul>
-                  <p>{t("submissions.closeSubmission.notAppliedHint.next")}</p>
+                  <p>
+                    <Trans
+                      i18nKey="submissions.closeSubmission.notAppliedHint.next"
+                      components={{ b: <span className="font-semibold" /> }}
+                    />
+                  </p>
                 </div>
               </Alert>
             )}

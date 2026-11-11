@@ -3398,12 +3398,13 @@
       "reopenApply": "Reopen submission",
       "finishHint": "The submission is closed to new students, but some repositories are not yet read-only. Finish closing to retry only those. This does not reopen the submission.",
       "finishApply": "Finish closing",
+      "keptRole": "GitHub kept the existing role ({{effective}}).",
       "notAppliedHint": {
-        "lead": "The submission is closed to new students, but GitHub kept a higher role for the students listed above, so they still have write access. Retrying won't change this. A role GitHub keeps comes from one of these:",
+        "lead": "The students listed above still have write access. GitHub kept a higher role that closing can't lower. It comes from one of these:",
         "owner": "An organization owner role",
         "admin": "A repository admin or creator role",
         "team": "A team or organization base permission that grants write",
-        "next": "Remove that grant or transfer repository ownership, then use Update student repo access to set those repositories to read."
+        "next": "Remove that role or permission, or transfer the repository. Then use <b>Update student repo access</b> to set the repository to read."
       },
       "flagError": "The submission window couldn't be updated, so no repositories were changed. Try again.",
       "working": "Updating repositories",
@@ -4157,7 +4158,7 @@
         "needsAdmin": "You need admin access on this repository to change its collaborators.",
         "adminWarning": "Set each collaborator's role, or add and remove collaborators. <b>Admin</b> lets a collaborator change repository settings and manage collaborators; the organization safety defaults still block members from changing a repository's visibility.",
         "studentBadge": "Student",
-        "notApplied": "GitHub kept the existing role ({{effective}}). A repository creator can't be downgraded below admin. Ask the student to lower their own access, or transfer repository ownership.",
+        "notApplied": "GitHub kept the existing role ({{effective}}). A higher grant still applies: an organization owner or repository creator role, or a team or base permission. Remove that grant or transfer the repository, then set the role again.",
         "roleFor": "Role for {{username}}",
         "newRole": "Role for the new collaborator",
         "removeUser": "Remove {{username}}",

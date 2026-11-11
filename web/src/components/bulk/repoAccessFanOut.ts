@@ -34,14 +34,20 @@ export const describeAccessFailure = (
 
 // A silently-ignored write is marked `notApplied` so callers can tell a
 // deterministic miss (a role GitHub won't lower, e.g. an org owner's) from a
-// transient failure that a retry could fix.
-export type BulkAccessOutcome =
-  | FanOutOutcome
-  | { owner: string; status: "failed"; detail?: string; notApplied: true }
+// transient failure that a retry could fix. `effective` is the role that stuck.
+export type NotAppliedOutcome = {
+  owner: string
+  status: "failed"
+  detail?: string
+  notApplied: true
+  effective?: string
+}
+export type BulkAccessOutcome = FanOutOutcome | NotAppliedOutcome
 export type BulkAccessResult = FanOutResult<BulkAccessOutcome>
 
-export const isNotApplied = (outcome: BulkAccessOutcome): boolean =>
-  "notApplied" in outcome
+export const isNotApplied = (
+  outcome: BulkAccessOutcome,
+): outcome is NotAppliedOutcome => "notApplied" in outcome
 
 type RunBulkRepoAccessParams = {
   owners: string[]
@@ -128,6 +134,7 @@ export async function runBulkRepoAccess({
             status: "failed",
             detail: describeAccessFailure(err, t),
             notApplied: true,
+            effective: err.effective,
           }
         }
         throw err

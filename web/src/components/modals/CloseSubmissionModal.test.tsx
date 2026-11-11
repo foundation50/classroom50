@@ -296,6 +296,13 @@ describe("CloseSubmissionModal", () => {
     expect(
       screen.getByText("submissions.closeSubmission.notAppliedHint.lead"),
     ).toBeTruthy()
+    // The row keeps only its fact; the hint carries the explanation once.
+    expect(
+      screen.getByText("submissions.closeSubmission.keptRole"),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText("components.modals.repoAccess.notApplied"),
+    ).toBeNull()
     expect(
       screen.queryByText("submissions.closeSubmission.finishApply"),
     ).toBeNull()
