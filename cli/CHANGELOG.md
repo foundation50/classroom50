@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.59.1](https://github.com/foundation50/classroom50/compare/cli-v1.59.0...cli-v1.59.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **deps:** resolve katex alert and update npm, Go, and Python deps ([#1155](https://github.com/foundation50/classroom50/issues/1155)) ([65f3258](https://github.com/foundation50/classroom50/commit/65f32587057ba1dfa22fe2ad5235f4be4bc2ef58))
+
 ## [1.59.0](https://github.com/foundation50/classroom50/compare/cli-v1.58.5...cli-v1.59.0) (2026-11-01)
 
 
