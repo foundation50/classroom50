@@ -17,6 +17,15 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.59.1](https://github.com/foundation50/classroom50/compare/web-v1.59.0...web-v1.59.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **deps:** override minimatch to 11 for the globparts DoS alert ([#1156](https://github.com/foundation50/classroom50/issues/1156)) ([0dbf975](https://github.com/foundation50/classroom50/commit/0dbf975cb50a168861f5066ac7225a373fce886d))
+* **deps:** resolve katex alert and update npm, Go, and Python deps ([#1155](https://github.com/foundation50/classroom50/issues/1155)) ([65f3258](https://github.com/foundation50/classroom50/commit/65f32587057ba1dfa22fe2ad5235f4be4bc2ef58))
+* **web:** stop "Finish closing" from reopening every repo ([#1153](https://github.com/foundation50/classroom50/issues/1153)) ([5fab940](https://github.com/foundation50/classroom50/commit/5fab940f0f4d2c20866dbe227b22535da5fa9a5e))
+
 ## [1.59.0](https://github.com/foundation50/classroom50/compare/web-v1.58.5...web-v1.59.0) (2026-11-01)
 
 
