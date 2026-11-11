@@ -3398,6 +3398,13 @@
       "reopenApply": "Reopen submission",
       "finishHint": "The submission is closed to new students, but some repositories are not yet read-only. Finish closing to retry only those. This does not reopen the submission.",
       "finishApply": "Finish closing",
+      "notAppliedHint": {
+        "lead": "The submission is closed to new students, but GitHub kept a higher role for the students listed above, so they still have write access. Retrying won't change this. A role GitHub keeps comes from one of these:",
+        "owner": "An organization owner role",
+        "admin": "A repository admin or creator role",
+        "team": "A team or organization base permission that grants write",
+        "next": "Remove that grant or transfer repository ownership, then use Update student repo access to set those repositories to read."
+      },
       "flagError": "The submission window couldn't be updated, so no repositories were changed. Try again.",
       "working": "Updating repositories",
       "progress": "Updated {{processed}} of {{total}}",

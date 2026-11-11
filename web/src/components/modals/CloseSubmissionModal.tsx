@@ -9,7 +9,10 @@ import {
   useOwnerDisplayName,
   partitionOutcomes,
 } from "@/components/bulk/fanOut"
-import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
+import {
+  isNotApplied,
+  runBulkRepoAccess,
+} from "@/components/bulk/repoAccessFanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
@@ -46,7 +49,15 @@ export function CloseSubmissionModal({
   students = [],
 }: CloseSubmissionModalProps) {
   const { t } = useTranslation()
-  const closing = mode === "close"
+  // The parent derives `mode` from the assignment's `closed` flag, which this
+  // run flips FIRST, so the prop swaps to "reopen" mid-run once the listing
+  // refetches. Freeze the direction the run started with: otherwise the
+  // "Finish closing" retry (and the title) would follow the prop and re-grant
+  // write to every repo (#1152).
+  const [startedMode, setStartedMode] = useState<"close" | "reopen" | null>(
+    null,
+  )
+  const closing = (startedMode ?? mode) === "close"
   const permission: RepoPermission = closing ? "pull" : "push"
   const addCollaboratorMutation = useAddRepoCollaborator()
   const setClosed = useSetAssignmentClosed(org, classroom)
@@ -55,30 +66,39 @@ export function CloseSubmissionModal({
   // The flag write failed before any repo was touched; `bulk.error` carries
   // the phase, this carries which alert to show.
   const [flagError, setFlagError] = useState(false)
-  // True after a close run that flipped the flag but left some repos not
-  // read-only (deferred/failed). The flag is committed (new accepts are
-  // blocked), so the recovery is to re-run the read-only fan-out WITHOUT
-  // reopening — reopening would re-grant write first. Drives the "finish
-  // closing" affordance so a throttled close isn't stuck offering only Reopen.
-  const [fanOutIncomplete, setFanOutIncomplete] = useState(false)
+  // Owners a close run left not read-only for a reason a re-run could fix
+  // (deferred or transiently failed). The flag is already committed (new
+  // accepts are blocked), so the recovery is "Finish closing": re-run the
+  // read-only fan-out over just these, WITHOUT reopening, which would re-grant
+  // write first. Kept roles (`notApplied`, see BulkAccessOutcome) are left out.
+  const [pendingOwners, setPendingOwners] = useState<string[]>([])
+  const fanOutIncomplete = pendingOwners.length > 0
+  // A close run hit kept roles: explain instead of offering a retry.
+  const [hasNotApplied, setHasNotApplied] = useState(false)
 
   // The modal's own flags reset with the run state, on open (see useBulkRun).
   useEffect(() => {
     if (!open) return
+    setStartedMode(null)
     setFlagError(false)
-    setFanOutIncomplete(false)
+    setPendingOwners([])
+    setHasNotApplied(false)
   }, [open])
 
-  const total = owners.length
+  const accepted = owners.length
   const displayFor = useOwnerDisplayName(students)
 
-  // Set every accepted student's role on their own repo. `flipFlag` runs the
-  // full close/reopen (flag flip first, then fan-out); `finishOnly` skips the
-  // flag flip and re-runs just the fan-out to finish an interrupted close.
+  // Set each target student's role on their own repo. `flipFlag` runs the full
+  // close/reopen over every accepted owner (flag flip first, then fan-out); a
+  // finish-only run skips the flip and retries just the pending owners.
   const run = async ({ flipFlag }: { flipFlag: boolean }) => {
+    const targets = flipFlag ? owners : pendingOwners
+    const total = targets.length
     if (!bulk.begin(total)) return
+    if (flipFlag) setStartedMode(mode)
     setFlagError(false)
-    setFanOutIncomplete(false)
+    setPendingOwners([])
+    setHasNotApplied(false)
 
     // Flip the window flag FIRST: closing must block new accepts even if the
     // per-repo fan-out is later throttled or partially fails. If this write
@@ -99,7 +119,7 @@ export function CloseSubmissionModal({
     }
 
     const { outcomes, rateLimited } = await runBulkRepoAccess({
-      owners,
+      owners: targets,
       org,
       classroom,
       assignment,
@@ -130,7 +150,14 @@ export function CloseSubmissionModal({
 
     // Closing left some repos not read-only: the flag is committed, so offer a
     // finish-only re-run (no reopen) instead of stranding the teacher.
-    setFanOutIncomplete(closing && (failed.length > 0 || deferred.length > 0))
+    setPendingOwners(
+      closing
+        ? outcomes
+            .filter((o) => o.status !== "ok" && !isNotApplied(o))
+            .map((o) => o.owner)
+        : [],
+    )
+    setHasNotApplied(closing && failed.some(isNotApplied))
     bulk.complete(
       {
         headline: t(headlineKey, { count: succeeded.length, total }),
@@ -162,9 +189,9 @@ export function CloseSubmissionModal({
       }
       subtitle={
         closing
-          ? t("submissions.closeSubmission.subtitle", { count: total })
+          ? t("submissions.closeSubmission.subtitle", { count: accepted })
           : t("submissions.closeSubmission.reopenSubtitle", {
-              count: total,
+              count: accepted,
             })
       }
       headerVisual={
@@ -212,16 +239,16 @@ export function CloseSubmissionModal({
     >
       {phase === "idle" && (
         <div className="mt-4 flex flex-col gap-4">
-          {total === 0 ? (
+          {accepted === 0 ? (
             <Alert tone="info" className="text-sm">
               {t("submissions.closeSubmission.noRepos")}
             </Alert>
           ) : (
             <Alert tone="warning" className="text-sm">
               {closing
-                ? t("submissions.closeSubmission.warning", { count: total })
+                ? t("submissions.closeSubmission.warning", { count: accepted })
                 : t("submissions.closeSubmission.reopenWarning", {
-                    count: total,
+                    count: accepted,
                   })}
             </Alert>
           )}
@@ -256,11 +283,32 @@ export function CloseSubmissionModal({
         phase={phase}
         result={result}
         after={
-          fanOutIncomplete ? (
-            <Alert tone="info" className="text-sm">
-              {t("submissions.closeSubmission.finishHint")}
-            </Alert>
-          ) : null
+          <>
+            {fanOutIncomplete && (
+              <Alert tone="info" className="text-sm">
+                {t("submissions.closeSubmission.finishHint")}
+              </Alert>
+            )}
+            {hasNotApplied && (
+              <Alert tone="info" className="text-sm">
+                <div className="flex flex-col gap-2">
+                  <p>{t("submissions.closeSubmission.notAppliedHint.lead")}</p>
+                  <ul className="list-disc ps-5">
+                    <li>
+                      {t("submissions.closeSubmission.notAppliedHint.owner")}
+                    </li>
+                    <li>
+                      {t("submissions.closeSubmission.notAppliedHint.admin")}
+                    </li>
+                    <li>
+                      {t("submissions.closeSubmission.notAppliedHint.team")}
+                    </li>
+                  </ul>
+                  <p>{t("submissions.closeSubmission.notAppliedHint.next")}</p>
+                </div>
+              </Alert>
+            )}
+          </>
         }
       />
     </Modal>
