@@ -205,7 +205,7 @@ $$`}
       expect(container.querySelector(".katex-error")).not.toBeNull(),
     )
     // maxSize clamps the 5000em rule to 500em; without it KaTeX emits 5000em.
-    const rule = container.querySelector<HTMLElement>(".rule")
+    const rule = container.querySelector<HTMLElement>(".katex-rule")
     expect(rule?.style.borderRightWidth).toBe("500em")
     // maxExpand turns the infinite \def loop into an error chip.
     expect(container.querySelector(".katex-error")?.textContent).toContain(

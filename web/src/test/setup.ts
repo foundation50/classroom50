@@ -1,12 +1,11 @@
-// happy-dom >= 21 implements Element.animate(), so motion drives Web Animations
-// in the node suite. Its Animation.cancel() rejects `finished` without marking
-// the promise handled, which the Web Animations spec requires and browsers do;
-// vitest then reports every cancelled animation as an unhandled rejection.
-// Attach the no-op handler ourselves until capricorn86/happy-dom#2412 ships.
-if (typeof Animation !== "undefined") {
-  const cancel = Animation.prototype.cancel
-  Animation.prototype.cancel = function (this: Animation) {
-    this.finished.catch(() => {})
-    cancel.call(this)
-  }
+// happy-dom >= 21 implements Element.animate(), but only partially (no
+// Animation.commitStyles(), startTime stays null, ...). motion >= 14.7 composes
+// an element's independent transforms (y, scale, ...) into one WAAPI animation
+// and, under happy-dom, the toast exit stalls part-way through so AnimatePresence
+// never unmounts it (NotificationProvider.test.tsx). motion detects WAAPI via
+// `Element.prototype.hasOwnProperty("animate")`, so dropping it here sends every
+// animation through motion's own frame loop, as before happy-dom 21. The
+// Chromium project still exercises the real WAAPI path.
+if (typeof Element !== "undefined") {
+  Reflect.deleteProperty(Element.prototype, "animate")
 }
