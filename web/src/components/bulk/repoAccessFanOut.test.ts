@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { isNotApplied, runBulkRepoAccess } from "./repoAccessFanOut"
+import {
+  isNotApplied,
+  runBulkGroupRepoAccess,
+  runBulkRepoAccess,
+} from "./repoAccessFanOut"
 import { GitHubAPIError } from "@/github-core/errors"
 
 const t = ((key: string) => key) as never
@@ -116,6 +120,120 @@ describe("runBulkRepoAccess progress tracking", () => {
     })
 
     expect(outcomes.every((o) => o.status === "deferred")).toBe(true)
+    expect(setCollaborator).not.toHaveBeenCalled()
+  })
+})
+
+describe("runBulkGroupRepoAccess", () => {
+  const base = {
+    org: "o",
+    permission: "pull" as const,
+    treatRequestedAsFloor: false,
+    t,
+    isMounted: () => true,
+    onProgress: () => {},
+  }
+
+  it("sets the team (when there is one) and every direct collaborator", async () => {
+    const setCollaborator = vi.fn().mockResolvedValue({ effective: undefined })
+    const setTeamPermission = vi.fn().mockResolvedValue(undefined)
+    const listCollaborators = vi.fn(async (_org: string, repo: string) =>
+      repo === "r-team"
+        ? [{ login: "dana" }]
+        : [{ login: "alice" }, { login: "bob" }],
+    )
+
+    const { outcomes } = await runBulkGroupRepoAccess({
+      ...base,
+      targets: [
+        { owner: "group-1", repoName: "r-team", teamSlug: "t-1" },
+        { owner: "alice", repoName: "r-legacy" },
+      ],
+      setCollaborator,
+      setTeamPermission,
+      listCollaborators,
+    })
+
+    expect(outcomes.map((o) => o.status)).toEqual(["ok", "ok"])
+    expect(setTeamPermission).toHaveBeenCalledTimes(1)
+    expect(setTeamPermission).toHaveBeenCalledWith({
+      org: "o",
+      teamSlug: "t-1",
+      repo: "r-team",
+      permission: "pull",
+    })
+    expect(
+      setCollaborator.mock.calls
+        .map(([p]) => `${p.repo}:${p.username}`)
+        .toSorted(),
+    ).toEqual(["r-legacy:alice", "r-legacy:bob", "r-team:dana"])
+  })
+
+  it("reports a group whose only misses are kept roles as notApplied, naming them", async () => {
+    const setCollaborator = vi.fn().mockImplementation(({ username }) =>
+      Promise.resolve({
+        effective:
+          username === "alice"
+            ? { permission: "admin", role_name: "admin" }
+            : undefined,
+      }),
+    )
+
+    const { outcomes } = await runBulkGroupRepoAccess({
+      ...base,
+      targets: [{ owner: "alice", repoName: "r" }],
+      setCollaborator,
+      setTeamPermission: vi.fn(),
+      listCollaborators: async () => [{ login: "alice" }, { login: "bob" }],
+    })
+
+    expect(outcomes[0].status).toBe("failed")
+    expect(isNotApplied(outcomes[0])).toBe(true)
+    expect(isNotApplied(outcomes[0]) && outcomes[0].members).toEqual([
+      "alice (admin)",
+    ])
+    // The other member was still set: a kept role doesn't stop the group.
+    expect(setCollaborator).toHaveBeenCalledTimes(2)
+  })
+
+  it("a transient member failure fails the group as retryable, not notApplied", async () => {
+    const setCollaborator = vi.fn().mockImplementation(({ username }) =>
+      username === "bob"
+        ? Promise.reject(apiError(500))
+        : Promise.resolve({
+            effective: { permission: "admin", role_name: "admin" },
+          }),
+    )
+
+    const { outcomes } = await runBulkGroupRepoAccess({
+      ...base,
+      targets: [{ owner: "alice", repoName: "r" }],
+      setCollaborator,
+      setTeamPermission: vi.fn(),
+      listCollaborators: async () => [{ login: "alice" }, { login: "bob" }],
+    })
+
+    expect(outcomes[0].status).toBe("failed")
+    expect(isNotApplied(outcomes[0])).toBe(false)
+  })
+
+  it("a rate-limited team write defers the remaining groups", async () => {
+    const setTeamPermission = vi.fn().mockRejectedValue(apiError(429))
+    const setCollaborator = vi.fn()
+
+    const { outcomes, rateLimited } = await runBulkGroupRepoAccess({
+      ...base,
+      targets: [
+        { owner: "group-1", repoName: "r1", teamSlug: "t-1" },
+        { owner: "group-2", repoName: "r2", teamSlug: "t-2" },
+      ],
+      setCollaborator,
+      setTeamPermission,
+      listCollaborators: async () => [],
+    })
+
+    expect(rateLimited).toBe(true)
+    expect(outcomes.map((o) => o.status)).toContain("deferred")
     expect(setCollaborator).not.toHaveBeenCalled()
   })
 })

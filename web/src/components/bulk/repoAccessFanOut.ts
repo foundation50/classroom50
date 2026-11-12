@@ -35,12 +35,14 @@ export const describeAccessFailure = (
 // A silently-ignored write is marked `notApplied` so callers can tell a
 // deterministic miss (a role GitHub won't lower, e.g. an org owner's) from a
 // transient failure that a retry could fix. `effective` is the role that stuck.
+// On a shared repo `members` names each "login (role)" GitHub kept.
 export type NotAppliedOutcome = {
   owner: string
   status: "failed"
   detail?: string
   notApplied: true
   effective?: string
+  members?: string[]
 }
 export type BulkAccessOutcome = FanOutOutcome | NotAppliedOutcome
 export type BulkAccessResult = FanOutResult<BulkAccessOutcome>
@@ -49,21 +51,23 @@ export const isNotApplied = (
   outcome: BulkAccessOutcome,
 ): outcome is NotAppliedOutcome => "notApplied" in outcome
 
+// Set every accepted student's role on their OWN repo. Returns the verified
+// effective permission (undefined when the read-back lagged / 404'd).
+export type SetCollaborator = (params: {
+  org: string
+  repo: string
+  username: string
+  permission: RepoPermission
+  verify: boolean
+}) => Promise<{ effective?: { permission?: string; role_name?: string } }>
+
 type RunBulkRepoAccessParams = {
   owners: string[]
   org: string
   classroom: string
   assignment: string
   permission: RepoPermission
-  // Set every accepted student's role on their OWN repo. Returns the verified
-  // effective permission (undefined when the read-back lagged / 404'd).
-  setCollaborator: (params: {
-    org: string
-    repo: string
-    username: string
-    permission: RepoPermission
-    verify: boolean
-  }) => Promise<{ effective?: { permission?: string; role_name?: string } }>
+  setCollaborator: SetCollaborator
   // How a residual (read-back) role is judged against the requested one:
   //   - false (exact "=="): a residual ABOVE the requested role is the
   //     over-access a downgrade must catch — fail loudly. Use for a lockdown.
@@ -77,6 +81,37 @@ type RunBulkRepoAccessParams = {
   // Called after each owner is processed (success, failure, or deferral) with
   // the running processed count and the owner just handled.
   onProgress: (processed: number, owner: string) => void
+}
+
+// One verified collaborator write; throws AccessNotAppliedError when the
+// read-back shows GitHub kept a role the request should have changed.
+async function setAndVerifyCollaborator(params: {
+  setCollaborator: SetCollaborator
+  org: string
+  repo: string
+  username: string
+  permission: RepoPermission
+  treatRequestedAsFloor: boolean
+}): Promise<void> {
+  const { setCollaborator, org, repo, username, permission } = params
+  const { effective } = await setCollaborator({
+    org,
+    repo,
+    username,
+    permission,
+    verify: true,
+  })
+  if (
+    effective &&
+    !permissionSatisfies(
+      effective.permission,
+      effective.role_name,
+      permission,
+      params.treatRequestedAsFloor,
+    )
+  ) {
+    throw new AccessNotAppliedError(effective.role_name || effective.permission)
+  }
 }
 
 // The shared bounded repo-access fan-out used by every whole-assignment access
@@ -105,26 +140,14 @@ export async function runBulkRepoAccess({
     perOwner: async (owner) => {
       const repo = studentRepoName(classroom, assignment, owner)
       try {
-        const { effective } = await setCollaborator({
+        await setAndVerifyCollaborator({
+          setCollaborator,
           org,
           repo,
           username: owner,
           permission,
-          verify: true,
+          treatRequestedAsFloor,
         })
-        if (
-          effective &&
-          !permissionSatisfies(
-            effective.permission,
-            effective.role_name,
-            permission,
-            treatRequestedAsFloor,
-          )
-        ) {
-          throw new AccessNotAppliedError(
-            effective.role_name || effective.permission,
-          )
-        }
       } catch (err) {
         // The generic fan-out only knows the shared vocabulary; give the
         // not-applied case its own line before it becomes a plain failure.
@@ -138,6 +161,102 @@ export async function runBulkRepoAccess({
           }
         }
         throw err
+      }
+    },
+  })
+}
+
+// One shared repo of a group or team assignment, keyed by the row owner (the
+// founder login, or `group-<n>` in team mode). `teamSlug` is the GitHub team
+// that holds the repo in team mode; legacy group repos have none.
+export type GroupAccessTarget = {
+  owner: string
+  repoName: string
+  teamSlug?: string
+}
+
+type RunBulkGroupRepoAccessParams = Omit<
+  RunBulkRepoAccessParams,
+  "owners" | "classroom" | "assignment"
+> & {
+  targets: GroupAccessTarget[]
+  listCollaborators: (org: string, repo: string) => Promise<{ login: string }[]>
+  setTeamPermission: (params: {
+    org: string
+    teamSlug: string
+    repo: string
+    permission: RepoPermission
+  }) => Promise<unknown>
+}
+
+// The shared-repo sibling of runBulkRepoAccess: one unit of work per group repo.
+// Access to a shared repo comes from two places, so both are set: the group's
+// team (team mode; the team PUT can't be silently ignored, so it isn't read
+// back) and every direct collaborator (the founder in both flavors, plus each
+// member in a legacy group). A group whose only misses are kept roles reports
+// `notApplied` with the members GitHub kept; any other failure fails the group
+// so a retry covers it whole.
+export async function runBulkGroupRepoAccess({
+  targets,
+  org,
+  permission,
+  setCollaborator,
+  listCollaborators,
+  setTeamPermission,
+  treatRequestedAsFloor,
+  t,
+  isMounted,
+  onProgress,
+}: RunBulkGroupRepoAccessParams): Promise<BulkAccessResult> {
+  const byOwner = new Map(targets.map((target) => [target.owner, target]))
+  return runBulkFanOut<BulkAccessOutcome>({
+    owners: targets.map((target) => target.owner),
+    isMounted,
+    onProgress,
+    t,
+    perOwner: async (owner) => {
+      const target = byOwner.get(owner)
+      if (!target) return
+      if (target.teamSlug) {
+        await setTeamPermission({
+          org,
+          teamSlug: target.teamSlug,
+          repo: target.repoName,
+          permission,
+        })
+      }
+      const members = await listCollaborators(org, target.repoName)
+      const kept: string[] = []
+      // Sequential: a group is a handful of logins, and the per-group fan-out
+      // already runs several groups at once.
+      for (const member of members) {
+        try {
+          await setAndVerifyCollaborator({
+            setCollaborator,
+            org,
+            repo: target.repoName,
+            username: member.login,
+            permission,
+            treatRequestedAsFloor,
+          })
+        } catch (err) {
+          if (err instanceof AccessNotAppliedError) {
+            kept.push(`${member.login} (${err.effective ?? "unknown"})`)
+            continue
+          }
+          throw err
+        }
+      }
+      if (kept.length > 0) {
+        return {
+          owner,
+          status: "failed",
+          detail: t("components.modals.repoAccess.notAppliedMembers", {
+            members: kept.join(", "),
+          }),
+          notApplied: true,
+          members: kept,
+        }
       }
     },
   })

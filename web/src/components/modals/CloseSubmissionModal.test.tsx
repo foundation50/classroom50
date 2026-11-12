@@ -25,7 +25,27 @@ vi.mock("@/hooks/mutations/useSetAssignmentClosed", () => ({
   useSetAssignmentClosed: () => ({ mutateAsync: setClosedMutateAsync }),
 }))
 
-import { CloseSubmissionModal } from "./CloseSubmissionModal"
+const setTeamPermissionMutateAsync = vi.fn()
+vi.mock("@/hooks/mutations/useSetTeamRepoPermission", () => ({
+  default: () => ({ mutateAsync: setTeamPermissionMutateAsync }),
+  useSetTeamRepoPermission: () => ({
+    mutateAsync: setTeamPermissionMutateAsync,
+  }),
+}))
+
+const listDirectCollaborators = vi.fn()
+vi.mock("@/github-core/repoReads", () => ({
+  listDirectCollaborators: (...args: unknown[]) =>
+    listDirectCollaborators(...args),
+}))
+vi.mock("@/context/github/GitHubProvider", () => ({
+  useGitHubClient: () => ({}),
+}))
+
+import {
+  CloseSubmissionModal,
+  type CloseSubmissionTargets,
+} from "./CloseSubmissionModal"
 import { GitHubAPIError } from "@/github-core/errors"
 
 function apiError(status: number): GitHubAPIError {
@@ -49,6 +69,13 @@ afterEach(() => {
   cleanup()
   addMutateAsync.mockReset()
   setClosedMutateAsync.mockReset()
+  setTeamPermissionMutateAsync.mockReset()
+  listDirectCollaborators.mockReset()
+})
+
+const individual = (owners: string[]): CloseSubmissionTargets => ({
+  kind: "individual",
+  owners,
 })
 
 function renderModal(mode: "close" | "reopen", owners: string[]) {
@@ -60,7 +87,7 @@ function renderModal(mode: "close" | "reopen", owners: string[]) {
       classroom="cs"
       assignment="hw1"
       mode={mode}
-      owners={owners}
+      targets={individual(owners)}
     />,
   )
 }
@@ -247,7 +274,7 @@ describe("CloseSubmissionModal", () => {
         classroom="cs"
         assignment="hw1"
         mode="reopen"
-        owners={["alice", "bob"]}
+        targets={individual(["alice", "bob"])}
       />,
     )
     // The result still reads as a close, not a reopen.
@@ -403,7 +430,7 @@ describe("CloseSubmissionModal", () => {
       org: "o",
       classroom: "cs",
       assignment: "hw1",
-      owners: ["alice"],
+      targets: individual(["alice"]),
     }
     view.rerender(<CloseSubmissionModal {...props} open={false} mode="close" />)
     view.rerender(<CloseSubmissionModal {...props} open mode="reopen" />)
@@ -447,7 +474,7 @@ describe("CloseSubmissionModal", () => {
           classroom="cs"
           assignment="hw1"
           mode="reopen"
-          owners={["alice", "bob"]}
+          targets={individual(["alice", "bob"])}
         />,
       )
       return Promise.reject(apiError(429))
@@ -522,5 +549,223 @@ describe("CloseSubmissionModal", () => {
     expect(
       screen.queryByText("submissions.closeSubmission.failedSection"),
     ).toBeNull()
+  })
+})
+
+describe("CloseSubmissionModal on shared repos", () => {
+  function renderGroupModal(
+    mode: "close" | "reopen",
+    repos: Extract<CloseSubmissionTargets, { kind: "group" }>["repos"],
+  ) {
+    return render(
+      <CloseSubmissionModal
+        open
+        onClose={() => {}}
+        org="o"
+        classroom="cs"
+        assignment="hw1"
+        mode={mode}
+        targets={{ kind: "group", repos }}
+      />,
+    )
+  }
+
+  it("legacy group: shows the group copy and sets every direct collaborator to pull", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    listDirectCollaborators.mockImplementation((_client, _org, repo: string) =>
+      Promise.resolve(
+        repo === "cs-hw1-alice"
+          ? [{ login: "alice" }, { login: "bob" }]
+          : [{ login: "carol" }],
+      ),
+    )
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    renderGroupModal("close", [
+      { owner: "alice", repoName: "cs-hw1-alice" },
+      { owner: "carol", repoName: "cs-hw1-carol" },
+    ])
+
+    expect(
+      screen.getByText("submissions.closeSubmission.warningGroup"),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(setClosedMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ closed: true }),
+    )
+    // No team in the legacy flavor: only collaborator writes.
+    expect(setTeamPermissionMutateAsync).not.toHaveBeenCalled()
+    expect(
+      addMutateAsync.mock.calls
+        .map(([p]) => `${p.repo}:${p.username}:${p.permission}`)
+        .toSorted(),
+    ).toEqual([
+      "cs-hw1-alice:alice:pull",
+      "cs-hw1-alice:bob:pull",
+      "cs-hw1-carol:carol:pull",
+    ])
+  })
+
+  it("team mode: sets the team's role first, then the direct collaborators", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    const order: string[] = []
+    setTeamPermissionMutateAsync.mockImplementation((p) => {
+      order.push(`team:${p.teamSlug}:${p.permission}`)
+      return Promise.resolve()
+    })
+    listDirectCollaborators.mockResolvedValue([{ login: "dana" }])
+    addMutateAsync.mockImplementation((p) => {
+      order.push(`collab:${p.username}:${p.permission}`)
+      return Promise.resolve({ effective: undefined })
+    })
+    renderGroupModal("close", [
+      {
+        owner: "group-1",
+        repoName: "cs-hw1-group-1",
+        teamSlug: "cs-hw1-group-1",
+        label: "Team Rocket",
+      },
+    ])
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(setTeamPermissionMutateAsync).toHaveBeenCalledWith({
+      org: "o",
+      teamSlug: "cs-hw1-group-1",
+      repo: "cs-hw1-group-1",
+      permission: "pull",
+    })
+    expect(order).toEqual(["team:cs-hw1-group-1:pull", "collab:dana:pull"])
+  })
+
+  it("team mode reopen restores push on the team and the collaborators", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: false })
+    setTeamPermissionMutateAsync.mockResolvedValue(undefined)
+    listDirectCollaborators.mockResolvedValue([{ login: "dana" }])
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    renderGroupModal("reopen", [
+      { owner: "group-1", repoName: "cs-hw1-group-1", teamSlug: "t-1" },
+    ])
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.reopenApply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.reopenResultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(setTeamPermissionMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ permission: "push" }),
+    )
+    expect(addMutateAsync.mock.calls[0][0]).toMatchObject({
+      username: "dana",
+      permission: "push",
+    })
+  })
+
+  it("names the members GitHub kept, lists the group by its label, and offers no retry", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    listDirectCollaborators.mockResolvedValue([
+      { login: "alice" },
+      { login: "bob" },
+    ])
+    // alice is an org owner: her role sticks; bob's write lands.
+    addMutateAsync.mockImplementation(({ username }: { username: string }) =>
+      Promise.resolve({
+        effective:
+          username === "alice"
+            ? { permission: "admin", role_name: "admin" }
+            : undefined,
+      }),
+    )
+    renderGroupModal("close", [
+      { owner: "alice", repoName: "cs-hw1-alice", label: "Alice's group" },
+    ])
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.failedSection"),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText("Alice's group")).toBeTruthy()
+    expect(
+      screen.getByText("submissions.closeSubmission.keptRoleMembers"),
+    ).toBeTruthy()
+    expect(
+      screen.getByText("submissions.closeSubmission.notAppliedHint.leadGroup"),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText("submissions.closeSubmission.finishApply"),
+    ).toBeNull()
+  })
+
+  it("a failed collaborator read fails the whole group and offers finish closing for it", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    listDirectCollaborators.mockImplementation((_client, _org, repo: string) =>
+      repo === "cs-hw1-alice"
+        ? Promise.reject(apiError(500))
+        : Promise.resolve([{ login: "carol" }]),
+    )
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    renderGroupModal("close", [
+      { owner: "alice", repoName: "cs-hw1-alice" },
+      { owner: "carol", repoName: "cs-hw1-carol" },
+    ])
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.finishApply"),
+      ).toBeTruthy(),
+    )
+
+    // Finish closing retries only alice's group.
+    listDirectCollaborators.mockReset()
+    listDirectCollaborators.mockResolvedValue([{ login: "alice" }])
+    addMutateAsync.mockReset()
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    fireEvent.click(screen.getByText("submissions.closeSubmission.finishApply"))
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(setClosedMutateAsync).toHaveBeenCalledTimes(1)
+    expect(listDirectCollaborators.mock.calls.map((c) => c[2])).toEqual([
+      "cs-hw1-alice",
+    ])
+    expect(addMutateAsync.mock.calls.map(([p]) => p.username)).toEqual([
+      "alice",
+    ])
+  })
+
+  it("closes with no group repos yet: flips the flag, shows the group empty state", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    renderGroupModal("close", [])
+
+    expect(
+      screen.getByText("submissions.closeSubmission.noReposGroup"),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+
+    await waitFor(() =>
+      expect(setClosedMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ closed: true }),
+      ),
+    )
+    expect(listDirectCollaborators).not.toHaveBeenCalled()
+    expect(addMutateAsync).not.toHaveBeenCalled()
   })
 })
