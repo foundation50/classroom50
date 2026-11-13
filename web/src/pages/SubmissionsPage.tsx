@@ -37,7 +37,10 @@ import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsM
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { CloneSubmissionsModal } from "@/pages/submissions/CloneSubmissionsModal"
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
-import { CloseSubmissionModal } from "@/components/modals/CloseSubmissionModal"
+import {
+  CloseSubmissionModal,
+  type CloseSubmissionTargets,
+} from "@/components/modals/CloseSubmissionModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
 import { BulkRepoVisibilityModal } from "@/components/modals/BulkRepoVisibilityModal"
 import { BulkRepoPagesModal } from "@/components/modals/BulkRepoPagesModal"
@@ -251,8 +254,8 @@ const SubmissionsPageContent = () => {
   const skipsGrading = assignmentResolved
     ? assignmentSkipsGrading(assignmentInfo)
     : false
-  // The narrower bare-repo case: no control files, so no bulk repo management,
-  // Feedback PR, or close toggle. A no_autograder repo is initialized and has them.
+  // The narrower bare-repo case: no control files, so no bulk repo management
+  // or Feedback PR. A no_autograder repo is initialized and has them.
   const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
   // Locked assignments are closed to students (accept + submission surfaces
   // refuse them); the gradebook stays fully functional for staff, so this is a
@@ -1054,6 +1057,47 @@ const SubmissionsPageContent = () => {
     [scopedScores],
   )
   const acceptedOwners = useMemo(() => [...acceptedSet], [acceptedSet])
+  // What Close/Reopen submission sets: each accepted student's own repo, or
+  // every existing shared repo (through its team in team mode). Staff who are
+  // direct collaborators on a shared repo are left alone in both directions.
+  const closeSubmissionTargets = useMemo<CloseSubmissionTargets>(
+    () =>
+      isGroupFlavor
+        ? {
+            kind: "group",
+            repos: groupRepoList.map((repo) => {
+              const key = repo.owner.toLowerCase()
+              const label = groupDisplayNames?.get(key)
+              return isTeamAssignment
+                ? {
+                    kind: "team",
+                    owner: repo.owner,
+                    repoName: repo.repoName,
+                    teamSlug: teamByOwner.get(key)?.slug,
+                    label,
+                  }
+                : {
+                    kind: "group",
+                    owner: repo.owner,
+                    repoName: repo.repoName,
+                    label,
+                  }
+            }),
+            studentPermission: assignmentInfo?.student_permission,
+            staffLogins: new Set(staffRoles.keys()),
+          }
+        : { kind: "individual", owners: acceptedOwners },
+    [
+      isGroupFlavor,
+      isTeamAssignment,
+      groupRepoList,
+      teamByOwner,
+      groupDisplayNames,
+      assignmentInfo?.student_permission,
+      staffRoles,
+      acceptedOwners,
+    ],
+  )
 
   // Top-line counts over the (section-scoped) submitted set + roster size.
   const stats = useMemo(
@@ -1730,15 +1774,19 @@ const SubmissionsPageContent = () => {
                   canRegradeAll ? () => setLockConfirmOpen(true) : undefined
                 }
                 closed={isClosedAssignment}
-                // Close/reopen submission: authoring tier + individual, non-empty
-                // repo shape (a group repo's membership is founder-managed). Unlike
-                // bulk access it does NOT require acceptedSet.size > 0 — closing
-                // still blocks future accepts when no one has accepted yet.
+                // Close/reopen submission: authoring tier + org owner (the role
+                // writes need admin on every repo). Any repo shape: the modal
+                // sets a shared repo through its team and collaborators, and a
+                // bare repo's founder is a collaborator like any other. Team
+                // mode also waits for the team listing, since a target built
+                // before it settles has no team to lower. Unlike bulk access it
+                // does NOT require acceptedSet.size > 0 — closing still blocks
+                // future accepts when no one has accepted yet.
                 onCloseToggle={
                   canRegradeAll &&
                   isOwner &&
-                  !isGroupFlavor &&
-                  !isEmptyRepoAssignment
+                  assignmentResolved &&
+                  (!isTeamAssignment || teamsSettled)
                     ? () => setCloseSubmissionOpen(true)
                     : undefined
                 }
@@ -2114,7 +2162,7 @@ const SubmissionsPageContent = () => {
         classroom={classroom}
         assignment={assignment}
         mode={isClosedAssignment ? "reopen" : "close"}
-        owners={acceptedOwners}
+        targets={closeSubmissionTargets}
         students={students}
       />
     </PageShell>

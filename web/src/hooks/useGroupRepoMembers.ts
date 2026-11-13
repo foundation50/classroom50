@@ -9,6 +9,7 @@ import {
   retryOnRateLimit,
   withGithubReadSlot,
 } from "@/github-core/queries"
+import { listDirectCollaborators } from "@/github-core/repoReads"
 import type { GitHubUser } from "@/github-core/types"
 import { mapWithConcurrency } from "@/util/concurrency"
 
@@ -60,16 +61,14 @@ export function useGroupRepoMemberLogins(
           // teammate as "no group" — the exact #245 state this exists to fix.
           // Degrade to "that repo's members unknown" instead.
           try {
-            // affiliation=direct excludes org-inherited access (owners/admins),
-            // matching useGetRepoCollaborators so both share one cache entry.
-            // Through the shared read slot (+ rate-limit retry) so this fan-out
-            // and the live-submissions fan-out share one concurrency budget on
-            // the same page load rather than each bursting to REPO_READ_CONCURRENCY.
+            // Direct only, matching useGetRepoCollaborators so both share one
+            // cache entry. Through the shared read slot (+ rate-limit retry) so
+            // this fan-out and the live-submissions fan-out share one
+            // concurrency budget on the same page load rather than each
+            // bursting to REPO_READ_CONCURRENCY.
             const collaborators = await withGithubReadSlot(() =>
               retryOnRateLimit(() =>
-                client.request<GitHubUser[]>(
-                  `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
-                ),
+                listDirectCollaborators(client, org, repo),
               ),
             )
             // Prime the per-repo cache the rows and Members modal read from.

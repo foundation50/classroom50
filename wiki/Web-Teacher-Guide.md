@@ -1187,10 +1187,11 @@ order:
   autograder, once students have accepted; a single repository can also be
   paused from its row.
 - **Close submission** / **Reopen submission** (owners): close the submission
-  window: block new accepts and set every student's repository to read-only
-  (work is preserved). This is the enforcement mechanism for due dates; the due
-  date itself only marks submissions late. **Reopen submission** restores write
-  access.
+  window: block new accepts and set every assignment repository to read-only
+  (work is preserved). On a group or team assignment this sets each shared
+  repository to read-only for the group's team and every member. This is the
+  enforcement mechanism for due dates; the due date itself only marks
+  submissions late. **Reopen submission** restores write access.
 - **Lock assignment** / **Unlock assignment**: lock the assignment so students
   can't access or accept it (and, for a private template, remove the student
   team's read on it); unlock reopens it and restores template access. The same

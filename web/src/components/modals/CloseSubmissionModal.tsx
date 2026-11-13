@@ -11,12 +11,38 @@ import {
 } from "@/components/bulk/fanOut"
 import {
   isNotApplied,
+  runBulkGroupRepoAccess,
   runBulkRepoAccess,
+  type GroupAccessTarget,
+  type SetCollaborator,
 } from "@/components/bulk/repoAccessFanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
+import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { founderPermission } from "@/domain/assignments/permissions"
+import { listDirectCollaborators } from "@/github-core/repoReads"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
+import useSetTeamRepoPermission from "@/hooks/mutations/useSetTeamRepoPermission"
 import type { RepoPermission, Student } from "@/types/classroom"
+
+// A shared repo plus the name the result lists it under (the team's display
+// name in team mode; a legacy group falls back to the founder's roster name).
+export type GroupCloseTarget = GroupAccessTarget & { label?: string }
+
+// What the fan-out sets. Individual: each accepted student's own repo, by
+// login. Group and team: each existing shared repo.
+export type CloseSubmissionTargets =
+  | { kind: "individual"; owners: string[] }
+  | {
+      kind: "group"
+      repos: GroupCloseTarget[]
+      // The assignment's student_permission, which reopen hands back to a
+      // legacy founder through founderPermission (admin, so they can still
+      // manage members) instead of a flat push.
+      studentPermission?: RepoPermission
+      // Lowercased classroom staff logins; their direct roles are left alone.
+      staffLogins?: ReadonlySet<string>
+    }
 
 type CloseSubmissionModalProps = {
   open: boolean
@@ -27,17 +53,16 @@ type CloseSubmissionModalProps = {
   // "close" ends the submission window (block new accepts, repos -> read);
   // "reopen" reverses it (allow accepts, repos -> write).
   mode: "close" | "reopen"
-  // The accepted students (their own login = their repo's owner segment).
-  owners: string[]
+  targets: CloseSubmissionTargets
   students?: Student[]
 }
 
 // Close/reopen the submission window as one action: flip the assignment's
-// `closed` flag, then fan out over the accepted set setting each student's role
-// on their OWN repo (read on close, write on reopen). Sibling of
-// BulkRepoAccessModal — reuses its bounded-fan-out shape, but the permission is
-// fixed by `mode` and the flag flip runs first (so new accepts are blocked even
-// if the fan-out is partially throttled). Individual assignments only.
+// `closed` flag, then fan out over the existing repos setting each one to read
+// (close) or write (reopen). Sibling of BulkRepoAccessModal — reuses its
+// bounded-fan-out shape, but the permission is fixed by `mode` and the flag
+// flip runs first (so new accepts are blocked even if the fan-out is partially
+// throttled). A shared repo is set through its team and its collaborators.
 export function CloseSubmissionModal({
   open,
   onClose,
@@ -45,10 +70,11 @@ export function CloseSubmissionModal({
   classroom,
   assignment,
   mode,
-  owners,
+  targets,
   students = [],
 }: CloseSubmissionModalProps) {
   const { t } = useTranslation()
+  const client = useGitHubClient()
   // The parent derives `mode` from the assignment's `closed` flag, which this
   // run flips FIRST, so the prop swaps to "reopen" mid-run once the listing
   // refetches. Freeze the direction the run started with: otherwise the
@@ -60,6 +86,7 @@ export function CloseSubmissionModal({
   const closing = (startedMode ?? mode) === "close"
   const permission: RepoPermission = closing ? "pull" : "push"
   const addCollaboratorMutation = useAddRepoCollaborator()
+  const setTeamPermission = useSetTeamRepoPermission()
   const setClosed = useSetAssignmentClosed(org, classroom)
   const bulk = useBulkRun(open)
   const { phase, progress, result, busy } = bulk
@@ -85,15 +112,55 @@ export function CloseSubmissionModal({
     setHasNotApplied(false)
   }, [open])
 
-  const accepted = owners.length
-  const displayFor = useOwnerDisplayName(students)
+  const isGroup = targets.kind === "group"
+  const allOwners =
+    targets.kind === "group"
+      ? targets.repos.map((repo) => repo.owner)
+      : targets.owners
+  const accepted = allOwners.length
+  const ownerDisplayName = useOwnerDisplayName(students)
+  const displayFor = (owner: string): string => {
+    const label =
+      targets.kind === "group"
+        ? targets.repos.find((repo) => repo.owner === owner)?.label
+        : undefined
+    return label ?? ownerDisplayName(owner)
+  }
+  // The copy that names what the fan-out touches: a student's own repository,
+  // or a group's shared one. Spelled out as literals for the i18n audit.
+  const copyKeys = isGroup
+    ? {
+        subtitle: "submissions.closeSubmission.subtitleGroup",
+        reopenSubtitle: "submissions.closeSubmission.reopenSubtitleGroup",
+        noRepos: "submissions.closeSubmission.noReposGroup",
+        warning: "submissions.closeSubmission.warningGroup",
+        reopenWarning: "submissions.closeSubmission.reopenWarningGroup",
+        notAppliedLead: "submissions.closeSubmission.notAppliedHint.leadGroup",
+        notAppliedNext: "submissions.closeSubmission.notAppliedHint.nextGroup",
+      }
+    : {
+        subtitle: "submissions.closeSubmission.subtitle",
+        reopenSubtitle: "submissions.closeSubmission.reopenSubtitle",
+        noRepos: "submissions.closeSubmission.noRepos",
+        warning: "submissions.closeSubmission.warning",
+        reopenWarning: "submissions.closeSubmission.reopenWarning",
+        notAppliedLead: "submissions.closeSubmission.notAppliedHint.lead",
+        notAppliedNext: "submissions.closeSubmission.notAppliedHint.next",
+      }
 
-  // Set each target student's role on their own repo. `flipFlag` runs the full
-  // close/reopen over every accepted owner (flag flip first, then fan-out); a
-  // finish-only run skips the flip and retries just the pending owners.
+  // Set each target repo's roles. `flipFlag` runs the full close/reopen over
+  // every existing repo (flag flip first, then fan-out); a finish-only run skips
+  // the flip and retries just the pending owners. The retry resolves pending
+  // owners against the CURRENT repo list, so a repo that has since vanished is
+  // dropped from the count rather than reported as never processed.
   const run = async ({ flipFlag }: { flipFlag: boolean }) => {
-    const targets = flipFlag ? owners : pendingOwners
-    const total = targets.length
+    const pending = flipFlag ? allOwners : pendingOwners
+    const groupTargets =
+      targets.kind === "group"
+        ? targets.repos.filter((repo) => pending.includes(repo.owner))
+        : []
+    const total =
+      targets.kind === "group" ? groupTargets.length : pending.length
     if (!bulk.begin(total)) return
     if (flipFlag) setStartedMode(mode)
     setFlagError(false)
@@ -118,13 +185,12 @@ export function CloseSubmissionModal({
       }
     }
 
-    const { outcomes, rateLimited } = await runBulkRepoAccess({
-      owners: targets,
+    const setCollaborator: SetCollaborator = (params) =>
+      addCollaboratorMutation.mutateAsync(params)
+    const fanOut = {
       org,
-      classroom,
-      assignment,
       permission,
-      setCollaborator: (params) => addCollaboratorMutation.mutateAsync(params),
+      setCollaborator,
       // On close (downgrade to pull), a residual role ABOVE pull is the
       // over-access a lockdown must catch, so compare exactly. On reopen
       // (restore push), a residual at or above write is benign — treat the
@@ -133,9 +199,36 @@ export function CloseSubmissionModal({
       treatRequestedAsFloor: !closing,
       t,
       isMounted: bulk.isMounted,
-      onProgress: (processed) =>
+      onProgress: (processed: number) =>
         bulk.setProgress({ processed, total, message: "" }),
-    })
+    }
+    const { outcomes, rateLimited } =
+      targets.kind === "group"
+        ? await runBulkGroupRepoAccess({
+            ...fanOut,
+            targets: groupTargets,
+            listCollaborators: (org, repo) =>
+              listDirectCollaborators(client, org, repo),
+            setTeamPermission: (params) =>
+              setTeamPermission.mutateAsync(params),
+            skipLogins: targets.staffLogins,
+            // Reopen gives a legacy founder back the role accept granted
+            // (admin, so they can still manage members); everyone else gets
+            // the flat direction. Close lowers all of them alike.
+            permissionFor: closing
+              ? undefined
+              : (target, login) =>
+                  target.kind === "group" &&
+                  login.toLowerCase() === target.owner.toLowerCase()
+                    ? founderPermission("group", targets.studentPermission)
+                    : permission,
+          })
+        : await runBulkRepoAccess({
+            ...fanOut,
+            owners: pending,
+            classroom,
+            assignment,
+          })
     if (!bulk.isMounted()) return
 
     const { succeeded, deferred, failed } = partitionOutcomes(outcomes)
@@ -166,9 +259,13 @@ export function CloseSubmissionModal({
           isNotApplied(o)
             ? {
                 ...o,
-                detail: t("submissions.closeSubmission.keptRole", {
-                  effective: o.effective ?? "unknown",
-                }),
+                detail: o.members
+                  ? t("submissions.closeSubmission.keptRoleMembers", {
+                      members: o.members.join(", "),
+                    })
+                  : t("submissions.closeSubmission.keptRole", {
+                      effective: o.effective ?? "unknown",
+                    }),
               }
             : o,
         )
@@ -204,10 +301,8 @@ export function CloseSubmissionModal({
       }
       subtitle={
         closing
-          ? t("submissions.closeSubmission.subtitle", { count: accepted })
-          : t("submissions.closeSubmission.reopenSubtitle", {
-              count: accepted,
-            })
+          ? t(copyKeys.subtitle, { count: accepted })
+          : t(copyKeys.reopenSubtitle, { count: accepted })
       }
       headerVisual={
         <ModalIcon tone="warning">
@@ -256,15 +351,13 @@ export function CloseSubmissionModal({
         <div className="mt-4 flex flex-col gap-4">
           {accepted === 0 ? (
             <Alert tone="info" className="text-sm">
-              {t("submissions.closeSubmission.noRepos")}
+              {t(copyKeys.noRepos)}
             </Alert>
           ) : (
             <Alert tone="warning" className="text-sm">
               {closing
-                ? t("submissions.closeSubmission.warning", { count: accepted })
-                : t("submissions.closeSubmission.reopenWarning", {
-                    count: accepted,
-                  })}
+                ? t(copyKeys.warning, { count: accepted })
+                : t(copyKeys.reopenWarning, { count: accepted })}
             </Alert>
           )}
         </div>
@@ -307,7 +400,7 @@ export function CloseSubmissionModal({
             {hasNotApplied && (
               <Alert tone="info" className="text-sm">
                 <div className="flex flex-col gap-2">
-                  <p>{t("submissions.closeSubmission.notAppliedHint.lead")}</p>
+                  <p>{t(copyKeys.notAppliedLead)}</p>
                   <ul className="list-disc ps-5">
                     <li>
                       {t("submissions.closeSubmission.notAppliedHint.owner")}
@@ -321,7 +414,7 @@ export function CloseSubmissionModal({
                   </ul>
                   <p>
                     <Trans
-                      i18nKey="submissions.closeSubmission.notAppliedHint.next"
+                      i18nKey={copyKeys.notAppliedNext}
                       components={{ b: <span className="font-semibold" /> }}
                     />
                   </p>

@@ -1,6 +1,19 @@
 import type { GitHubClient } from "./client"
-import type { GitHubRepo } from "./types"
+import type { GitHubRepo, GitHubUser } from "./types"
 import { GitHubAPIError, tolerateGitHubError } from "./errors"
+
+// `affiliation=direct` leaves out access inherited from an org role or a team,
+// so on a classroom repo this is the founder plus any members added by hand,
+// never the org owners who hold admin on every repo.
+export function listDirectCollaborators(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+): Promise<GitHubUser[]> {
+  return client.request<GitHubUser[]>(
+    `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
+  )
+}
 
 export async function getRepo(
   client: GitHubClient,

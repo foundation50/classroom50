@@ -56,9 +56,10 @@ is blocked. Autograding also keeps running after the due date, so a late
 submission still gets a score (marked late). When you want an actual cutoff:
 
 - **Close submission** (in the **Actions** menu) blocks new accepts and sets
-  every student's repository to read-only. Work is preserved, and students
-  keep read access. **Reopen submission** restores write access, useful when
-  a project continues in a follow-up course.
+  every assignment repository to read-only, including group and team
+  repositories. Work is preserved, and students keep read access. **Reopen
+  submission** restores write access, useful when a project continues in a
+  follow-up course.
 - **Update student repo access** in the same menu gives finer control, such
   as dropping everyone to read-only while you grade and restoring write
   afterward.
