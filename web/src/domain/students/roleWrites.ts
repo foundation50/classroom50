@@ -5,7 +5,6 @@ import {
   grantTeamConfigRepoAccess,
   readOrgMembershipState,
   removeUserFromTeam,
-  setOrgMembershipRole,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { assertClassroomNotArchived } from "../classrooms"
@@ -13,7 +12,6 @@ import {
   getRawFile,
   getUser,
   listAllOrgMembers,
-  listOrgAdmins,
   listTeamMembers,
 } from "@/github-core/queries"
 import { getAuthenticatedUser } from "@/domain/queries/users"
@@ -397,34 +395,7 @@ export type ApplyClassroomRoleChangeResult = {
 }
 
 // Apply a CONFIRMED role change (or an additive enroll) for an active org
-// member: move them onto the CSV role's team and off every other classroom
-// team. The caller must only invoke this for a member the preflight classified
-// as `role_change` or `enroll` and — for a teacher target or a demotion off
-// teacher — the teacher confirmed, since it grants/revokes org-OWNER.
-//
-// Ordering is chosen so a mid-sequence failure never leaves ELEVATED access
-// dangling:
-//  0) Before any change, refuse an org-OWNER revocation that would be
-//     self-inflicted or strip the last owner (self-demotion / sole-owner
-//     demotion) — both are unrecoverable-in-place, so they're blocked outright.
-//  1) Demote org owner -> member FIRST when leaving teacher for a
-//     non-teacher role. Done before any team change, so if it throws we abort
-//     with the member unchanged (still teacher + owner) rather than
-//     half-moved-but-still-owner. If a LATER step fails after this committed,
-//     the error explicitly says the owner was revoked so the caller re-runs.
-//  2) Add to the target team (student -> classroom team; a staff role -> its
-//     staff team, created + granted that role's config-repo access — write for
-//     teacher/hta, read-only for ta — if missing), then promote
-//     to org owner when the target is teacher.
-//  3) Remove from EVERY currently-held classroom team that isn't the target
-//     (best-effort — a failed drop is a warning, since the target add + any
-//     owner change already landed). Dropping all non-target teams (not just the
-//     primary) means a member on both the teacher and TA teams moved to
-//     student leaves neither staff team behind.
-//
-// NEVER team-adds a non-member (that would create a stray team invitation); the
-// preflight only produces role_change/enroll for active members, and this
-// re-verifies.
+// Classroom role changes never grant or revoke organization ownership.
 export async function applyClassroomRoleChange(
   client: GitHubClient,
   input: ApplyClassroomRoleChangeInput,
@@ -451,94 +422,18 @@ export async function applyClassroomRoleChange(
   const slugForRole = (role: ClassroomRole): string =>
     role === "student" ? slugs.student : slugs.staff[role]
 
-  // Teacher is the org-owner role.
-  const wasTeacher = fromRoles.some(isTeacherRole)
-  const toIsTeacher = isTeacherRole(toRole)
-  const demotesOwner = wasTeacher && !toIsTeacher
-
-  // Guard the org-OWNER revocation before touching anything. Demoting yourself
-  // strips your own admin mid-operation (you may then lose permission to finish
-  // the very move you started); demoting the sole owner leaves the org with no
-  // owner. Both are refused outright rather than half-applied. listOrgAdmins is
-  // owner-only and returns [] on 403 — the acting owner can read it, so a
-  // confirmed single-owner set is trustworthy; an unreadable ([]) list does not
-  // block (preserves the prior fail-open behavior for a degraded read).
-  if (demotesOwner) {
-    const viewer = await getAuthenticatedUser(client)
-    if (isSameGitHubUser(viewer, { github_id: input.github_id, username })) {
-      throw new Error(
-        `You can't demote yourself from teacher here — it would revoke ` +
-          `your own organization-owner access mid-change. Ask another owner ` +
-          `to change your role.`,
-      )
-    }
-    const admins = await listOrgAdmins(client, org)
-    const soleOwner =
-      admins.length === 1 &&
-      isSameGitHubUser(admins[0], { github_id: input.github_id, username })
-    if (soleOwner) {
-      throw new Error(
-        `${username} is the only organization owner, so they can't be demoted ` +
-          `from teacher — promote another owner first.`,
-      )
-    }
-  }
-
-  // 0) Resolve the target staff team before anything irreversible: a refusal
-  // (a team at the slug that isn't ours) after the owner demote would strand
-  // the member demoted and on no team.
   const targetTeam =
     toRole === "student"
       ? undefined
       : await ensureClassroomRoleTeam(client, org, classroom, toRole)
-
-  // 1) Demote org owner FIRST when leaving teacher for a non-teacher role.
-  // Doing this before any team mutation guarantees a failure here leaves the
-  // member fully unchanged (still owner) rather than partially moved but still
-  // an owner — the dangerous partial state.
-  let ownerRevoked = false
-  try {
-    if (demotesOwner) {
-      await setOrgMembershipRole(client, { org, username, role: "member" })
-      ownerRevoked = true
-    }
-
-    // 2) Add to the target team (config write), then promote to org owner for
-    // a teacher target.
-    if (toRole === "student" || !targetTeam) {
-      await addUserToTeam(client, {
-        org,
-        teamSlug: slugs.student,
-        username,
-        role: "member",
-      })
-    } else {
-      const team = targetTeam
-      await grantTeamConfigRepoAccess(client, org, team.slug, toRole)
-      await addUserToTeam(client, {
-        org,
-        teamSlug: team.slug,
-        username,
-        role: "member",
-      })
-    }
-    if (toIsTeacher) {
-      await setOrgMembershipRole(client, { org, username, role: "admin" })
-    }
-  } catch (err) {
-    // A failure AFTER the owner demote committed leaves the member no longer an
-    // owner but not yet on the target team — a half-applied elevated-access
-    // change the caller must know to re-run, not a silent generic failure.
-    if (ownerRevoked) {
-      throw new Error(
-        `${username} was demoted from organization owner, but moving them to ` +
-          `the ${toRole} team then failed (${getErrorMessage(err)}). Re-run ` +
-          `the role change to finish the move.`,
-        { cause: err },
-      )
-    }
-    throw err
-  }
+  if (targetTeam && toRole !== "student")
+    await grantTeamConfigRepoAccess(client, org, targetTeam.slug, toRole)
+  await addUserToTeam(client, {
+    org,
+    teamSlug: targetTeam?.slug ?? slugs.student,
+    username,
+    role: "member",
+  })
 
   // 3) Remove from EVERY currently-held classroom team except the target
   // (best-effort). Dedupe so a role held twice isn't dropped twice.
