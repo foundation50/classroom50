@@ -2720,6 +2720,47 @@ describe("filterDisplayList", () => {
       }
     }
   })
+
+  it("pages a team assignment the same way when rows sort by display name", () => {
+    // Both recipes must receive the same display-name map: a spine without it
+    // would page by counter while the table pages by name (#1157).
+    const teamRows = [
+      row({ owner: "group-1", usernames: ["alice"] }),
+      row({ owner: "group-2", usernames: ["bob"] }),
+    ]
+    const groupDisplayNames = new Map([
+      ["group-1", "Zebras"],
+      ["group-2", "Ants"],
+      ["group-3", "Moths"],
+    ])
+    for (const sort of ["name-first", "name-last", "recent"] as const) {
+      const args = {
+        ...base,
+        rows: teamRows,
+        nonSubmitters: [],
+        groupRepos: [{ owner: "group-3", repoName: "cs101-hw1-group-3" }],
+        groupDisplayNames,
+        sort,
+      }
+      const spine = displayPageOwners({
+        ...filterDisplayList(args),
+        isGroup: true,
+        sort,
+        students,
+        groupDisplayNames,
+        page: 0,
+        pageSize: 10,
+      })
+      const table = tableOwners(
+        filterDisplayList(args),
+        true,
+        students,
+        sort,
+        groupDisplayNames,
+      )
+      expect(spine, sort).toEqual(table)
+    }
+  })
 })
 
 // The table's own display-list assembly (SubmissionsTable.displayItems), so the
@@ -2730,6 +2771,7 @@ function tableOwners(
   isGroup: boolean,
   students: Student[],
   sort: SubmissionSort,
+  groupDisplayNames?: ReadonlyMap<string, string>,
 ): string[] {
   const nameSort = sort === "name-first" || sort === "name-last"
   const items = isGroup
@@ -2740,6 +2782,7 @@ function tableOwners(
           students,
           sort === "name-last" ? "last" : "first",
           inputs.teamsWithoutRepos,
+          groupDisplayNames,
         )
       : buildGroupDisplayItems(
           inputs.rows,
@@ -2963,6 +3006,34 @@ describe("displayPageOwners", () => {
     // Page 1 holds only the repo-less team: a slot, but no owner to read.
     expect(displayPageOwners({ ...args, page: 1 })).toEqual([])
   })
+
+  it("teams: pages by display name under a name sort, like the table (#1157)", () => {
+    // The fan-out must read the repos on the page the teacher sees. With the
+    // table sorting team rows by display name, a spine still paging by counter
+    // would fan out group-1 and group-2 while the first page shows A1A and C3A.
+    const args = {
+      isGroup: true,
+      sort: "name-first" as const,
+      students,
+      rows: [
+        row({ owner: "group-1", usernames: ["cara"] }),
+        row({ owner: "group-2", usernames: ["bob"] }),
+      ],
+      nonSubmitters: [],
+      groupRepos: [{ owner: "group-3", repoName: "cs-hw-group-3" }],
+      groupDisplayNames: new Map([
+        ["group-1", "Z9Z"],
+        ["group-2", "A1A"],
+        ["group-3", "C3A"],
+      ]),
+      pageSize: 2,
+    }
+    expect(displayPageOwners({ ...args, page: 0 })).toEqual([
+      "group-2",
+      "group-3",
+    ])
+    expect(displayPageOwners({ ...args, page: 1 })).toEqual(["group-1"])
+  })
 })
 
 describe("teamsWithoutRepos", () => {
@@ -3180,9 +3251,10 @@ describe("pagination helpers", () => {
     })
 
     it("interleaves a repo-less team with the other team rows by counter", () => {
-      // Team owners (`group-<n>`) miss the roster name map, so every team row
-      // keys on the owner segment with numeric collation — group-2 sorts
-      // between group-1 and group-10 regardless of which row kind carries it.
+      // Without a display-name map, team owners (`group-<n>`) miss the roster
+      // name map, so every team row falls back to the owner segment with
+      // numeric collation — group-2 sorts between group-1 and group-10
+      // regardless of which row kind carries it.
       const items = buildGroupRosterDisplayItems(
         [row({ owner: "group-10" })],
         [groupRepo("group-1")],
@@ -3200,6 +3272,99 @@ describe("pagination helpers", () => {
         "teamNoRepo",
         "row",
       ])
+    })
+
+    it("orders team rows by their display name, not the creation counter (#1157)", () => {
+      // Groups created in the order B2A (group-1), A1A (group-2), C3A (group-3,
+      // no repo yet). The teacher reads the names, so the sort must too.
+      const items = buildGroupRosterDisplayItems(
+        [row({ owner: "group-1" })],
+        [groupRepo("group-2")],
+        [],
+        "first",
+        [teamRef(3)],
+        new Map([
+          ["group-1", "B2A"],
+          ["group-2", "A1A"],
+          ["group-3", "C3A"],
+        ]),
+      )
+      expect(items.map(displayItemOwner)).toEqual([
+        "group-2",
+        "group-1",
+        "group-3",
+      ])
+    })
+
+    it("sorts team display names case-insensitively with numeric collation", () => {
+      // The page labels an unnamed team "Group <n>", so unnamed teams keep
+      // their numbered order (Group 2 before Group 10) and a named team slots
+      // in alphabetically among them regardless of letter case.
+      const items = buildGroupRosterDisplayItems(
+        [row({ owner: "group-10" }), row({ owner: "group-2" })],
+        [groupRepo("group-1"), groupRepo("group-3")],
+        [],
+        "first",
+        [],
+        new Map([
+          ["group-1", "zebras"],
+          ["group-2", "Group 2"],
+          ["group-3", "Alpha"],
+          ["group-10", "Group 10"],
+        ]),
+      )
+      expect(items.map(displayItemOwner)).toEqual([
+        "group-3",
+        "group-2",
+        "group-10",
+        "group-1",
+      ])
+    })
+
+    it("breaks a display-name tie on the owner segment", () => {
+      // Two teams can pick the same name; the counter keeps the order stable
+      // whichever input order the rows arrive in.
+      const names = new Map([
+        ["group-7", "Rockets"],
+        ["group-3", "Rockets"],
+      ])
+      const forward = buildGroupRosterDisplayItems(
+        [row({ owner: "group-7" }), row({ owner: "group-3" })],
+        [],
+        [],
+        "first",
+        [],
+        names,
+      )
+      const reversed = buildGroupRosterDisplayItems(
+        [row({ owner: "group-3" }), row({ owner: "group-7" })],
+        [],
+        [],
+        "first",
+        [],
+        names,
+      )
+      expect(forward.map(displayItemOwner)).toEqual(["group-3", "group-7"])
+      expect(reversed.map(displayItemOwner)).toEqual(["group-3", "group-7"])
+    })
+
+    it("falls back to the founder's roster name when the map has no entry", () => {
+      // A legacy group (owner = founder login) never has a display name, so it
+      // keeps sorting by the founder; a team the map misses (deleted on
+      // GitHub) sorts by its owner segment rather than vanishing or throwing.
+      const roster = [
+        student({ username: "zed", first_name: "Zed", last_name: "Adams" }),
+      ]
+      const items = buildGroupRosterDisplayItems(
+        [row({ owner: "zed" }), row({ owner: "group-4" })],
+        [groupRepo("group-1")],
+        roster,
+        "first",
+        [],
+        new Map([["group-1", "Mid"]]),
+      )
+      // "group-4" < "mid" < "zed adams"
+      expect(items.map(displayItemOwner)).toEqual(["group-4", "group-1", "zed"])
     })
   })
 
