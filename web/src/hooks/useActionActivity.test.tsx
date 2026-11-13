@@ -27,10 +27,13 @@ vi.mock("@/context/notifications/NotificationProvider", () => ({
   useOptionalToast: () => ({ notify }),
 }))
 
-// The registry is driven by the test: `ops` is what operationsForOrg returns.
+// The registry is driven by the test: `ops` is what operationsForOrg returns,
+// `dismissedRuns` what isRunDismissed answers.
 let ops: ActionOperation[] = []
+let dismissedRuns = new Set<number>()
 const clearOp = vi.fn()
 const dismiss = vi.fn()
+const dismissRun = vi.fn()
 vi.mock("@/context/actions/ActionActivityProvider", () => ({
   useActionActivityRegistry: () => ({
     operationsForOrg: () => ops,
@@ -38,6 +41,8 @@ vi.mock("@/context/actions/ActionActivityProvider", () => ({
     isDismissed: () => false,
     dismiss,
     clearOp,
+    isRunDismissed: (runId: number) => dismissedRuns.has(runId),
+    dismissRun,
   }),
 }))
 
@@ -107,13 +112,63 @@ describe("useActionActivity", () => {
     })
     ops = []
     runs = []
+    dismissedRuns = new Set()
     notify.mockReset()
     clearOp.mockReset()
+    dismiss.mockReset()
+    dismissRun.mockReset()
     rerunFailedRun.mockClear()
     cancelMutate.mockReset()
   })
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it("lets a discovered run be dismissed, keyed by its run id", async () => {
+    runs = [run({ id: 42, status: "queued", conclusion: null })]
+    const { result } = renderActivity()
+    await waitFor(() => expect(result.current.trackers).toHaveLength(1))
+    const tracker = result.current.trackers[0]
+    expect(tracker.id).toBe("run-42")
+    expect(tracker.phase).toBe("running")
+    expect(tracker.dismissible).toBe(true)
+
+    act(() => result.current.dismiss("run-42"))
+    expect(dismissRun).toHaveBeenCalledWith(42)
+    expect(dismiss).not.toHaveBeenCalled()
+  })
+
+  it("routes a session op's dismissal to the op registry", async () => {
+    ops = [publishOp("op-a", "aaa")]
+    runs = [run({ id: 10, head_sha: "aaa" })]
+    const { result } = renderActivity()
+    await waitFor(() =>
+      expect(result.current.trackers[0]?.dismissible).toBe(true),
+    )
+    act(() => result.current.dismiss("op-a"))
+    expect(dismiss).toHaveBeenCalledWith("op-a")
+    expect(dismissRun).not.toHaveBeenCalled()
+  })
+
+  it("hides a dismissed discovered run but keeps it blocking the all-green auto-dismiss", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    dismissedRuns = new Set([42])
+    ops = [publishOp("op-a", "aaa")]
+    runs = [
+      run({ id: 42, status: "queued", conclusion: null }),
+      run({ id: 10, head_sha: "aaa" }),
+    ]
+    const { result } = renderActivity()
+    await waitFor(() =>
+      expect(result.current.trackers.map((tr) => tr.id)).toEqual(["op-a"]),
+    )
+    expect(result.current.trackers[0].phase).toBe("success")
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_100)
+    })
+    // The hidden run is still queued as far as GitHub knows, so the banner
+    // does not clear itself.
+    expect(clearOp).not.toHaveBeenCalled()
   })
 
   it("reads a cancelled publish as superseded when a newer publish succeeded", async () => {
