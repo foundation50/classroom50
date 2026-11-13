@@ -17,6 +17,18 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.60.0](https://github.com/foundation50/classroom50/compare/web-v1.59.1...web-v1.60.0) (2026-11-13)
+
+
+### Features
+
+* **web:** let a stuck discovered run be dismissed from the activity banner ([#1162](https://github.com/foundation50/classroom50/issues/1162)) ([c010c3e](https://github.com/foundation50/classroom50/commit/c010c3e43cd2b81c89e2efbf60a2a9a247ea3e6f))
+
+
+### Bug Fixes
+
+* **web:** close submission on group, team, and bare-repo assignments ([#1160](https://github.com/foundation50/classroom50/issues/1160)) ([8a07e16](https://github.com/foundation50/classroom50/commit/8a07e16c340f953c7f5e2d5ed14764e2d86062c1))
+
 ## [1.59.1](https://github.com/foundation50/classroom50/compare/web-v1.59.0...web-v1.59.1) (2026-11-11)
 
 
