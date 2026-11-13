@@ -29,6 +29,11 @@ type ActionActivityContextValue = {
   dismiss: (opId: string) => void
   // Forget an op entirely (GC). Idempotent.
   clearOp: (opId: string) => void
+  // Whether the teacher hid a discovered run (one matching no session op).
+  isRunDismissed: (runId: number) => boolean
+  // Hide a discovered run from the banner. A view preference only: the run
+  // stays whatever GitHub says it is. Idempotent.
+  dismissRun: (runId: number) => void
 }
 
 const ActionActivityContext = createContext<ActionActivityContextValue | null>(
@@ -44,13 +49,28 @@ const OP_TTL_MS = 15 * 60 * 1000
 let opSeq = 0
 const nextOpId = () => `op-${Date.now()}-${++opSeq}`
 
-// Persisted shape: ops + dismissed op ids (so a dismissal survives a remount).
-type PersistedState = { ops: ActionOperation[]; dismissed: string[] }
+// Dismissed discovered runs have no op to expire with, so bound the list
+// instead; the banner only ever polls the 50 newest runs anyway.
+const MAX_DISMISSED_RUNS = 50
+
+// Persisted shape: ops + dismissed op ids (so a dismissal survives a remount)
+// + dismissed discovered-run ids (a stuck queued run the teacher hid, #1159).
+type PersistedState = {
+  ops: ActionOperation[]
+  dismissed: string[]
+  dismissedRuns: number[]
+}
+
+const EMPTY_STATE: PersistedState = {
+  ops: [],
+  dismissed: [],
+  dismissedRuns: [],
+}
 
 const loadState = (): PersistedState => {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) return { ops: [], dismissed: [] }
+    if (!raw) return EMPTY_STATE
     const parsed = JSON.parse(raw) as Partial<PersistedState>
     const cutoff = Date.now() - OP_TTL_MS
     const ops = Array.isArray(parsed.ops)
@@ -60,10 +80,13 @@ const loadState = (): PersistedState => {
     const dismissed = Array.isArray(parsed.dismissed)
       ? parsed.dismissed.filter((id) => liveIds.has(id))
       : []
-    return { ops, dismissed }
+    const dismissedRuns = Array.isArray(parsed.dismissedRuns)
+      ? parsed.dismissedRuns.filter((id) => typeof id === "number")
+      : []
+    return { ops, dismissed, dismissedRuns }
   } catch {
     log.warn("failed to load persisted action activity (corrupt storage)")
-    return { ops: [], dismissed: [] }
+    return EMPTY_STATE
   }
 }
 
@@ -99,6 +122,7 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
         const ops = [...prev.ops.filter((o) => o.startedAt >= cutoff), full]
         const liveIds = new Set(ops.map((o) => o.id))
         const next: PersistedState = {
+          ...prev,
           ops,
           dismissed: prev.dismissed.filter((id) => liveIds.has(id)),
         }
@@ -114,7 +138,7 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
     setState((prev) => {
       if (prev.dismissed.includes(opId)) return prev
       const next: PersistedState = {
-        ops: prev.ops,
+        ...prev,
         dismissed: [...prev.dismissed, opId],
       }
       saveState(next)
@@ -125,10 +149,24 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
   const clearOp = useCallback((opId: string) => {
     setState((prev) => {
       if (!prev.ops.some((o) => o.id === opId)) return prev
-      const ops = prev.ops.filter((o) => o.id !== opId)
       const next: PersistedState = {
-        ops,
+        ...prev,
+        ops: prev.ops.filter((o) => o.id !== opId),
         dismissed: prev.dismissed.filter((id) => id !== opId),
+      }
+      saveState(next)
+      return next
+    })
+  }, [])
+
+  const dismissRun = useCallback((runId: number) => {
+    setState((prev) => {
+      if (prev.dismissedRuns.includes(runId)) return prev
+      const next: PersistedState = {
+        ...prev,
+        dismissedRuns: [...prev.dismissedRuns, runId].slice(
+          -MAX_DISMISSED_RUNS,
+        ),
       }
       saveState(next)
       return next
@@ -166,6 +204,15 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
     [dismissedSet],
   )
 
+  const dismissedRunSet = useMemo(
+    () => new Set(state.dismissedRuns),
+    [state.dismissedRuns],
+  )
+  const isRunDismissed = useCallback(
+    (runId: number) => dismissedRunSet.has(runId),
+    [dismissedRunSet],
+  )
+
   const value = useMemo<ActionActivityContextValue>(
     () => ({
       register,
@@ -174,6 +221,8 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
       isDismissed,
       dismiss,
       clearOp,
+      isRunDismissed,
+      dismissRun,
     }),
     [
       register,
@@ -182,6 +231,8 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
       isDismissed,
       dismiss,
       clearOp,
+      isRunDismissed,
+      dismissRun,
     ],
   )
 
@@ -204,5 +255,7 @@ export function useActionActivityRegistry(): ActionActivityContextValue {
     isDismissed: () => false,
     dismiss: () => {},
     clearOp: () => {},
+    isRunDismissed: () => false,
+    dismissRun: () => {},
   }
 }

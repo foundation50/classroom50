@@ -70,7 +70,8 @@ export type Tracker = {
   // Workflow file of the run (e.g., "publish-pages.yaml"), so the banner can
   // show workflow-specific failure detail.
   workflow?: string
-  // Terminal session-op trackers can be dismissed; discovered/non-terminal can't.
+  // Terminal session-op trackers and discovered runs can be dismissed; a
+  // running or pending session op can't.
   dismissible: boolean
   // A failed run with a known runId can be retried.
   retriable: boolean
@@ -113,8 +114,15 @@ export function useActionActivity(): ActionActivity {
   )
   const org = useActiveOrg()
   const client = useOptionalGitHubClient()
-  const { operationsForOrg, lastRegisteredAt, isDismissed, dismiss, clearOp } =
-    useActionActivityRegistry()
+  const {
+    operationsForOrg,
+    lastRegisteredAt,
+    isDismissed,
+    dismiss: dismissOp,
+    clearOp,
+    isRunDismissed,
+    dismissRun,
+  } = useActionActivityRegistry()
   const toast = useOptionalToast()
   const queryClient = useQueryClient()
 
@@ -386,11 +394,17 @@ export function useActionActivity(): ActionActivity {
       }
     })
 
-  // Discovered trackers: in-flight runs matching no session op (cron, another
-  // teacher). Shown while running; dropped when they finish.
-  const discoveredTrackers: Tracker[] = allRuns
+  // Discovered runs: in-flight runs matching no session op (cron, another
+  // teacher). Shown while running; dropped when they finish. Dismissible as a
+  // view preference: after a GitHub incident a run can sit in `queued` for a
+  // day with no way to cancel it (#1159). A dismissed run is only hidden; it
+  // still holds the poll fast and gates the all-green auto-dismiss, since
+  // GitHub still reports it running.
+  const discoveredRuns = allRuns
     .filter(isRunning)
     .filter((r) => !claimed.has(r.id))
+  const discoveredTrackers: Tracker[] = discoveredRuns
+    .filter((r) => !isRunDismissed(r.id))
     .map((r) => {
       const file = workflowFile(r)
       const label =
@@ -405,7 +419,7 @@ export function useActionActivity(): ActionActivity {
         htmlUrl: r.html_url,
         runId: r.id,
         workflow: file,
-        dismissible: false,
+        dismissible: true,
         retriable: false,
         startedAtMs: times.startedAtMs,
         endedAtMs: times.endedAtMs,
@@ -550,20 +564,32 @@ export function useActionActivity(): ActionActivity {
 
   const busy = new Set([...retrying, ...unsticking])
 
+  // A discovered tracker has no op behind it, so its dismissal is keyed by run
+  // id; everything else is a session op.
+  const dismiss = (id: string) => {
+    const runId = discoveredTrackers.find((tr) => tr.id === id)?.runId
+    if (runId !== undefined) dismissRun(runId)
+    else dismissOp(id)
+  }
+
   const anyFailed = trackers.some((tr) => tr.phase === "failed")
 
-  // All-green auto-dismiss: when every tracker has succeeded or been superseded
-  // (no failed, running, or pending — discovered runs are always "running", so
-  // they gate this too, and every id here is a session op), flash the green
-  // state briefly, then clearOp each so the banner clears itself. clearOp (not
-  // dismiss) forgets the op entirely — it's terminal history the teacher never
-  // needs again — which also drops it from operationsForOrg so the idle poll
-  // can stop instead of ticking until the op's TTL. Keyed off the phase
-  // signature so a new/failed action cancels the pending timer.
+  // All-green auto-dismiss: when every session op has succeeded or been
+  // superseded (no failed, running, or pending) and nothing discovered is
+  // running (a dismissed discovered run still counts: it's hidden, not done),
+  // flash the green state briefly, then clearOp each so the banner clears
+  // itself. clearOp (not dismiss) forgets the op entirely — it's terminal
+  // history the teacher never needs again — which also drops it from
+  // operationsForOrg so the idle poll can stop instead of ticking until the
+  // op's TTL. Keyed off the phase signature so a new/failed action cancels the
+  // pending timer.
   const allSucceeded =
-    trackers.length > 0 &&
-    trackers.every((tr) => tr.phase === "success" || tr.phase === "superseded")
-  const successIds = allSucceeded ? trackers.map((tr) => tr.id) : []
+    sessionTrackers.length > 0 &&
+    discoveredRuns.length === 0 &&
+    sessionTrackers.every(
+      (tr) => tr.phase === "success" || tr.phase === "superseded",
+    )
+  const successIds = allSucceeded ? sessionTrackers.map((tr) => tr.id) : []
   const successSignature = successIds.join(",")
   useEffect(() => {
     if (successSignature === "") return
