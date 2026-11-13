@@ -553,12 +553,14 @@ const SubmissionsTable = ({
   })()
 
   // The display list rendered as one paginated sequence. For a group assignment
-  // it's submitted group rows then unsubmitted group repos. For an individual
-  // assignment in a name order it's one row per roster student (submitters and
-  // non-submitters interleaved by roster name, in the active first/last mode) —
-  // the same ordering the live fan-out pages over. Under a time sort (a static
-  // snapshot view; live is off then) fall back to sorted submitters first, then
-  // non-submitters, preserving the chosen order.
+  // it's submitted group rows then unsubmitted group repos; under a name sort
+  // they're ordered by the label the row shows (team display name, else the
+  // founder's name). For an individual assignment in a name order it's one row
+  // per roster student (submitters and non-submitters interleaved by roster
+  // name, in the active first/last mode) — the same ordering the live fan-out
+  // pages over. Under a time sort (a static snapshot view; live is off then)
+  // fall back to sorted submitters first, then non-submitters, preserving the
+  // chosen order.
   const displayItems = useMemo(() => {
     if (isGroup) {
       return isNameSort(sort)
@@ -568,6 +570,7 @@ const SubmissionsTable = ({
             students,
             sortNameMode(sort),
             teamsWithoutRepos,
+            groupDisplayNames,
           )
         : buildGroupDisplayItems(
             scores,
@@ -587,6 +590,7 @@ const SubmissionsTable = ({
     nonSubmitters,
     unsubmittedGroupRepos,
     teamsWithoutRepos,
+    groupDisplayNames,
   ])
   const bounds = pageBounds(displayItems.length, pageSize, page)
   const pageItems = useMemo(
