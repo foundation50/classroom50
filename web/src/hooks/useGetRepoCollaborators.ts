@@ -12,8 +12,6 @@ const useGetRepoCollaborators = (
 
   return useQuery({
     queryKey: githubKeys.collaborators(org, repoName),
-    // Direct only: with inherited access included, every org owner would show
-    // as an admin collaborator and mask the real founder.
     queryFn: () => listDirectCollaborators(client, org, repoName),
     staleTime: 60 * 1000,
     enabled: Boolean(org && repoName) && (options?.enabled ?? true),

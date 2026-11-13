@@ -45,6 +45,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 import {
   CloseSubmissionModal,
   type CloseSubmissionTargets,
+  type GroupCloseTarget,
 } from "./CloseSubmissionModal"
 import { GitHubAPIError } from "@/github-core/errors"
 
@@ -553,9 +554,23 @@ describe("CloseSubmissionModal", () => {
 })
 
 describe("CloseSubmissionModal on shared repos", () => {
+  type GroupTargets = Extract<CloseSubmissionTargets, { kind: "group" }>
+  const legacy = (
+    owner: string,
+    repoName: string,
+    label?: string,
+  ): GroupCloseTarget => ({ kind: "group", owner, repoName, label })
+  const team = (
+    owner: string,
+    repoName: string,
+    teamSlug?: string,
+    label?: string,
+  ): GroupCloseTarget => ({ kind: "team", owner, repoName, teamSlug, label })
+
   function renderGroupModal(
     mode: "close" | "reopen",
-    repos: Extract<CloseSubmissionTargets, { kind: "group" }>["repos"],
+    repos: GroupCloseTarget[],
+    extra: Omit<GroupTargets, "kind" | "repos"> = {},
   ) {
     return render(
       <CloseSubmissionModal
@@ -565,7 +580,7 @@ describe("CloseSubmissionModal on shared repos", () => {
         classroom="cs"
         assignment="hw1"
         mode={mode}
-        targets={{ kind: "group", repos }}
+        targets={{ kind: "group", repos, ...extra }}
       />,
     )
   }
@@ -581,8 +596,8 @@ describe("CloseSubmissionModal on shared repos", () => {
     )
     addMutateAsync.mockResolvedValue({ effective: undefined })
     renderGroupModal("close", [
-      { owner: "alice", repoName: "cs-hw1-alice" },
-      { owner: "carol", repoName: "cs-hw1-carol" },
+      legacy("alice", "cs-hw1-alice"),
+      legacy("carol", "cs-hw1-carol"),
     ])
 
     expect(
@@ -611,41 +626,72 @@ describe("CloseSubmissionModal on shared repos", () => {
     ])
   })
 
-  it("team mode: sets the team's role first, then the direct collaborators", async () => {
+  it("team mode: the team write settles before any collaborator is touched", async () => {
     setClosedMutateAsync.mockResolvedValue({ closed: true })
-    const order: string[] = []
-    setTeamPermissionMutateAsync.mockImplementation((p) => {
-      order.push(`team:${p.teamSlug}:${p.permission}`)
-      return Promise.resolve()
-    })
+    let releaseTeam!: () => void
+    setTeamPermissionMutateAsync.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseTeam = resolve
+        }),
+    )
     listDirectCollaborators.mockResolvedValue([{ login: "dana" }])
-    addMutateAsync.mockImplementation((p) => {
-      order.push(`collab:${p.username}:${p.permission}`)
-      return Promise.resolve({ effective: undefined })
-    })
+    addMutateAsync.mockResolvedValue({ effective: undefined })
     renderGroupModal("close", [
-      {
-        owner: "group-1",
-        repoName: "cs-hw1-group-1",
+      team("group-1", "cs-hw1-group-1", "cs-hw1-group-1", "Team Rocket"),
+    ])
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+
+    await waitFor(() =>
+      expect(setTeamPermissionMutateAsync).toHaveBeenCalledWith({
+        org: "o",
         teamSlug: "cs-hw1-group-1",
-        label: "Team Rocket",
-      },
+        repo: "cs-hw1-group-1",
+        permission: "pull",
+      }),
+    )
+    // Held: the collaborator read-back must observe the lowered team role.
+    expect(listDirectCollaborators).not.toHaveBeenCalled()
+    expect(addMutateAsync).not.toHaveBeenCalled()
+
+    releaseTeam()
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(addMutateAsync.mock.calls[0][0]).toMatchObject({
+      username: "dana",
+      permission: "pull",
+    })
+  })
+
+  it("team mode: a repo whose team is unresolved fails closed and offers finish closing", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    listDirectCollaborators.mockResolvedValue([{ login: "dana" }])
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    renderGroupModal("close", [
+      team("group-1", "cs-hw1-group-1", undefined, "Team Rocket"),
     ])
 
     fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
 
     await waitFor(() =>
       expect(
-        screen.getByText("submissions.closeSubmission.resultHeadline"),
+        screen.getByText("submissions.closeSubmission.finishApply"),
       ).toBeTruthy(),
     )
-    expect(setTeamPermissionMutateAsync).toHaveBeenCalledWith({
-      org: "o",
-      teamSlug: "cs-hw1-group-1",
-      repo: "cs-hw1-group-1",
-      permission: "pull",
-    })
-    expect(order).toEqual(["team:cs-hw1-group-1:pull", "collab:dana:pull"])
+    expect(
+      screen.getByText("submissions.closeSubmission.failedSection"),
+    ).toBeTruthy()
+    expect(
+      screen.getByText("components.modals.repoAccess.teamMissing"),
+    ).toBeTruthy()
+    // Lowering the founder alone would read as success while the team keeps
+    // write, so nothing is written for that repo.
+    expect(setTeamPermissionMutateAsync).not.toHaveBeenCalled()
+    expect(addMutateAsync).not.toHaveBeenCalled()
   })
 
   it("team mode reopen restores push on the team and the collaborators", async () => {
@@ -653,9 +699,7 @@ describe("CloseSubmissionModal on shared repos", () => {
     setTeamPermissionMutateAsync.mockResolvedValue(undefined)
     listDirectCollaborators.mockResolvedValue([{ login: "dana" }])
     addMutateAsync.mockResolvedValue({ effective: undefined })
-    renderGroupModal("reopen", [
-      { owner: "group-1", repoName: "cs-hw1-group-1", teamSlug: "t-1" },
-    ])
+    renderGroupModal("reopen", [team("group-1", "cs-hw1-group-1", "t-1")])
 
     fireEvent.click(screen.getByText("submissions.closeSubmission.reopenApply"))
 
@@ -671,6 +715,56 @@ describe("CloseSubmissionModal on shared repos", () => {
       username: "dana",
       permission: "push",
     })
+  })
+
+  it("legacy group reopen gives the founder admin back, members push, and leaves staff alone", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: false })
+    listDirectCollaborators.mockResolvedValue([
+      { login: "Alice" },
+      { login: "bob" },
+      { login: "ta-tom" },
+    ])
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    renderGroupModal("reopen", [legacy("alice", "cs-hw1-alice")], {
+      studentPermission: "push",
+      staffLogins: new Set(["ta-tom"]),
+    })
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.reopenApply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.reopenResultHeadline"),
+      ).toBeTruthy(),
+    )
+    // founderPermission("group", ...) clamps the founder to admin so they can
+    // keep managing members; a TA held at read is not promoted.
+    expect(
+      addMutateAsync.mock.calls.map(([p]) => `${p.username}:${p.permission}`),
+    ).toEqual(["Alice:admin", "bob:push"])
+  })
+
+  it("close leaves a staff collaborator's write alone", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    listDirectCollaborators.mockResolvedValue([
+      { login: "alice" },
+      { login: "ta-tom" },
+    ])
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    renderGroupModal("close", [legacy("alice", "cs-hw1-alice")], {
+      staffLogins: new Set(["ta-tom"]),
+    })
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(addMutateAsync.mock.calls.map(([p]) => p.username)).toEqual([
+      "alice",
+    ])
   })
 
   it("names the members GitHub kept, lists the group by its label, and offers no retry", async () => {
@@ -689,7 +783,7 @@ describe("CloseSubmissionModal on shared repos", () => {
       }),
     )
     renderGroupModal("close", [
-      { owner: "alice", repoName: "cs-hw1-alice", label: "Alice's group" },
+      legacy("alice", "cs-hw1-alice", "Alice's group"),
     ])
 
     fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
@@ -711,6 +805,41 @@ describe("CloseSubmissionModal on shared repos", () => {
     ).toBeNull()
   })
 
+  it("a legacy group with no label is listed by the founder's roster name", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    listDirectCollaborators.mockResolvedValue([{ login: "alice" }])
+    addMutateAsync.mockResolvedValue({
+      effective: { permission: "admin", role_name: "admin" },
+    })
+    render(
+      <CloseSubmissionModal
+        open
+        onClose={() => {}}
+        org="o"
+        classroom="cs"
+        assignment="hw1"
+        mode="close"
+        targets={{ kind: "group", repos: [legacy("alice", "cs-hw1-alice")] }}
+        students={[
+          {
+            username: "alice",
+            first_name: "Alice",
+            last_name: "Liddell",
+          } as never,
+        ]}
+      />,
+    )
+
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.failedSection"),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText(/Alice/)).toBeTruthy()
+  })
+
   it("a failed collaborator read fails the whole group and offers finish closing for it", async () => {
     setClosedMutateAsync.mockResolvedValue({ closed: true })
     listDirectCollaborators.mockImplementation((_client, _org, repo: string) =>
@@ -720,8 +849,8 @@ describe("CloseSubmissionModal on shared repos", () => {
     )
     addMutateAsync.mockResolvedValue({ effective: undefined })
     renderGroupModal("close", [
-      { owner: "alice", repoName: "cs-hw1-alice" },
-      { owner: "carol", repoName: "cs-hw1-carol" },
+      legacy("alice", "cs-hw1-alice"),
+      legacy("carol", "cs-hw1-carol"),
     ])
 
     fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
@@ -749,6 +878,61 @@ describe("CloseSubmissionModal on shared repos", () => {
     expect(addMutateAsync.mock.calls.map(([p]) => p.username)).toEqual([
       "alice",
     ])
+  })
+
+  it("finish closing sizes its run by the repos still listed, not the stale pending set", async () => {
+    setClosedMutateAsync.mockResolvedValue({ closed: true })
+    listDirectCollaborators.mockRejectedValue(apiError(500))
+    const props = {
+      open: true,
+      onClose: () => {},
+      org: "o",
+      classroom: "cs",
+      assignment: "hw1",
+      mode: "close" as const,
+    }
+    const view = render(
+      <CloseSubmissionModal
+        {...props}
+        targets={{
+          kind: "group",
+          repos: [
+            legacy("alice", "cs-hw1-alice"),
+            legacy("carol", "cs-hw1-carol"),
+          ],
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByText("submissions.closeSubmission.apply"))
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.finishApply"),
+      ).toBeTruthy(),
+    )
+
+    // carol's repo has left the org listing by the time the teacher retries.
+    view.rerender(
+      <CloseSubmissionModal
+        {...props}
+        targets={{ kind: "group", repos: [legacy("alice", "cs-hw1-alice")] }}
+      />,
+    )
+    listDirectCollaborators.mockReset()
+    listDirectCollaborators.mockResolvedValue([{ login: "alice" }])
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    fireEvent.click(screen.getByText("submissions.closeSubmission.finishApply"))
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(listDirectCollaborators.mock.calls.map((c) => c[2])).toEqual([
+      "cs-hw1-alice",
+    ])
+    // Clean finish: no stale pending owner keeps the retry button alive.
+    expect(
+      screen.queryByText("submissions.closeSubmission.finishApply"),
+    ).toBeNull()
   })
 
   it("closes with no group repos yet: flips the flag, shows the group empty state", async () => {

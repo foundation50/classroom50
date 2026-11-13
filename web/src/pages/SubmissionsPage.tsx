@@ -1058,20 +1058,33 @@ const SubmissionsPageContent = () => {
   )
   const acceptedOwners = useMemo(() => [...acceptedSet], [acceptedSet])
   // What Close/Reopen submission sets: each accepted student's own repo, or
-  // every existing shared repo (through its team in team mode).
+  // every existing shared repo (through its team in team mode). Staff who are
+  // direct collaborators on a shared repo are left alone in both directions.
   const closeSubmissionTargets = useMemo<CloseSubmissionTargets>(
     () =>
       isGroupFlavor
         ? {
             kind: "group",
-            repos: groupRepoList.map((repo) => ({
-              owner: repo.owner,
-              repoName: repo.repoName,
-              teamSlug: isTeamAssignment
-                ? teamByOwner.get(repo.owner.toLowerCase())?.slug
-                : undefined,
-              label: groupDisplayNames?.get(repo.owner.toLowerCase()),
-            })),
+            repos: groupRepoList.map((repo) => {
+              const key = repo.owner.toLowerCase()
+              const label = groupDisplayNames?.get(key)
+              return isTeamAssignment
+                ? {
+                    kind: "team",
+                    owner: repo.owner,
+                    repoName: repo.repoName,
+                    teamSlug: teamByOwner.get(key)?.slug,
+                    label,
+                  }
+                : {
+                    kind: "group",
+                    owner: repo.owner,
+                    repoName: repo.repoName,
+                    label,
+                  }
+            }),
+            studentPermission: assignmentInfo?.student_permission,
+            staffLogins: new Set(staffRoles.keys()),
           }
         : { kind: "individual", owners: acceptedOwners },
     [
@@ -1080,6 +1093,8 @@ const SubmissionsPageContent = () => {
       groupRepoList,
       teamByOwner,
       groupDisplayNames,
+      assignmentInfo?.student_permission,
+      staffRoles,
       acceptedOwners,
     ],
   )
@@ -1762,11 +1777,16 @@ const SubmissionsPageContent = () => {
                 // Close/reopen submission: authoring tier + org owner (the role
                 // writes need admin on every repo). Any repo shape: the modal
                 // sets a shared repo through its team and collaborators, and a
-                // bare repo's founder is a collaborator like any other. Unlike
-                // bulk access it does NOT require acceptedSet.size > 0 — closing
-                // still blocks future accepts when no one has accepted yet.
+                // bare repo's founder is a collaborator like any other. Team
+                // mode also waits for the team listing, since a target built
+                // before it settles has no team to lower. Unlike bulk access it
+                // does NOT require acceptedSet.size > 0 — closing still blocks
+                // future accepts when no one has accepted yet.
                 onCloseToggle={
-                  canRegradeAll && isOwner && assignmentResolved
+                  canRegradeAll &&
+                  isOwner &&
+                  assignmentResolved &&
+                  (!isTeamAssignment || teamsSettled)
                     ? () => setCloseSubmissionOpen(true)
                     : undefined
                 }

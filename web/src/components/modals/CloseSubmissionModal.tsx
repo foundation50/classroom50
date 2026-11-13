@@ -18,6 +18,7 @@ import {
 } from "@/components/bulk/repoAccessFanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { founderPermission } from "@/domain/assignments/permissions"
 import { listDirectCollaborators } from "@/github-core/repoReads"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
@@ -32,7 +33,16 @@ export type GroupCloseTarget = GroupAccessTarget & { label?: string }
 // login. Group and team: each existing shared repo.
 export type CloseSubmissionTargets =
   | { kind: "individual"; owners: string[] }
-  | { kind: "group"; repos: GroupCloseTarget[] }
+  | {
+      kind: "group"
+      repos: GroupCloseTarget[]
+      // The assignment's student_permission, which reopen hands back to a
+      // legacy founder through founderPermission (admin, so they can still
+      // manage members) instead of a flat push.
+      studentPermission?: RepoPermission
+      // Lowercased classroom staff logins; their direct roles are left alone.
+      staffLogins?: ReadonlySet<string>
+    }
 
 type CloseSubmissionModalProps = {
   open: boolean
@@ -140,10 +150,17 @@ export function CloseSubmissionModal({
 
   // Set each target repo's roles. `flipFlag` runs the full close/reopen over
   // every existing repo (flag flip first, then fan-out); a finish-only run skips
-  // the flip and retries just the pending owners.
+  // the flip and retries just the pending owners. The retry resolves pending
+  // owners against the CURRENT repo list, so a repo that has since vanished is
+  // dropped from the count rather than reported as never processed.
   const run = async ({ flipFlag }: { flipFlag: boolean }) => {
-    const targetOwners = flipFlag ? allOwners : pendingOwners
-    const total = targetOwners.length
+    const pending = flipFlag ? allOwners : pendingOwners
+    const groupTargets =
+      targets.kind === "group"
+        ? targets.repos.filter((repo) => pending.includes(repo.owner))
+        : []
+    const total =
+      targets.kind === "group" ? groupTargets.length : pending.length
     if (!bulk.begin(total)) return
     if (flipFlag) setStartedMode(mode)
     setFlagError(false)
@@ -168,11 +185,12 @@ export function CloseSubmissionModal({
       }
     }
 
+    const setCollaborator: SetCollaborator = (params) =>
+      addCollaboratorMutation.mutateAsync(params)
     const fanOut = {
       org,
       permission,
-      setCollaborator: ((params) =>
-        addCollaboratorMutation.mutateAsync(params)) as SetCollaborator,
+      setCollaborator,
       // On close (downgrade to pull), a residual role ABOVE pull is the
       // over-access a lockdown must catch, so compare exactly. On reopen
       // (restore push), a residual at or above write is benign — treat the
@@ -188,17 +206,26 @@ export function CloseSubmissionModal({
       targets.kind === "group"
         ? await runBulkGroupRepoAccess({
             ...fanOut,
-            targets: targets.repos.filter((repo) =>
-              targetOwners.includes(repo.owner),
-            ),
+            targets: groupTargets,
             listCollaborators: (org, repo) =>
               listDirectCollaborators(client, org, repo),
             setTeamPermission: (params) =>
               setTeamPermission.mutateAsync(params),
+            skipLogins: targets.staffLogins,
+            // Reopen gives a legacy founder back the role accept granted
+            // (admin, so they can still manage members); everyone else gets
+            // the flat direction. Close lowers all of them alike.
+            permissionFor: closing
+              ? undefined
+              : (target, login) =>
+                  target.kind === "group" &&
+                  login.toLowerCase() === target.owner.toLowerCase()
+                    ? founderPermission("group", targets.studentPermission)
+                    : permission,
           })
         : await runBulkRepoAccess({
             ...fanOut,
-            owners: targetOwners,
+            owners: pending,
             classroom,
             assignment,
           })

@@ -51,8 +51,8 @@ export const isNotApplied = (
   outcome: BulkAccessOutcome,
 ): outcome is NotAppliedOutcome => "notApplied" in outcome
 
-// Set every accepted student's role on their OWN repo. Returns the verified
-// effective permission (undefined when the read-back lagged / 404'd).
+// One collaborator role write with a read-back. `effective` is undefined when
+// the read-back lagged or 404'd.
 export type SetCollaborator = (params: {
   org: string
   repo: string
@@ -114,12 +114,12 @@ async function setAndVerifyCollaborator(params: {
   }
 }
 
-// The shared bounded repo-access fan-out used by every whole-assignment access
-// action (set-access, close/reopen submission). Sets each accepted student's
-// role on their own repo with bounded concurrency, verifies the effective role,
-// short-circuits the remainder to `deferred` on a secondary rate-limit, and
-// reports per-owner outcomes. The permission and the residual-role comparison
-// are the only axes callers vary.
+// The shared bounded repo-access fan-out for student-owned repos (set-access,
+// individual close/reopen; shared repos go through runBulkGroupRepoAccess
+// below). Sets each accepted student's role on their own repo with bounded
+// concurrency, verifies the effective role, short-circuits the remainder to
+// `deferred` on a secondary rate-limit, and reports per-owner outcomes. The
+// permission and the residual-role comparison are the only axes callers vary.
 export async function runBulkRepoAccess({
   owners,
   org,
@@ -166,14 +166,14 @@ export async function runBulkRepoAccess({
   })
 }
 
-// One shared repo of a group or team assignment, keyed by the row owner (the
-// founder login, or `group-<n>` in team mode). `teamSlug` is the GitHub team
-// that holds the repo in team mode; legacy group repos have none.
-export type GroupAccessTarget = {
-  owner: string
-  repoName: string
-  teamSlug?: string
-}
+// One shared repo of a group or team assignment, keyed by the row owner. A
+// legacy group repo is owned by its founder's login; a team repo by `group-<n>`
+// and held through the GitHub team in `teamSlug`, which is undefined while the
+// team listing is pending or after it failed (the fan-out fails that repo
+// closed rather than treat it as a legacy group).
+export type GroupAccessTarget =
+  | { kind: "group"; owner: string; repoName: string }
+  | { kind: "team"; owner: string; repoName: string; teamSlug?: string }
 
 type RunBulkGroupRepoAccessParams = Omit<
   RunBulkRepoAccessParams,
@@ -187,6 +187,13 @@ type RunBulkGroupRepoAccessParams = Omit<
     repo: string
     permission: RepoPermission
   }) => Promise<unknown>
+  // Lowercased logins whose direct collaborator role is left alone in both
+  // directions (classroom staff): closing must not strip a TA's write, and
+  // reopening must not promote one held at read.
+  skipLogins?: ReadonlySet<string>
+  // The role to write for one collaborator; defaults to `permission`. Lets a
+  // reopen restore the legacy founder's admin instead of a flat push.
+  permissionFor?: (target: GroupAccessTarget, login: string) => RepoPermission
 }
 
 // The shared-repo sibling of runBulkRepoAccess: one unit of work per group repo.
@@ -203,6 +210,8 @@ export async function runBulkGroupRepoAccess({
   setCollaborator,
   listCollaborators,
   setTeamPermission,
+  skipLogins,
+  permissionFor,
   treatRequestedAsFloor,
   t,
   isMounted,
@@ -216,8 +225,17 @@ export async function runBulkGroupRepoAccess({
     t,
     perOwner: async (owner) => {
       const target = byOwner.get(owner)
-      if (!target) return
-      if (target.teamSlug) {
+      if (!target) throw new Error(`no group repo target for ${owner}`)
+      if (target.kind === "team") {
+        // Without the team the repo cannot be made read-only, and lowering the
+        // founder alone would read as success while every member keeps write.
+        if (!target.teamSlug) {
+          return {
+            owner,
+            status: "failed",
+            detail: t("components.modals.repoAccess.teamMissing"),
+          }
+        }
         await setTeamPermission({
           org,
           teamSlug: target.teamSlug,
@@ -230,13 +248,14 @@ export async function runBulkGroupRepoAccess({
       // Sequential: a group is a handful of logins, and the per-group fan-out
       // already runs several groups at once.
       for (const member of members) {
+        if (skipLogins?.has(member.login.toLowerCase())) continue
         try {
           await setAndVerifyCollaborator({
             setCollaborator,
             org,
             repo: target.repoName,
             username: member.login,
-            permission,
+            permission: permissionFor?.(target, member.login) ?? permission,
             treatRequestedAsFloor,
           })
         } catch (err) {
