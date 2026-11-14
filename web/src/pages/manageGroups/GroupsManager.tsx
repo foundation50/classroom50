@@ -34,6 +34,7 @@ import useAddGroupTeamMember from "@/hooks/mutations/useAddGroupTeamMember"
 import { useSyncTeamsSnapshot } from "@/hooks/mutations/useSaveTeamsSnapshot"
 import { snapshotDrift } from "@/domain/teams/teamsFile"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import { retiredGroupCounters } from "@/domain/teams/groupCounters"
 import { groupRepoName } from "@/util/studentRepo"
 import { groupDisplayName } from "@/util/groupTeam"
 import { isComposingKey } from "@/util/imeComposition"
@@ -108,6 +109,17 @@ export function GroupsManager({
             candidate.mode === "team" && candidate.slug !== assignmentSlug,
         )
         .map((candidate) => ({ slug: candidate.slug, name: candidate.name })),
+    [assignmentsData, assignmentSlug],
+  )
+  // Counters of deleted groups whose repos may survive: never re-allocated by
+  // create or copy (#1128).
+  const retiredCounters = useMemo(
+    () =>
+      retiredGroupCounters(
+        assignmentsData?.assignments.find(
+          (candidate) => candidate.slug === assignmentSlug,
+        ),
+      ),
     [assignmentsData, assignmentSlug],
   )
 
@@ -218,6 +230,7 @@ export function GroupsManager({
         displayName: displayName.trim() || undefined,
         creatorLogin: user.login,
         formation,
+        retiredCounters,
       })
       setCreateOpen(false)
       await resync()
@@ -444,6 +457,7 @@ export function GroupsManager({
         fullNameByLogin={fullNameByLogin}
         rosterLogins={rosterLogins}
         creatorLogin={user?.login ?? ""}
+        retiredCounters={retiredCounters}
         sourceOptions={copySourceOptions}
       />
 

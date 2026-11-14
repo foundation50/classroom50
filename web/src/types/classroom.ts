@@ -232,6 +232,10 @@ export type Assignment = {
   // Who forms the groups of a `team` assignment (required there, absent
   // otherwise). In lockstep with the CLI's assignments-v1 schema enum.
   team_formation?: TeamFormation
+  // Counters of group teams deleted through Classroom 50. A deleted team's
+  // repo survives, so allocators never hand these out again (#1128).
+  // Append-only; team mode only.
+  retired_group_counters?: number[]
   feedback_pr?: boolean
   // Use the TEMPLATE repo's native pull request template
   // (.github/pull_request_template.md -> pull_request_template.md ->

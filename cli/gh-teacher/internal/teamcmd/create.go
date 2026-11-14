@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
@@ -108,7 +110,7 @@ func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope cliutil
 // message can point at `team add` to finish rather than re-running create
 // (which would mint a second team).
 func createTeamWithMembers(client githubapi.Client, errOut io.Writer, ctx teamContext, name string, members []string) (slug string, id int64, counter int, err error) {
-	slug, id, counter, err = configrepo.CreateGroupTeam(client, ctx.Org, ctx.Classroom, ctx.Assignment, name, nil, ctx.Entry.TeamFormation)
+	slug, id, counter, err = configrepo.CreateGroupTeam(client, ctx.Org, ctx.Classroom, ctx.Assignment, name, nil, ctx.Entry.TeamFormation, ctx.Entry.RetiredGroupCounters)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -195,9 +197,21 @@ func runTeamDelete(client githubapi.Client, out io.Writer, scope cliutil.Assignm
 		_, _ = fmt.Fprintf(out, "%s: deleted team %s\n", ctx.Org, slug)
 	}
 
+	// One commit for both halves of the bookkeeping: drop the snapshot row and
+	// retire the counter on the assignment entry. A dropped row without the
+	// retired counter would let the next create re-allocate it against the
+	// group's surviving repo (#1128).
+	counter, _ := contract.ParseGroupTeamCounter(slug, ctx.Classroom, ctx.Assignment)
 	message := fmt.Sprintf("team: remove %s from %s/%s (gh teacher team delete)", slug, ctx.Classroom, ctx.Assignment)
 	return commitTeamsUpdate(client, ctx, message, func(file *configrepo.TeamsFile) error {
 		configrepo.RemoveTeam(file, ctx.Assignment, slug)
+		return nil
+	}, func(file *assignment.AssignmentsJSON) error {
+		idx, ok := assignment.FindAssignment(file.Assignments, ctx.Assignment)
+		if !ok {
+			return nil // assignment already gone: nothing can allocate for it
+		}
+		assignment.RetireGroupCounter(&file.Assignments[idx], counter)
 		return nil
 	})
 }

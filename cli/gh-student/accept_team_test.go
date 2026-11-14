@@ -501,3 +501,92 @@ func TestGroupTeamCreate_SeedsCounterFromListing(t *testing.T) {
 		t.Errorf("creates = %v, want exactly %v (no sequential 422 walk)", createNames, want)
 	}
 }
+
+// The team-mode already-exists gate: the repo is adopted only when the team
+// is attached or the student can push; a detached repo the student can only
+// read is another group's leftover (#1128) and fails closed.
+func TestAssertExistingRepoIsGroups(t *testing.T) {
+	const repoName = teamTestClassroom + "-" + teamTestAssignment + "-group-1"
+	teamSlug := contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 1)
+	attachPath := "/orgs/" + teamTestOrg + "/teams/" + teamSlug + "/repos/" + teamTestOrg + "/" + repoName
+	repoPath := "/repos/" + teamTestOrg + "/" + repoName
+
+	cases := []struct {
+		name     string
+		attached bool
+		push     bool
+		wantErr  string
+	}{
+		{"attached team adopts", true, false, ""},
+		{"detached but pushable adopts (own half-finished accept)", false, true, ""},
+		{"detached and read-only is another group's repo", false, false, "doesn't belong to your group"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc(attachPath, func(w http.ResponseWriter, _ *http.Request) {
+				if tc.attached {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				http.NotFound(w, nil)
+			})
+			mux.HandleFunc(repoPath, func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"name":        repoName,
+					"permissions": map[string]bool{"admin": false, "push": tc.push, "pull": true},
+				})
+			})
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+
+			err := assertExistingRepoIsGroups(newTestRESTClient(t, server), teamTestOrg, teamSlug, repoName)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %v, want it to mention %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// A retired counter from the published entry is taken even though no team
+// holds it: the deleted team's repo survives, and a 422 can't catch the
+// collision because the TEAM name is free (#1128).
+func TestGroupTeamCreate_SkipsRetiredCounters(t *testing.T) {
+	var createNames []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/user/teams", userTeamsHandler())
+	mux.HandleFunc("/orgs/"+teamTestOrg+"/teams", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		name, _ := body["name"].(string)
+		createNames = append(createNames, name)
+		_ = json.NewEncoder(w).Encode(map[string]any{"slug": name})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	entry := teamEntry()
+	entry.RetiredGroupCounters = []int{1, 2}
+	var errOut bytes.Buffer
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, true, "")
+	if err != nil {
+		t.Fatalf("resolveTeamMembership(--new-team): %v", err)
+	}
+	if membership.Counter != 3 {
+		t.Errorf("membership = %+v, want counter 3 (1 and 2 retired)", membership)
+	}
+	want := contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 3)
+	if len(createNames) != 1 || createNames[0] != want {
+		t.Errorf("creates = %v, want exactly [%s]", createNames, want)
+	}
+}

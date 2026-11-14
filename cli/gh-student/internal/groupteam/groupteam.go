@@ -121,13 +121,19 @@ func MyTeam(client githubapi.Client, org, classroom, assignment string) (Members
 // 422s and the retry budget would cap an assignment at counterCap groups),
 // then the create's 422 stays the authority for anything the listing can't
 // see, retrying with the next free counter bounded by counterCap ATTEMPTS.
-// The seed is best-effort: a failed listing falls back to counter 1.
-func Create(client githubapi.Client, org, classroom, assignment, displayName string) (Membership, error) {
+// The seed is best-effort: a failed listing falls back to counter 1. `retired`
+// (the entry's retired_group_counters) are taken outright: a deleted team's
+// repo survives, so re-allocating its counter would hand this group the old
+// group's repo, and no 422 would catch it (the TEAM name is free) (#1128).
+func Create(client githubapi.Client, org, classroom, assignment, displayName string, retired []int) (Membership, error) {
 	record, err := MarshalDescription(classroom, assignment, displayName)
 	if err != nil {
 		return Membership{}, err
 	}
 	taken := takenCounters(client, org, classroom, assignment)
+	for _, c := range retired {
+		taken[c] = true
+	}
 	nextFree := func(from int) int {
 		for c := from; ; c++ {
 			if !taken[c] {
