@@ -16,6 +16,7 @@ import {
   is422NameTooLong,
 } from "@/github-core/errors"
 import { getRepo } from "@/github-core/repoReads"
+import { localizedError } from "@/types/localizedMessage"
 import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
@@ -83,6 +84,32 @@ function parentOrgFromRestrictionMessage(
   if (!named) return undefined
   if (named.toLowerCase() === classroomOrg.toLowerCase()) return undefined
   return named
+}
+
+// The repo behind a create's 422 "already exists". GitHub confirmed the name
+// is taken, so a 404 (or non-rate-limit 403) on the read means the repo
+// exists but the viewer can't see it: typically a private repo left behind
+// by a deleted group, which the new group has no access to (#1128). Raw, that
+// 404 read as "not found" on a repo the student was just told exists.
+async function readExistingRepo(
+  client: GitHubClient,
+  owner: string,
+  name: string,
+): Promise<GitHubRepo> {
+  try {
+    return await client.request<GitHubRepo>(`/repos/${owner}/${name}`)
+  } catch (err) {
+    if (
+      err instanceof GitHubAPIError &&
+      (err.isNotFound || (err.isForbidden && !err.isRateLimited))
+    ) {
+      throw localizedError({
+        key: "accept.errors.repoExistsInaccessible",
+        params: { org: owner, repo: name },
+      })
+    }
+    throw err
+  }
 }
 
 export async function createAssignmentRepo(params: {
@@ -183,13 +210,9 @@ async function createAssignmentRepoWithVisibility(
       }
 
       if (is422AlreadyExists(err)) {
-        const existing = await client.request<GitHubRepo>(
-          `/repos/${owner}/${name}`,
-        )
-
         return {
           kind: "already-accepted",
-          repo: existing,
+          repo: await readExistingRepo(client, owner, name),
         }
       }
 
@@ -348,13 +371,9 @@ async function createEmptyAssignmentRepo(params: {
     }
 
     if (err instanceof GitHubAPIError && is422AlreadyExists(err)) {
-      const existing = await client.request<GitHubRepo>(
-        `/repos/${owner}/${name}`,
-      )
-
       return {
         kind: "already-accepted",
-        repo: existing,
+        repo: await readExistingRepo(client, owner, name),
       }
     }
 

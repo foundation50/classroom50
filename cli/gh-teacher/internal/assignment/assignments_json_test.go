@@ -233,6 +233,51 @@ func TestPagesRoundTripsAndExcludesEmptyRepo(t *testing.T) {
 	}
 }
 
+// retired_group_counters is a typed field (not Extra), round-trips, and is
+// validated to the schema's shape: counters >= 1, no duplicates.
+func TestRetiredGroupCountersRoundTripAndValidate(t *testing.T) {
+	raw := `{"slug":"proj","name":"Project","mode":"team","autograder":"default","max_group_size":3,"team_formation":"student","retired_group_counters":[1,3]}`
+	var entry AssignmentEntry
+	if err := json.Unmarshal([]byte(raw), &entry); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := entry.RetiredGroupCounters; len(got) != 2 || got[0] != 1 || got[1] != 3 {
+		t.Fatalf("retired_group_counters not decoded into the typed field: %v", got)
+	}
+	if _, diverted := entry.Extra["retired_group_counters"]; diverted {
+		t.Fatalf("retired_group_counters was diverted to Extra; add it to knownEntryKeys")
+	}
+	if err := ValidateAssignmentEntry(entry); err != nil {
+		t.Fatalf("valid entry rejected: %v", err)
+	}
+	out, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(out), `"retired_group_counters":[1,3]`) {
+		t.Fatalf("retired_group_counters did not round-trip: %s", out)
+	}
+
+	for _, bad := range [][]int{{0}, {-2}, {2, 2}} {
+		entry.RetiredGroupCounters = bad
+		if err := ValidateAssignmentEntry(entry); err == nil || !strings.Contains(err.Error(), "retired_group_counters") {
+			t.Errorf("retired_group_counters %v should be rejected, got %v", bad, err)
+		}
+	}
+}
+
+// RetireGroupCounter is append-only, sorted, and idempotent: a counter is
+// never dropped (its repo may still exist) and never listed twice.
+func TestRetireGroupCounter(t *testing.T) {
+	entry := AssignmentEntry{RetiredGroupCounters: []int{3}}
+	RetireGroupCounter(&entry, 1)
+	RetireGroupCounter(&entry, 3)
+	RetireGroupCounter(&entry, 2)
+	if got := entry.RetiredGroupCounters; len(got) != 3 || got[0] != 1 || got[1] != 2 || got[2] != 3 {
+		t.Fatalf("retired = %v, want [1 2 3]", got)
+	}
+}
+
 // TestSubmissionModeReaderRuleParity pins the PROSE reader rule (absence is the
 // wire default; never gate on the field being present) across its three
 // hand-synced copies — the schema submission_mode.description, contract.go, and

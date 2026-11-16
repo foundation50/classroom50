@@ -197,8 +197,10 @@ func loadRosterLogins(client githubapi.Client, ctx teamContext) (map[string]bool
 // commitTeamsUpdate applies `mutate` to <classroom>/teams.json through the
 // same optimistic-update-with-rebase loop assignment add uses, so concurrent
 // team edits don't lose each other's work. `mutate` runs per attempt against
-// the file read at that attempt's parent SHA.
-func commitTeamsUpdate(client githubapi.Client, ctx teamContext, message string, mutate func(*configrepo.TeamsFile) error) error {
+// the file read at that attempt's parent SHA. An optional `mutateAssignments`
+// edits <classroom>/assignments.json in the SAME commit, for bookkeeping that
+// must not diverge from the snapshot (a deleted team's retired counter).
+func commitTeamsUpdate(client githubapi.Client, ctx teamContext, message string, mutate func(*configrepo.TeamsFile) error, mutateAssignments ...func(*assignment.AssignmentsJSON) error) error {
 	build := func(parentSHA string) (map[string]string, error) {
 		file, err := configrepo.ReadTeamsFile(client, ctx.Org, ctx.Classroom, parentSHA)
 		if err != nil {
@@ -211,7 +213,22 @@ func commitTeamsUpdate(client githubapi.Client, ctx teamContext, message string,
 		if err != nil {
 			return nil, err
 		}
-		return map[string]string{configrepo.TeamsFilePath(ctx.Classroom): string(data)}, nil
+		tree := map[string]string{configrepo.TeamsFilePath(ctx.Classroom): string(data)}
+		for _, mutateEntries := range mutateAssignments {
+			entries, err := configrepo.LoadAssignments(client, ctx.Org, ctx.Classroom, parentSHA)
+			if err != nil {
+				return nil, err
+			}
+			if err := mutateEntries(&entries); err != nil {
+				return nil, err
+			}
+			encoded, err := assignment.EncodeAssignments(entries)
+			if err != nil {
+				return nil, err
+			}
+			tree[assignment.AssignmentsFilePath(ctx.Classroom)] = string(encoded)
+		}
+		return tree, nil
 	}
 	_, err := configwrite.CommitTree(client, ctx.Org, configrepo.ConfigRepoName, ctx.Branch, contract.PrefixCommit(message), build)
 	return err

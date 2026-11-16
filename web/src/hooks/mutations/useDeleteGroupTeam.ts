@@ -1,20 +1,21 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys, invalidateGroupTeams } from "@/github-core/queries"
-import { deleteGroupTeam } from "@/domain/teams/groupTeams"
 import {
-  removeTeamFromSnapshot,
-  writeTeamsFile,
-} from "@/domain/teams/teamsFile"
-import { logger } from "@/lib/logger"
+  githubKeys,
+  invalidateAssignments,
+  invalidateGroupTeams,
+} from "@/github-core/queries"
+import { deleteGroupTeam } from "@/domain/teams/groupTeams"
+import { recordGroupTeamDeletion } from "@/domain/teams/groupCounters"
 
-const log = logger.scope("mutations:deleteGroupTeam")
-
-// Delete a group team (fail-closed guards in the domain layer) and drop it
-// from the teams.json snapshot. The snapshot write is best-effort: the team is
-// already gone, so a failed follow-up commit only leaves a stale snapshot row
-// the drift badge surfaces.
+// Delete a group team: record the deletion in the config repo (drop its
+// teams.json row, retire its counter on the assignment entry), THEN delete the
+// team (fail-closed guards in the domain layer). Bookkeeping goes first
+// because it is what keeps the counter from being handed out again while the
+// group's repo survives (#1128): a failed commit aborts before anything is
+// destroyed, and a failed delete afterwards only leaves a live team the
+// drift badge restores on the next sync.
 export function useDeleteGroupTeam(params: {
   org: string
   classroom: string
@@ -26,36 +27,27 @@ export function useDeleteGroupTeam(params: {
 
   return useMutation({
     meta: { keepTabOpen: true },
-    mutationFn: async (input: { slug: string; id: number }) => {
+    mutationFn: async (input: { slug: string; id: number; n: number }) => {
+      await recordGroupTeamDeletion(client, {
+        org,
+        classroom,
+        assignment,
+        slug: input.slug,
+        n: input.n,
+      })
       await deleteGroupTeam(client, org, {
         slug: input.slug,
         id: input.id,
         classroom,
         assignment,
       })
-      try {
-        await writeTeamsFile(client, {
-          org,
-          classroom,
-          message: `Update teams: ${classroom}/${assignment}`,
-          update: (file) =>
-            removeTeamFromSnapshot(file, assignment, input.slug),
-        })
-      } catch (err) {
-        log.warn("teams.json cleanup after delete failed (non-fatal)", {
-          org,
-          classroom,
-          assignment,
-          slug: input.slug,
-          err,
-        })
-      }
     },
     onSuccess: (_data, input) => {
       invalidateGroupTeams(queryClient, org, classroom, assignment, input.slug)
       void queryClient.invalidateQueries({
         queryKey: githubKeys.teamsFile(org, classroom),
       })
+      invalidateAssignments(queryClient, org, classroom)
     },
   })
 }

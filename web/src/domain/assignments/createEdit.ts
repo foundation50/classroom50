@@ -120,6 +120,8 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   autograder: "preserved",
   max_group_size: "classroom50-owned",
   team_formation: "classroom50-owned",
+  // Append-only bookkeeping written by group deletion, never by the form.
+  retired_group_counters: "preserved",
   feedback_pr: "classroom50-owned",
   // Rebuilt from input and MUTABLE: an edit may flip empty_repo now (the UI
   // warns when students already accepted, since existing repos aren't

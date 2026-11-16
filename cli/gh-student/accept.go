@@ -372,7 +372,7 @@ func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, as
 	if err := assertModeCoherentForCreate(assignment, entry.Mode, entry.MaxGroupSize, entry.TeamFormation); err != nil {
 		return groupteam.Membership{}, err
 	}
-	created, err := groupteam.Create(client, org, classroom, assignment, teamName)
+	created, err := groupteam.Create(client, org, classroom, assignment, teamName, entry.RetiredGroupCounters)
 	if err != nil {
 		return groupteam.Membership{}, err
 	}
@@ -552,6 +552,12 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if err != nil {
 		createSp.Fail(createMsg)
 		return err
+	}
+	if alreadyExisted && teamSlug != "" {
+		if err := assertExistingRepoIsGroups(client, org, teamSlug, reponame.Name(classroom, assignment, ownerSegment)); err != nil {
+			createSp.Fail(createMsg)
+			return err
+		}
 	}
 	if hasTemplate {
 		// Resolve the template owner's immutable id best-effort so a rename
@@ -852,6 +858,55 @@ func attachTeamStep(client githubapi.Client, p acceptRepoParams) error {
 		return nil
 	}
 	return groupteam.AttachRepo(context.Background(), client, p.org, p.teamSlug, p.repoName)
+}
+
+// assertExistingRepoIsGroups gates the team-mode already-exists path: a repo
+// already sitting at the group's name is the group's own only when the team
+// is attached (a teammate's accept) or the student can push to it (their own
+// half-finished accept left them creator-admin). Anything else is another
+// group's repo, left behind by a deleted team whose counter was re-allocated
+// (#1128), and adopting it would hand this group push on someone else's work.
+// Fail closed. Mirrors the web's assertExistingRepoIsGroups.
+func assertExistingRepoIsGroups(client githubapi.Client, org, teamSlug, repoName string) error {
+	attached, err := groupteam.TeamHasRepo(context.Background(), client, org, teamSlug, repoName)
+	if err != nil {
+		return err
+	}
+	if attached {
+		return nil
+	}
+	var repo struct {
+		Permissions struct {
+			Admin bool `json:"admin"`
+			Push  bool `json:"push"`
+		} `json:"permissions"`
+	}
+	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(repoName))
+	if err := client.Get(path, &repo); err != nil {
+		return fmt.Errorf("GET %s (checking whether the existing repository is your group's): %w", path, err)
+	}
+	if repo.Permissions.Admin || repo.Permissions.Push {
+		return nil
+	}
+	return fmt.Errorf("a repository named %s/%s already exists, but it doesn't belong to your group; it was probably left behind by a group that was deleted. Ask your teacher for help: they can rename or delete that repository, or delete your group so you can create a new one", org, repoName)
+}
+
+// readExistingRepo resolves the repo behind a create's 422 "already exists".
+// GitHub confirmed the name is taken, so a 404 (or 403) on the read means the
+// repo exists but the student can't see it: typically a private repo left
+// behind by a deleted group (#1128). Raw, that 404 read as "not found" on a
+// repo the student was just told exists.
+func readExistingRepo(client githubapi.Client, org, repoName string, into *GeneratedRepo) error {
+	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(repoName))
+	err := client.Get(path, into)
+	if err == nil {
+		return nil
+	}
+	if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok &&
+		(httpErr.StatusCode == http.StatusNotFound || httpErr.StatusCode == http.StatusForbidden) {
+		return fmt.Errorf("a repository named %s/%s already exists, but your account can't open it. Ask your teacher to check who it belongs to, then run accept again", org, repoName)
+	}
+	return fmt.Errorf("repository %s/%s already exists but reading it failed (GET %s): %w", org, repoName, path, err)
 }
 
 // enablePagesStep configures the assignment's GitHub Pages site once the branch
@@ -1501,9 +1556,8 @@ func createTemplatedAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbo
 					return "", "", "", false, repoNameTooLongError(newRepoName, err)
 				}
 				if is422AlreadyExists(httpErr) {
-					getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
-					if getErr := client.Get(getPath, &created); getErr != nil {
-						return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
+					if getErr := readExistingRepo(client, org, newRepoName, &created); getErr != nil {
+						return "", "", "", false, getErr
 					}
 					return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
 				}
@@ -1629,9 +1683,8 @@ func createEmptyAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose b
 					return "", "", "", false, repoNameTooLongError(newRepoName, err)
 				}
 				if is422AlreadyExists(httpErr) {
-					getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
-					if getErr := client.Get(getPath, &created); getErr != nil {
-						return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
+					if getErr := readExistingRepo(client, org, newRepoName, &created); getErr != nil {
+						return "", "", "", false, getErr
 					}
 					return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
 				}

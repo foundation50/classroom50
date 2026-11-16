@@ -72,7 +72,7 @@ func TestCreateGroupTeam_FirstCounter(t *testing.T) {
 	server, posts := groupTeamServer(t, nil, 0)
 	client := githubtest.NewTestClient(t, server)
 
-	slug, id, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "The Sharks", []string{"ms-frizzle"}, contract.TeamFormationTeacher)
+	slug, id, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "The Sharks", []string{"ms-frizzle"}, contract.TeamFormationTeacher, nil)
 	if err != nil {
 		t.Fatalf("CreateGroupTeam: %v", err)
 	}
@@ -97,8 +97,9 @@ func TestCreateGroupTeam_FirstCounter(t *testing.T) {
 	}
 }
 
-// The listing seeds the lowest FREE counter (a deleted team's gap is reused),
-// and a 422 (an invisible secret team won the counter) retries with the next.
+// The listing seeds the lowest FREE counter (a gap with no retired counter
+// behind it is reused), and a 422 (an invisible secret team won the counter)
+// retries with the next.
 func TestCreateGroupTeam_SkipsTakenAndRetriesOn422(t *testing.T) {
 	existing := []map[string]any{
 		{"id": 1, "slug": groupSlug(t, 1), "description": groupRecord(t, "")},
@@ -108,7 +109,7 @@ func TestCreateGroupTeam_SkipsTakenAndRetriesOn422(t *testing.T) {
 	server, posts := groupTeamServer(t, existing, 1)
 	client := githubtest.NewTestClient(t, server)
 
-	slug, _, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil, contract.TeamFormationTeacher)
+	slug, _, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil, contract.TeamFormationTeacher, nil)
 	if err != nil {
 		t.Fatalf("CreateGroupTeam: %v", err)
 	}
@@ -123,13 +124,34 @@ func TestCreateGroupTeam_SkipsTakenAndRetriesOn422(t *testing.T) {
 	}
 }
 
+// A retired counter is taken even when no team holds it: the deleted team's
+// repo survives, and no 422 would catch the collision (#1128).
+func TestCreateGroupTeam_SkipsRetiredCounters(t *testing.T) {
+	existing := []map[string]any{
+		{"id": 2, "slug": groupSlug(t, 2), "description": groupRecord(t, "")},
+	}
+	server, posts := groupTeamServer(t, existing, 0)
+	client := githubtest.NewTestClient(t, server)
+
+	slug, _, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil, contract.TeamFormationTeacher, []int{1, 3})
+	if err != nil {
+		t.Fatalf("CreateGroupTeam: %v", err)
+	}
+	if n != 4 || slug != groupSlug(t, 4) {
+		t.Errorf("got counter %d (%q), want 4 (1 and 3 retired, 2 live)", n, slug)
+	}
+	if len(*posts) != 1 {
+		t.Errorf("POSTs = %d, want 1 (the seed already skipped the retired counters)", len(*posts))
+	}
+}
+
 // Exhausting the retry budget fails with an actionable error, never an
 // infinite loop.
 func TestCreateGroupTeam_BoundedRetries(t *testing.T) {
 	server, posts := groupTeamServer(t, nil, 1_000_000)
 	client := githubtest.NewTestClient(t, server)
 
-	_, _, _, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil, contract.TeamFormationTeacher)
+	_, _, _, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil, contract.TeamFormationTeacher, nil)
 	if err == nil || !strings.Contains(err.Error(), "could not allocate a group team counter") {
 		t.Fatalf("err = %v, want the bounded-allocation failure", err)
 	}
