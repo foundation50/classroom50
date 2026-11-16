@@ -1425,19 +1425,22 @@ export function buildRosterDisplayItems(
 }
 
 // Build the display list for a GROUP assignment in name order: one item per
-// group founder, name-sorted in the given mode (first- or last-name), resolved
-// to the founder's submitted row when one exists (owner match) else an
-// unsubmitted group-repo row. The group analog of buildRosterDisplayItems.
-// `rows` are the (filtered) submitted group rows; `groupRepos` the unsubmitted
-// group repos. Team mode may add `teamsWithoutRepos` (live teams whose repo
-// doesn't exist yet); they key on the same `group-<n>` owner segment, so the
-// shared sort interleaves them with the other team rows by counter.
+// group, name-sorted, resolved to the group's submitted row when one exists
+// (owner match) else an unsubmitted group-repo row. The group analog of
+// buildRosterDisplayItems. `rows` are the (filtered) submitted group rows;
+// `groupRepos` the unsubmitted group repos. Team mode adds `teamsWithoutRepos`
+// (live teams whose repo doesn't exist yet) and `groupDisplayNames`, the label
+// the table shows for each `group-<n>` owner: a team row sorts by that label
+// (#1157), so the order the teacher sees matches the names they read, not the
+// creation counter. A legacy group (owner = founder login) sorts by the
+// founder's roster name in the given first/last mode, else the login.
 export function buildGroupRosterDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
   students: Student[],
   mode: StudentSortMode = "first",
   teamsWithoutRepos: GroupTeamRef[] = [],
+  groupDisplayNames?: ReadonlyMap<string, string>,
 ): DisplayItem[] {
   const submitted = rows.map<DisplayItem>((row) => ({ kind: "row", row }))
   const unsubmitted = groupRepos.map<DisplayItem>((repo) => ({
@@ -1451,13 +1454,22 @@ export function buildGroupRosterDisplayItems(
   // Precompute the name map once so the comparator is O(1) per compare (getName
   // would re-scan the roster each call).
   const names = buildNameKeyLookup(students, mode)
-  return [...submitted, ...unsubmitted, ...repoless].sort((a, b) =>
-    ownerSortKey(displayItemOwner(a), names).localeCompare(
-      ownerSortKey(displayItemOwner(b), names),
-      undefined,
-      NAME_COLLATION,
-    ),
+  const keyed = [...submitted, ...unsubmitted, ...repoless].map((item) => {
+    const owner = displayItemOwner(item).trim().toLowerCase()
+    return {
+      item,
+      owner,
+      key: groupSortKey(owner, names, groupDisplayNames),
+    }
+  })
+  // Two groups can share a display name; the owner segment breaks the tie so
+  // the order is deterministic across the table and the fan-out spine.
+  keyed.sort(
+    (a, b) =>
+      a.key.localeCompare(b.key, undefined, NAME_COLLATION) ||
+      a.owner.localeCompare(b.owner, undefined, NAME_COLLATION),
   )
+  return keyed.map(({ item }) => item)
 }
 
 // Build the ordered display list for a GROUP assignment under a non-name sort:
@@ -1575,11 +1587,19 @@ export function buildNameKeyLookup(
   return map
 }
 
-// A single owner's group SORT key from the precomputed name map: display name
-// when the founder is on the roster with a name, else the login — lowercased.
-// (Mirrors the prior `getName(owner) || owner`.)
-function ownerSortKey(owner: string, names: Map<string, string>): string {
-  return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
+// A single group's SORT key, from a lowercased owner segment: the team's
+// display name when the page knows one (team mode), else the founder's roster
+// name (legacy group), else the owner itself — lowercased throughout.
+function groupSortKey(
+  owner: string,
+  names: Map<string, string>,
+  groupDisplayNames?: ReadonlyMap<string, string>,
+): string {
+  return (
+    groupDisplayNames?.get(owner)?.trim().toLowerCase() ||
+    names.get(owner) ||
+    owner
+  )
 }
 
 // Lowercased founder -> the logins a NEW manual grade on a legacy group repo
@@ -1752,6 +1772,7 @@ export function displayPageOwners({
   nonSubmitters,
   groupRepos,
   teamsWithoutRepos = [],
+  groupDisplayNames,
   page,
   pageSize,
 }: {
@@ -1765,6 +1786,9 @@ export function displayPageOwners({
   // slots (so the page slice matches the rendered table) but contribute no
   // owner — there is no repo for the fan-out to read.
   teamsWithoutRepos?: GroupTeamRef[]
+  // Team mode: the labels the table sorts group rows by under a name sort.
+  // Must be the same map the table gets, or the two page over different rows.
+  groupDisplayNames?: ReadonlyMap<string, string>
   page: number
   pageSize: number
 }): string[] {
@@ -1776,6 +1800,7 @@ export function displayPageOwners({
           students,
           sortNameMode(sort),
           teamsWithoutRepos,
+          groupDisplayNames,
         )
       : buildGroupDisplayItems(rows, groupRepos, teamsWithoutRepos)
     : isNameSort(sort)

@@ -804,11 +804,21 @@ const SubmissionsPageContent = () => {
             isGroup: isGroupFlavor,
             sort,
             students,
+            groupDisplayNames,
             page,
             pageSize,
           })
         : [],
-    [scoresLoaded, spineInputs, isGroupFlavor, sort, students, page, pageSize],
+    [
+      scoresLoaded,
+      spineInputs,
+      isGroupFlavor,
+      sort,
+      students,
+      groupDisplayNames,
+      page,
+      pageSize,
+    ],
   )
   const {
     submissions: liveSubmissions,
