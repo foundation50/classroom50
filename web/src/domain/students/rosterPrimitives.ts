@@ -406,8 +406,8 @@ export async function resolveTeamIdForRoleRead(
 
 // Re-send a pending classroom/staff org invitation, re-attaching the invitee's
 // role team so accepting lands them on it (a team-less resend orphans them) and
-// re-issuing the role's org role (teacher -> org OWNER) so a resend never
-// downgrades a pending teacher. The single source for the resend recipe shared
+// retaining ordinary organization membership; classroom teams carry the
+// teacher role. The single source for the resend recipe shared
 // by the staff-settings hook, the roster member modal, and the roster bulk bar
 // — each resolves the invitee id its own way (login lookup vs. the row's
 // github_id) and passes it in.

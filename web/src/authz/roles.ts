@@ -67,18 +67,13 @@ export function isTeacherRole(role: ResolvedRole | undefined): boolean {
 // per-classroom staff/student team); "member" means "on this team".
 export type GitHubTeamMembership = "member" | "non-member" | "unresolved"
 
-// --- The app<->GitHub org-role mapping (both directions, single-sourced) -----
-// The ONLY place the admin<->owner correspondence is decided (GitHub wire
-// "admin" == product "owner", i.e., teacher). Security-sensitive: a missed
-// hand-copy elsewhere could silently mis-scope owner access, so all three
-// helpers below live here.
-
-// WRITE: the org membership role an invite/role-change carries. Only teacher
-// maps to owner ("admin"); student/ta are "direct_member".
+// Classroom roles are team memberships and never grant organization ownership.
+// Organization admin remains an independently managed institutional permission.
 export function githubOrgRoleForRole(
   role: ClassroomRole,
 ): "admin" | "direct_member" {
-  return isTeacherRole(role) ? "admin" : "direct_member"
+  void role
+  return "direct_member"
 }
 
 // READ (inverse): the classroom role an existing invite's org role implies.

@@ -1058,7 +1058,7 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     expect(state.committed).toBeNull()
   })
 
-  it("invites a teacher as an org OWNER (admin role), retaining their email too", async () => {
+  it("invites a teacher as an ordinary member, retaining their email too", async () => {
     const { client, state } = makeClient()
 
     await bulkInviteByEmail(client, {
@@ -1069,7 +1069,7 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
 
     expect(state.inviteBodies[0]).toMatchObject({
       email: "prof@x.edu",
-      role: "admin",
+      role: "direct_member",
     })
     // An accepting owner is auto-promoted to team maintainer, but the invite
     // team holds no teacher and the reconcile reads members of every role, so a
@@ -1551,7 +1551,7 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // reconcile sees an accepting owner even though GitHub makes them a
     // maintainer.
     expect(byEmail.get("prof@x.edu")).toMatchObject({
-      role: "admin",
+      role: "direct_member",
       team_ids: [5000, 9001],
     })
     // Every invited email gets a pending roster row recording its invited role,
@@ -4525,7 +4525,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(invitations[0]).toMatchObject({ role: "direct_member" })
   })
 
-  it("invites a teacher row as an organization OWNER (role admin)", async () => {
+  it("invites a teacher row as an ordinary organization member", async () => {
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },
       members: [],
@@ -4538,8 +4538,11 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     })
 
     expect(res.invited).toEqual([{ username: "prof", role: "teacher" }])
-    // The org invite must carry admin (owner), not direct_member.
-    expect(invitations[0]).toMatchObject({ invitee_id: 9, role: "admin" })
+    // Teacher access comes from the staff team, not organization ownership.
+    expect(invitations[0]).toMatchObject({
+      invitee_id: 9,
+      role: "direct_member",
+    })
   })
 
   it("invites a ta row as a plain member (direct_member), not an owner", async () => {
@@ -4555,7 +4558,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     })
 
     expect(res.invited).toEqual([{ username: "helper", role: "ta" }])
-    // A TA is a plain org member; only teacher -> admin.
+    // Every classroom role keeps ordinary organization membership.
     expect(invitations[0]).toMatchObject({
       invitee_id: 8,
       role: "direct_member",
@@ -4585,11 +4588,11 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
         { username: "prof", role: "teacher" },
       ]),
     )
-    // Only the teacher is invited as an org owner (admin); the rest are plain.
+    // All classroom roles use ordinary organization membership.
     const byId = new Map(invitations.map((i) => [i.invitee_id, i]))
     expect(byId.get(1)).toMatchObject({ role: "direct_member" })
     expect(byId.get(2)).toMatchObject({ role: "direct_member" })
-    expect(byId.get(3)).toMatchObject({ role: "admin" })
+    expect(byId.get(3)).toMatchObject({ role: "direct_member" })
   })
 
   it("does not escalate an existing active member for a teacher row", async () => {
@@ -5109,7 +5112,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
     expect(orgRolePuts).toEqual([])
   })
 
-  it("promotes to teacher: adds to the teacher team AND sets org role admin", async () => {
+  it("assigns teacher without changing organization ownership", async () => {
     const { client, teamAdds, orgRolePuts } = makeRoleChangeClient({
       members: ["userb"],
     })
@@ -5126,10 +5129,10 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       slug: "classroom50-cs101-teacher",
       login: "userb",
     })
-    expect(orgRolePuts).toContainEqual({ login: "userb", role: "admin" })
+    expect(orgRolePuts).toEqual([])
   })
 
-  it("downgrades a teacher to student: demotes org role to member BEFORE any team change", async () => {
+  it("moves teacher to student without changing organization ownership", async () => {
     const { client, teamAdds, teamRemoves, orgRolePuts, ops } =
       makeRoleChangeClient({ members: ["boss"] })
 
@@ -5149,10 +5152,9 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       slug: "classroom50-cs101-teacher",
       login: "boss",
     })
-    expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
-    // The owner demote must run FIRST, so a failure never leaves the member
-    // half-moved-but-still-owner. The first recorded op is the membership PUT.
-    expect(ops[0]).toEqual({ kind: "orgRole", login: "boss", role: "member" })
+    expect(orgRolePuts).toEqual([])
+    // Classroom moves must not write organization membership.
+    expect(ops.some((op) => op.kind === "orgRole")).toBe(false)
   })
 
   it("drops EVERY non-target classroom team for a multi-team member", async () => {
@@ -5236,43 +5238,26 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
     expect(teamAdds).toEqual([])
   })
 
-  it("refuses a self-demotion off teacher before any mutation", async () => {
-    const { client, orgRolePuts, teamAdds } = makeRoleChangeClient({
+  it.each([
+    { viewerLogin: "boss", admins: ["boss", "other"] },
+    { viewerLogin: "other", admins: ["boss"] },
+  ])("preserves ownership during a classroom change: %j", async (options) => {
+    const { client, orgRolePuts, teamRemoves } = makeRoleChangeClient({
       members: ["boss"],
-      viewerLogin: "boss", // the acting owner IS the demotion target
+      ...options,
     })
-
-    await expect(
-      applyClassroomRoleChange(client, {
-        org: "acme",
-        classroom: "cs101",
-        username: "boss",
-        fromRoles: ["teacher"],
-        toRole: "student",
-      }),
-    ).rejects.toThrow(/can't demote yourself/i)
-    // Nothing mutated — the guard runs before the owner demote and team moves.
-    expect(orgRolePuts).toEqual([])
-    expect(teamAdds).toEqual([])
-  })
-
-  it("refuses demoting the sole organization owner", async () => {
-    const { client, orgRolePuts } = makeRoleChangeClient({
-      members: ["boss"],
-      viewerLogin: "someviewer",
-      admins: ["boss"], // boss is the only owner
+    await applyClassroomRoleChange(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "boss",
+      fromRoles: ["teacher"],
+      toRole: "student",
     })
-
-    await expect(
-      applyClassroomRoleChange(client, {
-        org: "acme",
-        classroom: "cs101",
-        username: "boss",
-        fromRoles: ["teacher"],
-        toRole: "student",
-      }),
-    ).rejects.toThrow(/only organization owner/i)
     expect(orgRolePuts).toEqual([])
+    expect(teamRemoves).toContainEqual({
+      slug: "classroom50-cs101-teacher",
+      login: "boss",
+    })
   })
 
   it("does not block a demotion when the owner list is unreadable (403 -> [])", async () => {
@@ -5291,7 +5276,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
       toRole: "student",
     })
 
-    expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
+    expect(orgRolePuts).toEqual([])
   })
 
   it("leaves the owner untouched when the target staff slug is held by an unclaimed team", async () => {
@@ -5314,7 +5299,7 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
     expect(orgRolePuts).toEqual([])
   })
 
-  it("surfaces an owner-revoked error when a step fails after the demote", async () => {
+  it("preserves ownership when the target team update fails", async () => {
     // The owner demote commits, then the target team-add throws — the error
     // must say the owner was revoked so the caller re-runs, not a generic fail.
     const { client, orgRolePuts } = makeRoleChangeClient({
@@ -5330,9 +5315,9 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
         fromRoles: ["teacher"],
         toRole: "student",
       }),
-    ).rejects.toThrow(/demoted from organization owner.*Re-run/s)
-    // The demote did land (it ran first); the failure is the team move.
-    expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
+    ).rejects.toThrow()
+    // The team operation failed without changing organization ownership.
+    expect(orgRolePuts).toEqual([])
   })
 })
 
@@ -5448,7 +5433,7 @@ describe("resendClassroomInvite — re-attach role team + preserve org role", ()
     }
   }
 
-  it("attaches the role's team and re-issues teacher as org OWNER", async () => {
+  it("attaches the teacher team without granting organization ownership", async () => {
     const { client, posted } = makeClient({ teams: { teacher: { id: 77 } } })
     await resendClassroomInvite(client, {
       org: "acme",
@@ -5461,7 +5446,7 @@ describe("resendClassroomInvite — re-attach role team + preserve org role", ()
     expect(posted[0]).toMatchObject({
       invitee_id: 4242,
       team_ids: [77],
-      role: "admin",
+      role: "direct_member",
     })
   })
 

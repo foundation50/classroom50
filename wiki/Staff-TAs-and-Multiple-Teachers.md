@@ -8,7 +8,7 @@ when several teachers are involved.
 
 | Role | On GitHub | Can |
 | --- | --- | --- |
-| **Teacher** | Organization **owner**, on the classroom's teacher team | Everything, including organization and classroom settings |
+| **Teacher** | Organization member, on the classroom's teacher team | Manage classroom settings and assignments; organization settings remain owner-only |
 | **Head TA** | Organization member, on the head-TA team | Write the `classroom50` repository; manage the classroom; review and merge feedback pull requests; not an owner |
 | **TA** | Organization member, on the TA team | Read the `classroom50` repository; view submissions and scores; review and merge feedback pull requests |
 | **Student** | Organization member, on the classroom team | Accept and submit assignments |
@@ -53,14 +53,13 @@ but doesn't touch their organization membership.
 Staff can also be invited by email, from the web app only. On the classroom's
 **Roster** page, click **Upload roster** and choose a file of addresses (one per
 line, or a roster CSV with an `email` column), then set each person's role in
-the preview's **Role** column, or supply a `role` column in the CSV. Rows marked
-**Teacher** show a warning before you confirm, because the teacher role makes
-that person an organization owner. As with a student, the address goes onto the
+the preview's **Role** column, or supply a `role` column in the CSV. Teacher invitations grant ordinary organization membership and the classroom
+teacher team. Organization ownership is managed separately. As with a student, the address goes onto the
 roster as a pending row and is matched to their GitHub account when they accept.
 See [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 `gh teacher roster invite` has no `--role` flag: it sends student invitations
-only, so a mistyped address can never be handed organization ownership. From the
+only, so classroom staff roles are assigned explicitly. From the
 CLI, grant a role with `gh teacher staff add` once you know the person's
 username. If you only have their address, invite them by email as a student
 first, then grant the role once they've joined; they stay enrolled as a student
