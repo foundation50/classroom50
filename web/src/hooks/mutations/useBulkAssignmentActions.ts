@@ -6,7 +6,9 @@ import { invalidateAssignments } from "@/github-core/queries"
 import {
   copyAssignmentsWithConflictRetry,
   deleteAssignmentsWithConflictRetry,
+  setAssignmentsClosedWithConflictRetry,
   setAssignmentsLockWithConflictRetry,
+  type BulkClosedResult,
   type BulkCopyItem,
   type BulkCopyResult,
   type BulkDeleteResult,
@@ -32,6 +34,28 @@ export function useBulkSetAssignmentLock(org: string, classroom: string) {
         classroom,
         slugs,
         locked,
+      }),
+    onSuccess: () => invalidateAssignments(queryClient, org, classroom),
+  })
+}
+
+export function useBulkSetAssignmentClosed(org: string, classroom: string) {
+  const client = useGitHubClient()
+  const queryClient = useQueryClient()
+
+  return useMutation<
+    BulkClosedResult,
+    Error,
+    { slugs: string[]; closed: boolean }
+  >({
+    // One commit and no template side effect; the per-repo access fan-out that
+    // follows it is the caller's, and holds the tab open itself.
+    mutationFn: ({ slugs, closed }) =>
+      setAssignmentsClosedWithConflictRetry(client, {
+        org,
+        classroom,
+        slugs,
+        closed,
       }),
     onSuccess: () => invalidateAssignments(queryClient, org, classroom),
   })
