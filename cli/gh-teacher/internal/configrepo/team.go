@@ -826,6 +826,14 @@ func teamRepoPermission(client githubapi.Client, org, slug, repoOwner, repo stri
 		return "", fmt.Errorf("GET %s: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// Without the `application/vnd.github.v3.repository+json` media type, which
+	// this client cannot send, GitHub answers a team that HAS access with 204 No
+	// Content and no body. Read the permission from the repository's team list
+	// instead of failing to decode an empty body.
+	if resp.StatusCode == http.StatusNoContent {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return teamPermissionFromRepoTeams(client, slug, repoOwner, repo)
+	}
 	var payload struct {
 		Permissions map[string]bool `json:"permissions"`
 	}
@@ -836,6 +844,30 @@ func teamRepoPermission(client githubapi.Client, org, slug, repoOwner, repo stri
 	for _, p := range []string{"admin", "maintain", "push", "triage", "pull"} {
 		if payload.Permissions[p] {
 			return p, nil
+		}
+	}
+	return "", nil
+}
+
+// teamPermissionFromRepoTeams returns the team's permission on
+// <repoOwner>/<repo> from GET /repos/{owner}/{repo}/teams, whose entries carry
+// a `permission` string. It backs teamRepoPermission when the per-team check
+// answers 204. Returns "" when the team is not listed.
+func teamPermissionFromRepoTeams(client githubapi.Client, slug, repoOwner, repo string) (string, error) {
+	const perPage = 100
+	teams, err := githubapi.PaginateAll[struct {
+		Slug       string `json:"slug"`
+		Permission string `json:"permission"`
+	}](client, perPage, 50, func(page int) string {
+		return fmt.Sprintf("repos/%s/%s/teams?per_page=%d&page=%d",
+			url.PathEscape(repoOwner), url.PathEscape(repo), perPage, page)
+	}, nil)
+	if err != nil {
+		return "", err
+	}
+	for _, t := range teams {
+		if t.Slug == slug {
+			return t.Permission, nil
 		}
 	}
 	return "", nil
