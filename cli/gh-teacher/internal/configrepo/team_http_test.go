@@ -688,6 +688,61 @@ func TestGrantTeamConfigRepoAccess(t *testing.T) {
 	}
 }
 
+// TestGrantTeamConfigRepoAccess204 covers the real GitHub behavior the
+// table above fakes away: the per-team check answers 204 with no body when
+// the team has access, so the permission must come from the repo's team list.
+func TestGrantTeamConfigRepoAccess204(t *testing.T) {
+	cases := []struct {
+		name       string
+		role       StaffRole
+		current    string
+		wantPut    string
+		wantChange bool
+	}{
+		{"no-op when hta already push", RoleHeadTA, "push", "", false},
+		{"downgrade ta push to pull", RoleTA, "push", "pull", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			slug := "classroom50-x-" + string(tc.role)
+			var gotPut string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/repos/o/classroom50/teams"):
+					_ = json.NewEncoder(w).Encode([]map[string]any{
+						{"slug": "classroom50-x-teacher", "permission": "push"},
+						{"slug": slug, "permission": tc.current},
+					})
+				case r.Method == http.MethodGet:
+					w.WriteHeader(http.StatusNoContent)
+				case r.Method == http.MethodPut:
+					var body struct {
+						Permission string `json:"permission"`
+					}
+					_ = json.NewDecoder(r.Body).Decode(&body)
+					gotPut = body.Permission
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+				}
+			}))
+			t.Cleanup(server.Close)
+			client := githubtest.NewTestClient(t, server)
+
+			changed, err := GrantTeamConfigRepoAccess(client, "o", slug, tc.role)
+			if err != nil {
+				t.Fatalf("GrantTeamConfigRepoAccess: %v", err)
+			}
+			if changed != tc.wantChange {
+				t.Errorf("changed = %v, want %v", changed, tc.wantChange)
+			}
+			if gotPut != tc.wantPut {
+				t.Errorf("PUT permission = %q, want %q", gotPut, tc.wantPut)
+			}
+		})
+	}
+}
+
 // TestGrantTeamRepoWrite requests push, and is idempotent when the team
 // already has access.
 func TestGrantTeamRepoWrite(t *testing.T) {
