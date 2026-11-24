@@ -1,5 +1,7 @@
-import type { QueryClient } from "@tanstack/react-query"
+import { hashKey, type QueryClient } from "@tanstack/react-query"
 
+import type { AssignmentsFile } from "@/domain/queries/assignments"
+import type { TeamsFile } from "@/domain/teams/teamsFile"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { ACCEPT_MARKER_PATH } from "@/util/yaml"
 import {
@@ -398,7 +400,10 @@ export function invalidateInviteQueries(queryClient: QueryClient, org: string) {
   queryClient.invalidateQueries({ queryKey: githubKeys.orgMembers(org) })
 }
 
-// Refresh a classroom's assignments list after any assignments.json write.
+// Refresh a classroom's assignments list after an assignments.json write whose
+// committed document the caller doesn't hold (the multi-phase rename). A
+// writer that does hold it must use seedAssignments instead, so the read never
+// races GitHub's contents API.
 export function invalidateAssignments(
   queryClient: QueryClient,
   org: string,
@@ -407,4 +412,91 @@ export function invalidateAssignments(
   void queryClient.invalidateQueries({
     queryKey: githubKeys.assignmentsFile(org, classroom),
   })
+}
+
+// Seed one config-file read with the document a write just committed, instead
+// of refetching it. GitHub's contents API is read-after-write eventual: an
+// immediate GET can still return the pre-write body, which jsonFileQuery would
+// then cache for its 10-minute staleTime (#1004). The in-flight read is
+// cancelled first so a slow stale response can't land on top of the seed, and
+// the document is JSON round-tripped so consumers see exactly what parsing the
+// committed file yields (no `undefined` members, same shape as the wire).
+//
+// Seeds must also land in commit order. A writer resolves only after its
+// post-commit work (template grants, team reconciles), so a second writer that
+// committed on top of it can resolve first; letting the first then seed would
+// pin its older document for the whole staleTime. Each seed records the commit
+// it replaced as superseded, so a write whose own commit is already superseded
+// is behind the cache and skipped.
+export type CommittedWrite = {
+  previousCommitSha: string
+  newCommitSha: string
+}
+
+// Per QueryClient and key: every commit sha a later seed has built on top of.
+const supersededByClient = new WeakMap<QueryClient, Map<string, Set<string>>>()
+
+function supersededFor(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  let byKey = supersededByClient.get(queryClient)
+  if (!byKey) {
+    byKey = new Map()
+    supersededByClient.set(queryClient, byKey)
+  }
+  const hash = hashKey(queryKey)
+  let set = byKey.get(hash)
+  if (!set) {
+    set = new Set()
+    byKey.set(hash, set)
+  }
+  return set
+}
+
+export function seedJsonFile<T>(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  document: T,
+  commit?: CommittedWrite,
+) {
+  if (commit) {
+    const superseded = supersededFor(queryClient, queryKey)
+    if (superseded.has(commit.newCommitSha)) return
+    superseded.add(commit.previousCommitSha)
+  }
+  void queryClient.cancelQueries({ queryKey })
+  queryClient.setQueryData(queryKey, JSON.parse(JSON.stringify(document)))
+}
+
+// The seed counterpart of invalidateAssignments for writers that hold the
+// assignments.json they committed.
+export function seedAssignments(
+  queryClient: QueryClient,
+  org: string,
+  classroom: string,
+  assignments: AssignmentsFile,
+  commit?: CommittedWrite,
+) {
+  seedJsonFile(
+    queryClient,
+    githubKeys.assignmentsFile(org, classroom),
+    assignments,
+    commit,
+  )
+}
+
+// Same for teams.json: every teacher-side snapshot write hands back the file
+// it committed, so the drift badge compares live membership against that
+// rather than a stale read. A best-effort snapshot write that did not land
+// hands back nothing, and the read is refetched instead.
+export function seedTeamsFile(
+  queryClient: QueryClient,
+  org: string,
+  classroom: string,
+  committed: (CommittedWrite & { teamsFile: TeamsFile }) | undefined,
+) {
+  const queryKey = githubKeys.teamsFile(org, classroom)
+  if (!committed) {
+    void queryClient.invalidateQueries({ queryKey })
+    return
+  }
+  seedJsonFile(queryClient, queryKey, committed.teamsFile, committed)
 }

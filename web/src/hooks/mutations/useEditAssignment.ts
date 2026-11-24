@@ -4,14 +4,15 @@ import {
   type CreateAssignmentInput,
   type CreateAssignmentResult,
 } from "@/domain/assignments"
-import { invalidateAssignments } from "@/github-core/queries"
+import { seedAssignments } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
 
-// Save an assignment's settings. The hook owns the assignments.json listing
-// invalidate (unmount-safe — the persistent app shell no longer remounts the
-// page, so a stale cache would otherwise linger until a hard refresh) plus the
+// Save an assignment's settings. The hook owns the assignments.json cache
+// reconcile (unmount-safe — the persistent app shell no longer remounts the
+// page, so a stale cache would otherwise linger until a hard refresh), seeding
+// the committed file rather than refetching (see seedJsonFile). Also owns the
 // unmount-safe deploy-tracking `onWrite` follow-up (its translated label comes
 // from the call site, keeping the hook t()-free). `onMutate` is hook-level
 // (React Query forbids it as a call-site option) so the caller's pre-flight
@@ -44,7 +45,13 @@ export function useEditAssignment(opts?: {
       }),
     onMutate,
     onSuccess: (result, input) => {
-      invalidateAssignments(queryClient, input.org, input.classroom)
+      seedAssignments(
+        queryClient,
+        input.org,
+        input.classroom,
+        result.assignments,
+        result,
+      )
       onWrite?.(result, input)
     },
   })

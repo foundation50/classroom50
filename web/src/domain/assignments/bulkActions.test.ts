@@ -141,6 +141,8 @@ describe("setAssignmentsLock", () => {
 
     expect(result.changed).toEqual(["hw1"])
     expect(result.newCommitSha).toBe("NEWCOMMIT")
+    // What the hook seeds the cache with: the file as committed.
+    expect(result.assignments).toEqual(writtenAssignments())
   })
 
   it("commits nothing when every selected assignment is already in state", async () => {
@@ -154,6 +156,7 @@ describe("setAssignmentsLock", () => {
     expect(createGitTree).not.toHaveBeenCalled()
     expect(result.changed).toEqual([])
     expect(result.newCommitSha).toBeNull()
+    expect(result.assignments).toEqual(file)
   })
 
   // Matches the CLI's omitempty: unlock drops the key.
@@ -343,6 +346,7 @@ describe("deleteAssignments", () => {
     expect(createGitCommit).toHaveBeenCalledTimes(1)
     expect(writtenAssignments().assignments.map((a) => a.slug)).toEqual(["hw2"])
     expect(result.deleted).toEqual(["hw1", "hw3"])
+    expect(result.assignments).toEqual(writtenAssignments())
   })
 
   it("skips slugs that are already gone and says so", async () => {
@@ -366,6 +370,7 @@ describe("deleteAssignments", () => {
     expect(createGitTree).not.toHaveBeenCalled()
     expect(updateRef).not.toHaveBeenCalled()
     expect(result.newCommitSha).toBeNull()
+    expect(result.assignments).toEqual(file)
   })
 })
 
@@ -411,6 +416,7 @@ describe("copyAssignments", () => {
       { slug: "a1", targetSlug: "a1" },
       { slug: "a2", targetSlug: "a2" },
     ])
+    expect(result.assignments).toEqual(writtenAssignments())
   })
 
   it("writes each copy under the slug it was handed", async () => {
@@ -447,6 +453,7 @@ describe("copyAssignments", () => {
 
     expect(createGitTree).not.toHaveBeenCalled()
     expect(result.newCommitSha).toBeNull()
+    expect(result.assignments).toEqual(file)
   })
 
   it("refuses a copy whose template is gone, before any write", async () => {

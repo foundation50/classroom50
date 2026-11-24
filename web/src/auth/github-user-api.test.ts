@@ -93,6 +93,28 @@ describe("fetchGithubUser", () => {
   it("preserves the HTTP status in the error message", () => {
     expect(new GitHubUserFetchError(403).message).toBe("GitHub API: HTTP 403")
   })
+
+  it("carries the rate-limit headers so a throttled 403 reads as transient", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("rate limited", {
+            status: 403,
+            headers: { "x-ratelimit-remaining": "0", "retry-after": "30" },
+          }),
+      ),
+    )
+
+    const error = await fetchGithubUser("tok").catch((e) => e)
+
+    expect(error).toBeInstanceOf(GitHubUserFetchError)
+    expect(error.status).toBe(403)
+    expect(error.rateLimit).toMatchObject({ remaining: 0, retryAfter: 30 })
+    expect(error.isRateLimited).toBe(true)
+    // A bare 403 (no throttle headers) stays a definitive forbidden.
+    expect(new GitHubUserFetchError(403).isRateLimited).toBe(false)
+  })
 })
 
 describe("fetchGithubUserWithScopes", () => {

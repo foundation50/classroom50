@@ -113,6 +113,9 @@ describe("editScoreOverride", () => {
     expect(result.newCommitSha).toBe("newcommit")
 
     const written = JSON.parse(committed()) as WrittenScores
+    // The hook seeds the read cache with this; it must be the committed file.
+    expect(result.scores).toEqual(written)
+    expect(result.previousCommitSha).toBe("refsha")
     const entry = written.assignments[ASSIGNMENT].entries[0]
     expect(entry.owner).toBe("alice")
     expect(entry.override).toBe(true)
@@ -210,7 +213,7 @@ describe("editScoreOverride", () => {
       },
     }
     const { client, committed } = makeClient(scores)
-    await editScoreOverride(client, {
+    const result = await editScoreOverride(client, {
       org: ORG,
       classroom: CLASSROOM,
       assignment: ASSIGNMENT,
@@ -221,6 +224,7 @@ describe("editScoreOverride", () => {
     const written = JSON.parse(committed()) as WrittenScores
     // The emptied bucket is dropped.
     expect(written.assignments[ASSIGNMENT]).toBeUndefined()
+    expect(result.scores).toEqual(written)
   })
 
   it("clearing the last entry keeps a collector-stamped bucket (collected_at)", async () => {

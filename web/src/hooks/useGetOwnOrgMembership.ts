@@ -2,8 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { getPendingOrgInvite } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
 import {
-  GitHubAPIError,
-  isDefinitiveGitHubStatus,
+  isDefinitiveGitHubError,
   retryTransientGitHubError,
 } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -30,11 +29,7 @@ const useGetOwnOrgMembership = (org: string | undefined) => {
     // refetch loop that pinned non-members on an endless spinner. Transient
     // 5xx/429/network errors still refetch on remount (documented self-heal);
     // only definitive statuses (the loop driver, unchangeable by a retry) don't.
-    retryOnMount: (query) =>
-      !(
-        query.state.error instanceof GitHubAPIError &&
-        isDefinitiveGitHubStatus(query.state.error.status)
-      ),
+    retryOnMount: (query) => !isDefinitiveGitHubError(query.state.error),
     enabled: Boolean(org),
   })
 }
