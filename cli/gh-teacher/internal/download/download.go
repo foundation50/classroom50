@@ -32,6 +32,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/membership"
 	"github.com/foundation50/gh-teacher/internal/orgrepos"
 	scoresschema "github.com/foundation50/gh-teacher/internal/scores"
 )
@@ -250,9 +251,9 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	if err != nil {
 		return err
 	}
-	teamLogins, err := configrepo.ListTeamMembers(client, org, teamSlug)
+	teamLogins, err := enrolledLogins(client, org, classroom, branch, teamSlug, errOut)
 	if err != nil {
-		return fmt.Errorf("list team %q members: %w", teamSlug, err)
+		return err
 	}
 
 	if len(teamLogins) == 0 {
@@ -484,6 +485,35 @@ type RosterMeta struct {
 // lowercased login for the scores.csv join. A missing/unreadable CSV is NOT
 // fatal (the team drives enrollment) — it warns and returns an empty map so
 // every team member still gets a row with blank name/section/email.
+// enrolledLogins lists the students to download: the classroom team's members,
+// which are authoritative for enrollment. The team is secret, so GitHub answers
+// 404 to anyone who is neither an org owner nor a member of it, and that
+// includes a TA or head TA. For them, fall back to the classroom's roster.csv,
+// which staff can read, instead of reporting an empty class. The fallback
+// applies only to a 404; a team that is readable but empty stays empty.
+func enrolledLogins(client githubapi.Client, org, classroom, branch, teamSlug string, errOut io.Writer) ([]string, error) {
+	members, found, err := configrepo.FindTeamMembersWithIDs(client, org, teamSlug)
+	if err != nil {
+		return nil, fmt.Errorf("list team %q members: %w", teamSlug, err)
+	}
+	if found {
+		return membership.Logins(members), nil
+	}
+	rows, err := configrepo.LoadRoster(client, org, classroom, branch)
+	if err != nil {
+		return nil, fmt.Errorf("classroom team %q is not visible to you (it is secret, readable only by org owners and its members), and roster.csv could not be read either: %w", teamSlug, err)
+	}
+	logins := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if login := configrepo.LoginKey(r.Username); login != "" {
+			logins = append(logins, login)
+		}
+	}
+	_, _ = fmt.Fprintf(errOut, "%s: classroom team %q is not visible to you; using %s (%d students) instead\n",
+		classroom, teamSlug, configrepo.RosterFilePath(classroom), len(logins))
+	return logins, nil
+}
+
 func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, errOut io.Writer) map[string]RosterMeta {
 	rows, err := configrepo.LoadRoster(client, org, classroom, branch)
 	if err != nil {
