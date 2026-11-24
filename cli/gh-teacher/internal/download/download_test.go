@@ -1582,3 +1582,59 @@ func TestDownloadByPattern_ExistingClones(t *testing.T) {
 		}
 	})
 }
+
+// TestEnrolledLogins_SecretTeamFallsBackToRoster: the classroom team is secret,
+// so GitHub answers 404 to a TA or head TA. Download must then use roster.csv
+// instead of reporting an empty class.
+func TestEnrolledLogins_SecretTeamFallsBackToRoster(t *testing.T) {
+	csv := "username,first_name,last_name,email,section,github_id\n" +
+		"Alice,Ada,Lovelace,ada@uni.edu,A,1\n" +
+		"bob,Bob,B,bob@uni.edu,A,2\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/teams/") {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"content":  base64.StdEncoding.EncodeToString([]byte(csv)),
+			"encoding": "base64",
+		})
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var errOut bytes.Buffer
+	got, err := enrolledLogins(client, "o", "cs", "main", "classroom50-cs", &errOut)
+	if err != nil {
+		t.Fatalf("enrolledLogins: %v", err)
+	}
+	if strings.Join(got, ",") != "alice,bob" {
+		t.Errorf("logins = %v, want [alice bob]", got)
+	}
+	if !strings.Contains(errOut.String(), "not visible to you") {
+		t.Errorf("expected a fallback note, got %q", errOut.String())
+	}
+}
+
+// TestEnrolledLogins_ReadableTeamIsAuthoritative: a readable team, even an
+// empty one, is used as-is; roster.csv is never consulted.
+func TestEnrolledLogins_ReadableTeamIsAuthoritative(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/teams/") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+			return
+		}
+		t.Errorf("unexpected request %s", r.URL.Path)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var errOut bytes.Buffer
+	got, err := enrolledLogins(client, "o", "cs", "main", "classroom50-cs", &errOut)
+	if err != nil {
+		t.Fatalf("enrolledLogins: %v", err)
+	}
+	if len(got) != 0 || errOut.Len() != 0 {
+		t.Errorf("got %v / %q, want empty with no note", got, errOut.String())
+	}
+}
